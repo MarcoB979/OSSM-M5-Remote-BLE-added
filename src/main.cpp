@@ -461,23 +461,10 @@ void screenmachine(lv_event_t * e)
     speed = lv_slider_get_value(ui_homespeedslider);
     LogDebug(speedenc);
     LogDebug(speed);
-    speedenc =  fscale(0.5, speedlimit, 0, Encoder_MAP, speed, 0);
-    encoder1.setCount(speedenc); 
-    LogDebug(speedenc);
 
     lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
-    depth = lv_slider_get_value(ui_homedepthslider);       
-    depthenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, depth, 0);
-    encoder2.setCount(depthenc);
+    lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
 
-    lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);        
-    stroke = lv_slider_get_value(ui_homestrokeslider);    
-    strokeenc =  fscale(0, maxdepthinmm, 0, Encoder_MAP, stroke, 0);
-    encoder3.setCount(strokeenc);
-
-    sensation = lv_slider_get_value(ui_homesensationslider);
-    sensationenc =  fscale(-100, 100, (Encoder_MAP/2*-1), (Encoder_MAP/2), sensation, 0);
-    encoder4.setCount(sensationenc);        
             
   } else if (lv_scr_act() == ui_Menue){
     st_screens = ST_UI_MENUE;
