@@ -8,7 +8,7 @@
 #define T_SETTINGS          "Settings"
 #define T_MOTD              "Welcome to OSSM M5 Remote"
 #define T_BATT              "Battery"
-#define T_CREAMPIE          "Creampie"
+#define T_CREAMPIE          "Pullout"
 #define T_START             "Start/Stop"
 #define T_CUM               "Cum"
 #define T_HOME              "Home"
@@ -47,6 +47,7 @@
 #define T_Insist            "Insist"
 #define T_JackHammer        "Jack Hammer"
 #define T_StrokeNibbler     "Stroke Nibbler"
+#define T_Knot              "Knot"
 
 #define T_CUM_SPEED         "CUM Speed"
 #define T_CUM_TIME          "CUM Time"

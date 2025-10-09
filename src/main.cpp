@@ -129,10 +129,8 @@ long cum_s_enc = 0;
 long cum_a_enc = 0;
 long encoder4_enc = 0;
 
-
-
-extern float maxdepthinmm = 450.0;
-extern float speedlimit = 600;
+extern float maxdepthinmm = 400.0;
+extern float speedlimit = 300;
 int speedscale = -5;
 
 float speed = 0.0;
@@ -339,7 +337,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
     
     if(incomingcontrol.esp_speed > speedlimit){
-      speedlimit = 600;
+      speedlimit = 300;
     } else (
     speedlimit = incomingcontrol.esp_speed);
     LogDebug(speedlimit);
@@ -492,7 +490,13 @@ void ejectcreampie(lv_event_t * e){
     lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
     EJECT_On = false;
   } else if(EJECT_On == false){
-    lv_obj_add_state(ui_HomeButtonL, LV_STATE_CHECKED);
+    lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
+    depth = 0;
+    speed = 0;
+    stroke = 0;
+    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
+    SendCommand(DEPTH, depth, OSSM_ID);
+    screenmachine(e);
     EJECT_On = true;
   } 
 }
@@ -913,7 +917,9 @@ void loop()
          lv_obj_send_event(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
          lv_obj_send_event(lv_group_get_focused(ui_g_menue), LV_EVENT_CLICKED, NULL);
-        }
+        } else if(click3_long_waspressed == true){
+         SendCommand(REBOOT, 0, OSSM_ID);
+        } 
       }
       break;
 

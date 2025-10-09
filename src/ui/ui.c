@@ -189,7 +189,7 @@ static void ui_event_HomeButtonL(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
-        //ejectcreampie(e);
+        ejectcreampie(e);
     }
 }
 static void ui_event_HomeButtonM(lv_event_t * e)
@@ -1654,7 +1654,7 @@ void ui_Pattern_screen_init(void)
 
     ui_PatternS = lv_roller_create(ui_Pattern);
     lv_roller_set_options(ui_PatternS,
-                          "SimpleStroke\nTeasingPounding\nRoboStroke\nHalfnHalf\nDeeper\nStopNGo\nInsist",
+                          "SimpleStroke\nTeasingPounding\nRoboStroke\nHalfnHalf\nDeeper\nStopNGo\nInsist\nKnot",
                           LV_ROLLER_MODE_NORMAL);
 
     lv_obj_set_height(ui_PatternS, 119);
