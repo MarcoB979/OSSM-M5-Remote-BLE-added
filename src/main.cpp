@@ -644,9 +644,11 @@ void screenmachine(lv_event_t * e)
     speed = lv_slider_get_value(ui_homespeedslider);
     LogDebug(speedenc);
     LogDebug(speed);
-    // Clear encoder1 when entering Home to avoid leftover counts from other screens
+    // Clear home control encoders when entering Home to avoid carry-over from other screens.
     encoder1.setCount(0);
-    // Clear encoder4 as well to avoid leftover torque/torque-r counts affecting Sensation
+    encoder2.setCount(0);
+    encoder3.setCount(0);
+    // Clear encoder4 as well to avoid leftover torque/torque-r counts affecting Sensation.
     encoder4.setCount(0);
 
     if (OssmBleIsMode()) {
@@ -664,6 +666,12 @@ void screenmachine(lv_event_t * e)
     st_screens = ST_UI_MENUE;
   } else if (lv_scr_act() == ui_Pattern){
     st_screens = ST_UI_PATTERN;
+    // Pattern screen only uses encoder4 (roller navigation).
+    // Drain other encoder counters so turning those knobs here never leaks into Home values.
+    encoder1.setCount(0);
+    encoder2.setCount(0);
+    encoder3.setCount(0);
+    encoder4_enc = encoder4.getCount();
   } else if (lv_scr_act() == ui_Torqe){
     st_screens = ST_UI_Torqe;
     torqe_f = lv_slider_get_value(ui_outtroqeslider);
