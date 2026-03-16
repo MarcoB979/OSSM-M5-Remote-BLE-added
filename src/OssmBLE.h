@@ -2,7 +2,7 @@
 
 #include <Arduino.h>
 
-bool OssmBleTryConnect();
+bool OssmBleTryConnect(void (*postInitCallback)() = nullptr);
 bool OssmBleConnected();
 
 void OssmBleSetMode(bool enabled);

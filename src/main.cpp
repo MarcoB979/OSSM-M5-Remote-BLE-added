@@ -537,12 +537,12 @@ void connectbutton(lv_event_t * e)
 {
 
     LogDebug("Connect button pressed");
-//    lv_label_set_text(ui_Welcome, T_CONNECTING);
-//    // Ensure the UI refreshes immediately so the user sees the "Connecting" state
-//    // before any blocking BLE/ESP-NOW operations begin.
-//    lv_task_handler();
-//    M5.update();
-//    delay(50);    
+    lv_label_set_text(ui_Welcome, T_CONNECTING);
+    // Ensure the UI refreshes immediately so the user sees the "Connecting" state
+    // before any blocking BLE/ESP-NOW operations begin.
+    lv_task_handler();
+    M5.update();
+    delay(100);    
     if(!Ossm_paired){
       OssmBleSetMode(false);
 
@@ -551,14 +551,13 @@ void connectbutton(lv_event_t * e)
       outgoingcontrol.esp_target = OSSM_ID;
       LogDebug("Sending ESP-NOW pairing heartbeat...");
       esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
-      lv_label_set_text(ui_Welcome, T_CONNECTING);
-      // Ensure the UI refreshes immediately so the user sees the "Connecting" state
-      // before any blocking BLE/ESP-NOW operations begin.
-      lv_task_handler();
-      M5.update();
-      delay(50);
+
       LogDebug("Attempting BLE connection...");
-      bool bleConnected = OssmBleTryConnect();
+      bool bleConnected = OssmBleTryConnect([](){
+        // Re-flush display after NimBLE init disrupts SPI DMA
+        lv_task_handler();
+        M5.update();
+      });
       if (bleConnected) {
         LogDebug("BLE connection successful!");
         lv_label_set_text(ui_Welcome, T_BLECONNECTED);
@@ -704,6 +703,7 @@ void homebuttonLevent(lv_event_t * e){
       OssmBleSendCommand(SPEED, 0, 0, maxdepthinmm, speedlimit, nullptr);
       OssmBleSendCommand(DEPTH, 0, 0, maxdepthinmm, speedlimit, nullptr);
       OssmBleSendCommand(STROKE, 0, 0, maxdepthinmm, speedlimit, nullptr);
+      delay(500); // small delay to ensure commands are processed in order on the remote side
       OssmBleSendIsPaused(1);
       OSSM_On = false;
     } else {
@@ -1435,7 +1435,9 @@ void cumscreentask(void *pvParameters)
 
 void mxclick() {
   // Ignore spurious MX clicks that can appear immediately during heavy ramped encoder activity.
-  if ((millis() - lastRampDetentMs) < 120UL) {
+  // Scale the guard window with the last ramp magnitude: heavier spin = longer suppression.
+  unsigned long guardMs = 120UL + (unsigned long)(rampValue - 1) * 25UL;
+  if ((millis() - lastRampDetentMs) < guardMs) {
     return;
   }
   vibrate();

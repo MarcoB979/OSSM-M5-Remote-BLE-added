@@ -162,16 +162,27 @@ bool OssmBleConnected()
   return (ble_client != nullptr && ble_client->isConnected() && ble_command_char != nullptr);
 }
 
-bool OssmBleTryConnect()
+void OssmBleInit()
+{
+  if (!ble_initialized) {
+    NimBLEDevice::init("M5-OSSM-Remote");
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    ble_initialized = true;
+  }
+}
+
+bool OssmBleTryConnect(void (*postInitCallback)())
 {
   if (OssmBleConnected()) {
     return true;
   }
 
-  if (!ble_initialized) {
-    NimBLEDevice::init("M5-OSSM-Remote");
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
-    ble_initialized = true;
+  bool wasUninitialized = !ble_initialized;
+  OssmBleInit(); // no-op if already initialised
+  // If we just ran NimBLEDevice::init() it disrupts the SPI DMA, so let the
+  // caller re-flush the display now that the BLE stack is stable.
+  if (wasUninitialized && postInitCallback) {
+    postInitCallback();
   }
 
   NimBLEScan* scanner = NimBLEDevice::getScan();
