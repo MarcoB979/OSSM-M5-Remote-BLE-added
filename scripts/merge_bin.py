@@ -1,4 +1,5 @@
 Import("env")
+import subprocess
 
 APP_BIN = "$BUILD_DIR/${PROGNAME}.bin"
 MERGED_BIN = "$BUILD_DIR/firmware_merged.bin"
@@ -21,27 +22,23 @@ def merge_bin(source, target, env):
     if memory_type == "opi_opi" or memory_type == "opi_qspi":
         flash_mode = "dout"
 
-    # Run esptool to merge images into a single binary
-    env.Execute(
-        " ".join(
-            [
-                "$PYTHONEXE",
-                "$OBJCOPY",
-                "--chip",
-                BOARD_CONFIG.get("build.mcu", "esp32"),
-                "merge_bin",
-                "-o",
-                MERGED_BIN,
-                "--flash_mode",
-                flash_mode,
-                "--flash_freq",
-                flash_freq,
-                "--flash_size",
-                flash_size    
-            ]
-            + flash_images
-        )
-    )
+    # Build command as a list so paths with spaces are passed correctly (no shell splitting).
+    cmd = [
+        env.subst("$PYTHONEXE"),
+        env.subst("$OBJCOPY"),
+        "--chip",
+        BOARD_CONFIG.get("build.mcu", "esp32"),
+        "merge_bin",
+        "-o",
+        env.subst(MERGED_BIN),
+        "--flash_mode",
+        flash_mode,
+        "--flash_freq",
+        flash_freq,
+        "--flash_size",
+        flash_size,
+    ] + [env.subst(i) for i in flash_images]
+    subprocess.call(cmd)
 
 # Add a post action that runs esptoolpy to merge available flash images
 env.AddPostAction(APP_BIN , merge_bin)
