@@ -153,9 +153,8 @@ unsigned long nowMs;
 unsigned long rampMs = 0;
 bool rampEnabled = true;
 int rampValue = 1;
-int rampTime = 75;
-int maxRamp = 8;
-unsigned long lastRampDetentMs = 0;
+int rampTime = 25; //75;
+int maxRamp = 2; //8;
 int encId = 0;
 int activeEncId = 0;
 
@@ -240,8 +239,6 @@ void vibrate(int vbr_Intensity = 200, int vbr_Length = 100){
 
 void mxclick();
 bool mxclick_short_waspressed = false;
-void mxlong();
-bool mxclick_long_waspressed = false;
 void click2();
 bool click2_short_waspressed = false;
 void click3();
@@ -254,7 +251,6 @@ bool click3_double_waspressed = false;
 static int getRampedDetentDelta(int encoderId, int detents)
 {
   if (detents == 0) return 0;
-  lastRampDetentMs = millis();
   if (!rampEnabled) {
     rampValue = 1;
     activeEncId = encoderId;
@@ -324,15 +320,19 @@ static void event_cb(lv_event_t *e)
   {
   case LV_EVENT_PRESSED:
     lv_label_set_text(label, "The last button event:\nLV_EVENT_PRESSED");
+    LogDebugFormatted("The last button event:\nLV_EVENT_PRESSED");
     break;
   case LV_EVENT_CLICKED:
     lv_label_set_text(label, "The last button event:\nLV_EVENT_CLICKED");
+    LogDebugFormatted("The last button event:\nLV_EVENT_CLICKED");
     break;
   case LV_EVENT_LONG_PRESSED:
     lv_label_set_text(label, "The last button event:\nLV_EVENT_LONG_PRESSED");
+    LogDebugFormatted("The last button event:\nLV_EVENT_LONG_PRESSED");
     break;
   case LV_EVENT_LONG_PRESSED_REPEAT:
     lv_label_set_text(label, "The last button event:\nLV_EVENT_LONG_PRESSED_REPEAT");
+    LogDebugFormatted("The last button event:\nLV_EVENT_LONG_PRESSED_REPEAT");
     break;
   default:
     break;
@@ -340,11 +340,17 @@ static void event_cb(lv_event_t *e)
 }
 
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+//  LogDebug("Last Packet Send Status: ");
+//  LogDebug(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+//  LogDebugFormatted("Speed: %f, Depth: %f, Stroke: %f, Command: %d, Value: %f, Target: %d\n",
+//    outgoingcontrol.esp_speed, outgoingcontrol.esp_depth, outgoingcontrol.esp_stroke,  outgoingcontrol.esp_command, outgoingcontrol.esp_value, outgoingcontrol.esp_target);
 }
 
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
   memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
-
+  LogDebug("Received ESP-NOW data");
+//  LogDebugFormatted("Speed: %f, Depth: %f, Stroke: %f, Sensation: %f, Pattern: %f, RState: %d, Connected: %d, Heartbeat: %d, Command: %d, Value: %f, Target: %d\n",
+//    incomingcontrol.esp_speed, incomingcontrol.esp_depth, incomingcontrol.esp_stroke, incomingcontrol.esp_sensation, incomingcontrol.esp_pattern, incomingcontrol.esp_rstate, incomingcontrol.esp_connected, incomingcontrol.esp_heartbeat, incomingcontrol.esp_command, incomingcontrol.esp_value, incomingcontrol.esp_target);
 
 
   
@@ -394,7 +400,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
       // go straight to Home. Otherwise remain on the welcome/start screen
       // and wait for post-homing updates.
       if (incomingcontrol.esp_speed > 0 && incomingcontrol.esp_depth > 0) {
-        lv_label_set_text(ui_connect, T_CONNECTED);
+        lv_label_set_text(ui_connect, "WIFI");
         lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
       } else {
         waiting_for_limits = true;
@@ -426,7 +432,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     // If we were waiting for limits after pairing, and now have both, load Home
     if (waiting_for_limits && gotSpeed && gotDepth) {
       waiting_for_limits = false;
-      lv_label_set_text(ui_connect, T_CONNECTED);
+      lv_label_set_text(ui_connect, "WIFI");
       lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
     }
   }
@@ -448,23 +454,14 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 
 //Sends Commands and Value to Remote device returns ture or false if sended
 bool SendCommand(int Command, float Value, int Target){
-  // If the OSSM is paused/off, don't send SPEED to the device; store
-  // the requested speed for unpause instead. For BLE transport store it
-  // inside the BLE module so BLE-specific resume logic lives in OssmBLE.*
-  if (Command == SPEED && OSSM_On == false) {
-    // If OSSM is paused/off, store the requested speed for unpause.
-    // For BLE transport, also forward the speed so the remote UI/device
-    // sees the current knob value (but OSSM will remain paused until ON).
-    if (OssmBleIsMode()) {
-      OssmBleStoreUnpauseSpeed(Value);
-      LogDebugFormatted("Stored BLE unpause_speed: %f\n", OssmBleGetUnpauseSpeed());
-      // Inform remote of the desired resume speed without sending a live
-      // `set:speed:` which may cause the OSSM to resume. Use pausedSpeed instead.
-      OssmBleSendPausedSpeed(Value);
-    } else {
-      unpause_speed = Value;
-      LogDebugFormatted("Stored unpause_speed: %f\n", unpause_speed);
-    }
+  // For BLE mode only: intercept SPEED while paused so we don't accidentally
+  // resume the OSSM mid-knob-turn. Store the desired speed and send it on ON.
+  // For ESP-NOW mode let SPEED through always — the OSSM side needs the current
+  // speed value immediately so it starts at the right speed when ON is sent.
+  if (Command == SPEED && OSSM_On == false && OssmBleIsMode()) {
+    OssmBleStoreUnpauseSpeed(Value);
+    LogDebugFormatted("Stored BLE unpause_speed: %f\n", OssmBleGetUnpauseSpeed());
+    OssmBleSendPausedSpeed(Value);
     return true;
   }
   // Immediately update local paused/running state when sending ON/OFF
@@ -535,6 +532,85 @@ bool SendCommand(int Command, float Value, int Target){
 
 void connectbutton(lv_event_t * e)
 {
+    lv_label_set_text(ui_Welcome, T_CONNECTING);
+
+    if(!Ossm_paired){
+      OssmBleSetMode(false);
+
+      // First connection attempt + one automatic retry after 10 seconds.
+      for (int attempt = 0; attempt < 6 && !Ossm_paired; ++attempt) {
+        uint32_t attemptStartMs = millis();
+
+        outgoingcontrol.esp_command = HEARTBEAT;
+        outgoingcontrol.esp_heartbeat = true;
+        outgoingcontrol.esp_target = OSSM_ID;
+        esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+
+        bool bleConnected = OssmBleTryConnect();
+        if (bleConnected) {
+          lv_label_set_text(ui_Welcome, T_BLECONNECTED);
+
+          OssmBleSetMode(true);
+          Ossm_paired = true;
+          OssmBlePrepareStrokeEngine();
+          lv_label_set_text(ui_connect, "BLE");
+          lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
+          break;
+        }
+
+        // Retry once after 10 seconds total from attempt start.
+        if (!Ossm_paired && attempt == 0) {
+          uint32_t lastHeartbeatMs = 0;
+          while (!Ossm_paired && (millis() - attemptStartMs) < 5000UL) {
+            if ((millis() - lastHeartbeatMs) >= 500UL) {
+              outgoingcontrol.esp_command = HEARTBEAT;
+              outgoingcontrol.esp_heartbeat = true;
+              outgoingcontrol.esp_target = OSSM_ID;
+              esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+              lastHeartbeatMs = millis();
+            }
+            lv_task_handler();
+            M5.update();
+            delay(20);
+          }
+          if (!Ossm_paired) {
+            lv_label_set_text(ui_Welcome, T_CONNECTING);
+          }
+        }
+      }
+
+      if (!Ossm_paired) {
+        lv_label_set_text(ui_Welcome, T_BLE_FAILED);
+      }
+      return;
+    }
+
+    if (OssmBleIsMode()) {
+      lv_label_set_text(ui_connect, "BLE");
+      lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
+    }
+}
+
+void connectbutton2(lv_event_t * e)
+{
+    LogDebug("ConnectBTN SHORT FUNCTION");
+    if(!Ossm_paired){
+      outgoingcontrol.esp_command = HEARTBEAT;
+      outgoingcontrol.esp_heartbeat = true;
+      outgoingcontrol.esp_target = OSSM_ID;
+      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    }
+}
+
+void connectbutton3(lv_event_t * e)
+{
+    if(!Ossm_paired){
+      outgoingcontrol.esp_command = HEARTBEAT;
+      outgoingcontrol.esp_heartbeat = true;
+      outgoingcontrol.esp_target = OSSM_ID;
+      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    }
+
 
     LogDebug("Connect button pressed");
     lv_label_set_text(ui_Welcome, T_CONNECTING);
@@ -542,15 +618,34 @@ void connectbutton(lv_event_t * e)
     // before any blocking BLE/ESP-NOW operations begin.
     lv_task_handler();
     M5.update();
-    delay(100);    
+    delay(200);    
     if(!Ossm_paired){
       OssmBleSetMode(false);
 
-      outgoingcontrol.esp_command = HEARTBEAT;
-      outgoingcontrol.esp_heartbeat = true;
-      outgoingcontrol.esp_target = OSSM_ID;
-      LogDebug("Sending ESP-NOW pairing heartbeat...");
-      esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      // Try ESP-NOW first with a short retry window.
+      // This prevents missing a one-shot reply while BLE scanning monopolizes the radio.
+      const uint32_t espStartMs = millis();
+      uint32_t lastHeartbeatMs = 0;
+      while (!Ossm_paired && (millis() - espStartMs) < 1200UL) {
+        if ((millis() - lastHeartbeatMs) >= 250UL) {
+          outgoingcontrol.esp_command = HEARTBEAT;
+          outgoingcontrol.esp_heartbeat = true;
+          outgoingcontrol.esp_target = OSSM_ID;
+          LogDebug("Sending ESP-NOW pairing heartbeat again...");
+          esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+          lastHeartbeatMs = millis();
+        }
+
+        lv_task_handler();
+        M5.update();
+        delay(20);
+      }
+
+      if (Ossm_paired) {
+        LogDebug("ESP-NOW allready connected, exiting connectbutton!");
+        // Paired via ESP-NOW callback during retry window.
+        return;
+      }
 
       LogDebug("Attempting BLE connection...");
       bool bleConnected = OssmBleTryConnect([](){
@@ -569,8 +664,21 @@ void connectbutton(lv_event_t * e)
         lv_label_set_text(ui_connect, "BLE");
         lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
       } else {
-        LogDebug("BLE connection failed");
-        lv_label_set_text(ui_Welcome, T_BLE_FAILED);
+        // Show failure only if neither ESP-NOW nor BLE managed to pair.
+        if (!Ossm_paired) {
+          LogDebug("BLE connection failed");
+           lv_label_set_text(ui_Welcome, T_BLE_FAILED);
+          outgoingcontrol.esp_command = HEARTBEAT;
+          outgoingcontrol.esp_heartbeat = true;
+          outgoingcontrol.esp_target = OSSM_ID;
+          LogDebug("Sending ESP-NOW pairing heartbeat...");
+          esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+          if(Ossm_paired){
+              LogDebug("ESP-NOW pairing succeeded after BLE failure");
+              lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
+          }
+        }
+
       }
       // Ensure the UI refreshes immediately so the user sees the "Connecting" state
       // before any blocking BLE/ESP-NOW operations begin.
@@ -858,8 +966,6 @@ void setup(){
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
   encoder4.attachHalfQuad(ENC_4_CLK, ENC_4_DT);
   Button1.attachClick(mxclick);
-  Button1.attachLongPressStart(mxlong);
-  Button1.setDebounceMs(75);
   Button2.attachClick(click2);
   Button3.attachClick(click3);
   Button3.attachLongPressStart(c3long);
@@ -1107,7 +1213,7 @@ void loop()
           int strokeDetents = (int)(strokeCount / 2);
           if (strokeDetents != 0) {
             changed = true;
-            stroke += getRampedDetentDelta(3, strokeDetents);
+            stroke -= getRampedDetentDelta(3, strokeDetents);   //make left turn increase Stroke value
             encoder3.setCount(strokeCount % 2);
           }
 
@@ -1359,7 +1465,6 @@ void loop()
       break;
 
      }
-     mxclick_long_waspressed = false;
      mxclick_short_waspressed = false;
      click2_short_waspressed = false;
      click3_short_waspressed = false;
@@ -1434,19 +1539,8 @@ void cumscreentask(void *pvParameters)
 
 
 void mxclick() {
-  // Ignore spurious MX clicks that can appear immediately during heavy ramped encoder activity.
-  // Scale the guard window with the last ramp magnitude: heavier spin = longer suppression.
-  unsigned long guardMs = 120UL + (unsigned long)(rampValue - 1) * 25UL;
-  if ((millis() - lastRampDetentMs) < guardMs) {
-    return;
-  }
   vibrate();
   mxclick_short_waspressed = true;
-} 
-
-void mxlong(){
-  vibrate(200, 200);
-  mxclick_long_waspressed = true;
 } 
 
 void click2() {

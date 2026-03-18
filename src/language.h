@@ -8,7 +8,7 @@
 #define T_CONNECTING        "Connecting..."
 #define T_CONNECTED         "Connected"
 #define T_DISCONNECTED      "Disconnected" 
-#define T_BLE_FAILED        "Failed. Try again or restart OSSM..."
+#define T_BLE_FAILED        "Connection failed. Restart and try again..."
 #define T_HOMING            "Homing..."
 #define T_BLECONNECTED      "Connected via Bluetooth"
 #define T_ESPCONNECTED      "Connected via Wifi (ESP-NOW)"
