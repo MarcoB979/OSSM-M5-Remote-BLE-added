@@ -1,4 +1,14 @@
 # Project OSSM M5 REMOTE
+## Release Update - 2026-03-19 02:30
+
+Important update for this version:
+
+- Completely redesigned Bluetooth communication.
+- Added mitigations to reduce the phantom MX-click issue (still not fully eliminated).
+- Inverted stroke direction behavior on screen.
+- Implemented multiple user-requested improvements.
+- Applied multiple bug fixes across ESP-NOW and BLE flows.
+
 ## Overview of the OSSM-M5-Remote
 
 A Remote Control Platform for all ESP Controlled Sex Toys,with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and related toys.
