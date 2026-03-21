@@ -196,7 +196,7 @@ static void ui_event_HomeButtonM(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
+    if(event == LV_EVENT_PRESSED) {
         homebuttonmevent(e);
     }
 }
@@ -238,6 +238,9 @@ static void ui_event_MenueButtonR(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
+    if(event == LV_EVENT_CLICKED) {
+        xtoysMenuButtonRToggle();
+    }
 }
 static void ui_event_SDepthI(lv_event_t * e)
 {
@@ -1183,7 +1186,6 @@ void ui_Menue_screen_init(void)
 
     lv_obj_add_flag(ui_MenueButtonR, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_clear_flag(ui_MenueButtonR, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_state(ui_MenueButtonR, LV_STATE_DISABLED);
 
     lv_obj_add_event_cb(ui_MenueButtonR, ui_event_MenueButtonR, LV_EVENT_ALL, NULL);
     lv_obj_set_style_bg_color(ui_MenueButtonR, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1201,7 +1203,7 @@ void ui_Menue_screen_init(void)
 
     lv_obj_set_align(ui_MenueButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_MenueButtonRText, T_BLANK);
+    lv_label_set_text(ui_MenueButtonRText, T_XTOYS);
 
     lv_obj_set_style_text_color(ui_MenueButtonRText, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_opa(ui_MenueButtonRText, 255, LV_PART_MAIN | LV_STATE_DEFAULT);

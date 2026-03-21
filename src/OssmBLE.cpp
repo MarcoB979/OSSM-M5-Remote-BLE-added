@@ -1,4 +1,4 @@
-#include "OssmBLE.h"
+﻿#include "OssmBLE.h"
 
 #include <NimBLEDevice.h>
 #include <math.h>
@@ -330,7 +330,8 @@ bool OssmBleIsHoming(const OssmBleMachineState& state)
 bool OssmBleIsReadyForStrokeEngine(const OssmBleMachineState& state)
 {
   return state.mode == OssmBleMachineMode::StrokeEngineIdle ||
-         state.mode == OssmBleMachineMode::StrokeEngineActive;
+         state.mode == OssmBleMachineMode::StrokeEngineActive ||
+         state.mode == OssmBleMachineMode::Streaming;
 }
 
 static void updateBleMachineStateCache(const String& rawState)
@@ -813,7 +814,7 @@ bool OssmBleSendPausedSpeed(float speed)
   return true;
 }
 
-bool OssmBleReadState(String* stateText)
+bool OssmBleReadState(String* stateText, bool logState)
 {
   if (stateText == nullptr) {
     return false;
@@ -836,8 +837,10 @@ bool OssmBleReadState(String* stateText)
 
   *stateText = String(raw.c_str());
   updateBleMachineStateCache(*stateText);
-  Serial.print("BLE rx (state): ");
-  Serial.println(stateText->c_str());
+  if (logState) {
+    Serial.print("BLE rx (state): ");
+    Serial.println(stateText->c_str());
+  }
   return true;
 }
 

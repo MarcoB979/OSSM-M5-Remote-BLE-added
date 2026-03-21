@@ -16,7 +16,6 @@
 #include "OssmBLE.h"
 #include "language.h"
 #include <esp_timer.h>
-#include "Xtoys.h"
 
 constexpr int32_t HOR_RES=320;
 constexpr int32_t VER_RES=240;
@@ -722,21 +721,6 @@ void connectbutton(lv_event_t * e)
     }
 }
 
-extern "C" void xtoysMenuButtonRToggle(void)
-{
-  if (OssmBleIsMode()) {
-    if (XToysIsActive()) {
-      XToysDeactivate();
-    } else {
-      XToysActivate();
-      if (XToysIsActive()) {
-        lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
-        st_screens = ST_UI_HOME;
-      }
-    }
-  }
-}
-
 void savesettings(lv_event_t * e)
 {
 
@@ -1056,9 +1040,6 @@ void setup(){
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
   lv_label_set_text(ui_HomePatternLabel,patternstr);
 
-  // Initialize X-Toys mode
-  XToysInit();
-
   LogDebug("Setup complete");
 }
 
@@ -1066,10 +1047,6 @@ void loop()
 {
 
      bool changed=false;
-     
-     // Update X-Toys mode status (check timeouts, BLE connection, etc.)
-     XToysUpdate();
-     
      const int BatteryLevel = M5.Power.getBatteryLevel();
      String BatteryValue = (String(BatteryLevel, DEC) + "%");
      const char *battVal = BatteryValue.c_str();
@@ -1097,7 +1074,7 @@ void loop()
       
      case ST_UI_START: //Menu With logo after boot
       {
-        if (OssmBleIsMode() && OssmBleIsWaitingForReady() && !XToysIsActive()) {
+        if (OssmBleIsMode() && OssmBleIsWaitingForReady()) {
           static uint32_t lastBleHomingPollMs = 0;
           uint32_t nowPollMs = millis();
           if ((nowPollMs - lastBleHomingPollMs) >= 500UL) {
@@ -1406,7 +1383,6 @@ void loop()
          lv_obj_send_event(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
         } else if(click3_short_waspressed == true){
          lv_obj_send_event(lv_group_get_focused(ui_g_menue), LV_EVENT_CLICKED, NULL);
-         lv_obj_send_event(ui_MenueButtonR, LV_EVENT_CLICKED, NULL);
         } else if(click3_long_waspressed == true){
          SendCommand(REBOOT, 0, OSSM_ID);
         } 

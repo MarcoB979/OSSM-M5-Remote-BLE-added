@@ -73,7 +73,7 @@ bool OssmBleGoToMenu();
 bool OssmBleSetBuffer(float value);
 bool OssmBleSetWifi(const String& ssid, const String& password);
 bool OssmBleStreamPosition(float position, int timeMs);
-bool OssmBleReadState(String* stateText);
+bool OssmBleReadState(String* stateText, bool logState = true);
 bool OssmBleGetCurrentState(OssmBleMachineState* outState, bool forceRefresh = true);
 bool OssmBlePollLimits(float* outMaxDepthMm, float* outMaxSpeedValue);
 const char* OssmBleMachineModeName(OssmBleMachineMode mode);

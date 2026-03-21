@@ -20,6 +20,7 @@
 #define T_START             "Start/Stop"
 #define T_CUM               "Cum"
 #define T_HOME              "Home"
+#define T_XTOYS             "X-Toys"
 #define T_MEN1              "Up"
 #define T_MEN2              "Down"
 #define T_SPEED             "Speed:"
