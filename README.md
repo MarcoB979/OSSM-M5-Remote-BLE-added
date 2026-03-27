@@ -20,14 +20,6 @@ https://github.com/KinkyMakers/OSSM-hardware
 
 To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
 
-## !!! It does not Work with the Official OSSM Firmware !!!
-This Branch is needed: https://github.com/ortlof/OSSM-Stroke
-
-The Cable remote is obsolete with this firmware. If you want to go back you need to flash the OSSM orginal firmware back.
-
-You can Easy flash the OSSM Mainboard with this [Online Flasher](https://openlust.org/lust-remote/lustremote-firmware/).
-
-
 ## Supported in this version of the M5 remote:
 | OSSM Machine | https://github.com/KinkyMakers/OSSM-hardware |
 
