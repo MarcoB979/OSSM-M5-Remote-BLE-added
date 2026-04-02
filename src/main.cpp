@@ -14,6 +14,7 @@
 #include "main.h"
 #include "Preferences.h"      //EEPROM replacement function
 #include "OssmBLE.h"
+
 #include "language.h"
 #include <esp_timer.h>
 #include "Xtoys.h"
@@ -55,21 +56,25 @@ constexpr int32_t VER_RES=240;
 #define OFF 0
 #define ON 1
 
-// Screens 
 
 #define ST_UI_START 0
 #define ST_UI_HOME 1
+#define ST_UI_MENUE 10
 
 #define ST_UI_MENUE 10
 #define ST_UI_PATTERN 11
 #define ST_UI_Torqe 12
 #define ST_UI_EJECTSETTINGS 13
-
 #define ST_UI_SETTINGS 20
 
+// EEPROM replacement function using Non-volatie memory (NVS)
+Preferences m5prf; //initiate an instance of the Preferences library
+
+
+// Global variable for UI to access initial brightness
+int g_brightness_value = 180;
 int st_screens = ST_UI_START;
-
-
+// --- Brightness slider event callback ---
 
 // Menü States
 
@@ -85,12 +90,10 @@ int st_screens = ST_UI_START;
 
 int menuestatus = CONNECT;
 
-// EEPROM replacement function using Non-volatie memory (NVS)
-Preferences m5prf; //initiate an instance of the Preferences library
-
 bool eject_status = false;
 bool dark_mode = false;
 bool vibrate_mode = true;
+bool strokeinvert_mode = false;
 bool touch_home = false;
 bool touch_disabled = false;
 
@@ -144,6 +147,7 @@ long cum_t_enc = 0;
 long cum_si_enc =0;
 long cum_s_enc = 0;
 long cum_a_enc = 0;
+long encoder3_enc = 0;
 long encoder4_enc = 0;
 
 float maxdepthinmm = 400.0;
@@ -162,7 +166,16 @@ float cum_size = 0.0;
 float cum_accel = 0.0;
 
 // Speed to use when unpausing (stored while paused)
+
+// Speed to use when unpausing (stored while paused)
 float unpause_speed = 0.0;
+
+// --- Screen Saver Variables ---
+unsigned long last_activity_ms = 0;
+int screensaver_timeout_ms = 1 * 10 * 1000; // 1 minute, configurable
+int screensaver_dim_brightness = 15; // Value for dimmed screen
+int screensaver_prev_brightness = 180; // Default, will be set at startup
+bool screensaver_active = true;
 
 unsigned long nowMs;
 unsigned long rampMs = 0;
@@ -292,16 +305,31 @@ void vibrate(int vbr_Intensity = 200, int vbr_Length = 100){
     }
 }
 
+void brightness_slider_event_cb(lv_event_t * e)
+{
+  if(lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
+    int val = lv_slider_get_value(ui_brightness_slider);
+    M5.Display.setBrightness(val);
+    m5prf.putInt("Brightness", val); // save to NVS
+  }
+}
+
+// Forward declaration for mxclick
 void mxclick();
 bool mxclick_short_waspressed = false;
-void click2();
-bool click2_short_waspressed = false;
-void click3();
-bool click3_short_waspressed = false;
-void c3long();
-bool click3_long_waspressed = false;
-void c3double();
-bool click3_double_waspressed = false;
+void mxlong();
+bool mxclick_long_waspressed = false;
+void mxdouble();
+bool mxclick_double_waspressed = false;
+
+void clickLeft();
+bool clickLeft_short_waspressed = false;
+void clickRight();
+bool clickRight_short_waspressed = false;
+void clickRightLong();
+bool clickRight_long_waspressed = false;
+void clickRightDouble();
+bool clickRight_double_waspressed = false;
 
 // Home-only MX anti-ghost filter: ignore very fast repeated physical MX clicks.
 static unsigned long mx_last_home_action_ms = 0;
@@ -407,6 +435,15 @@ uint32_t my_tick_function() {
   return (esp_timer_get_time() / 1000LL);
 }
 
+void screensaver_check_activity() {
+  // Call this in every input handler (button, encoder, touch, etc.)
+  last_activity_ms = millis();
+  if (screensaver_active) {
+    M5.Lcd.setBrightness(screensaver_prev_brightness);
+    screensaver_active = false;
+  }
+}
+
 void my_touchpad_read(lv_indev_t * drv, lv_indev_data_t * data) {
   M5.update();
   auto count = M5.Touch.getCount();
@@ -415,6 +452,7 @@ void my_touchpad_read(lv_indev_t * drv, lv_indev_data_t * data) {
     if ( count == 0 ) {
       data->state = LV_INDEV_STATE_RELEASED;
     } else {
+      screensaver_check_activity();
       auto touch = M5.Touch.getDetail(0);
       data->state = LV_INDEV_STATE_PRESSED; 
       data->point.x = touch.x;
@@ -737,10 +775,16 @@ extern "C" void xtoysMenuButtonRToggle(void)
   }
 }
 
+
 void savesettings(lv_event_t * e)
 {
+  //read darkmode saved setting to force reboot for theme change
+  bool theme_Change_Previous = false;
+  bool theme_Change_New = false;
+
 
   m5prf.begin("m5-ctnr", false); //open NVS-storage container/session. False means that it's used it in read+write mode. Set true to open or create the namespace in read-only mode.
+  theme_Change_Previous = m5prf.getBool("Darkmode", true);
 
   if(lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED) == 1){
     m5prf.putBool("Vibrate", true); //NSV-storage write true to key "Vibrate"
@@ -754,16 +798,15 @@ void savesettings(lv_event_t * e)
     m5prf.putBool("Lefty", false);
 	}
 
-	if(lv_obj_has_state(ui_ejectaddon, LV_STATE_CHECKED) == 1){
-    m5prf.putBool("ejectAddon", true);  
-	}else if(lv_obj_has_state(ui_ejectaddon, LV_STATE_CHECKED) == 0){
-    m5prf.putBool("ejectAddon", false);
-	}
-
-  //read darkmode saved setting to force reboot for theme change
-  bool theme_Change_Previous = false;
-  bool theme_Change_New = false;
-  theme_Change_Previous = m5prf.getBool("Darkmode", true);
+  LogDebug("Saving StrokeInvert setting...");
+  // Stroke Inverted persistent storage
+  if(lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED) == 1){
+    m5prf.putBool("StrokeInvert", true);
+    strokeinvert_mode = true;
+  }else if(lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED) == 0){
+    m5prf.putBool("StrokeInvert", false);
+    strokeinvert_mode = false;
+  }
 
   if(lv_obj_has_state(ui_darkmode, LV_STATE_CHECKED) == 1){
     theme_Change_New = true;
@@ -772,8 +815,10 @@ void savesettings(lv_event_t * e)
     theme_Change_New = false;
     m5prf.putBool("Darkmode", false);
 	}
-
+  m5prf.putInt("Brightness", lv_slider_get_value(ui_brightness_slider)); // save brightness slider value to NVS
+  
   m5prf.end(); //close storage container/session.
+  LogDebugFormatted("Brightness value saved: %d", m5prf.getInt("Brightness", 180));
 
   if(theme_Change_Previous != theme_Change_New){
     vibrate(225,75);
@@ -781,6 +826,14 @@ void savesettings(lv_event_t * e)
   }else{
     vibrate(225,75);
   }
+ m5prf.begin("m5-ctnr", true); // Reopen in read-only mode to verify saved settings and log them.   
+  LogDebug("Settings are saved, these are the values:");
+  LogDebugFormatted("Vibrate: %s", m5prf.getBool("Vibrate", true) ? "true" : "false");
+  LogDebugFormatted("Lefty/Touch: %s", m5prf.getBool("Lefty", true) ? "true" : "false");
+  LogDebugFormatted("StrokeInvert: %s", m5prf.getBool("StrokeInvert", false) ? "true" : "false"); 
+  LogDebugFormatted("Darkmode: %s", m5prf.getBool("Darkmode", false) ? "true" : "false");
+  LogDebugFormatted("Brightness: %d", m5prf.getInt("Brightness", 180));
+m5prf.end();
 }
 
 void screenmachine(lv_event_t * e)
@@ -798,6 +851,11 @@ void screenmachine(lv_event_t * e)
     encoder3.setCount(0);
     // Clear encoder4 as well to avoid leftover torque/torque-r counts affecting Sensation.
     encoder4.setCount(0);
+    if (!strokeinvert_mode) {
+      lv_slider_set_mode(ui_homestrokeslider, LV_SLIDER_MODE_NORMAL);
+    } else {  
+      lv_slider_set_mode(ui_homestrokeslider, LV_SLIDER_MODE_RANGE);
+    }
 
     if (OssmBleIsMode()) {
       lv_slider_set_range(ui_homespeedslider, 0, 100);
@@ -956,19 +1014,37 @@ void setup(){
   M5.begin(cfg);
   LogDebugFormatted("MX boot raw pin%d=%d\n", Button1.pin(), digitalRead(Button1.pin()));
 
-  m5prf.begin("m5-ctnr", false); 
-    // Loads these settings at boot
-    eject_status = m5prf.getBool("ejectAddon", false); //boolean here is used if key does not exist yet
-    dark_mode = m5prf.getBool("Darkmode", true);       // ^ (basically first boot defaults, saving settings surives a re-flash!)
-    vibrate_mode = m5prf.getBool("Vibrate", true);
-    touch_home= m5prf.getBool("Lefty", false);       // = touchcreen. There apears to be no actual lefthanded mode anywhere
-  m5prf.end();
 
+  m5prf.begin("m5-ctnr", false); 
+  // Loads these settings at boot
+  LogDebug("Loading settings...");
+  eject_status = m5prf.getBool("ejectAddon", false); //boolean here is used if key does not exist yet
+  dark_mode = m5prf.getBool("Darkmode", true);       // ^ (basically first boot defaults, saving settings surives a re-flash!)
+  vibrate_mode = m5prf.getBool("Vibrate", true);
+  touch_home= m5prf.getBool("Lefty", false);       // = touchcreen. There apears to be no actual lefthanded mode anywhere
+  strokeinvert_mode = m5prf.getBool("StrokeInvert");
+  int brightness = m5prf.getInt("Brightness", -1);
+  if (brightness < 0) {
+    brightness = 180; // your default
+    m5prf.putInt("Brightness", brightness); // save default to NVS
+  }
+
+  g_brightness_value = brightness;
+  m5prf.end();
+  // --- Apply brightness at startup ---
+  M5.Lcd.setBrightness(brightness);
+  LogDebugFormatted("Brightness applied: %d", brightness);
+
+  // ...existing code...
+
+  
   M5.Power.setChargeCurrent(BATTERY_CHARGE_CURRENT);
   LogDebug("\n Starting");      // Start LogDebug
-
+  LogDebug("TEST ");
+  
   WiFi.mode(WIFI_STA);
   LogDebug(WiFi.macAddress());
+  LogDebug("TEST ");
 
   // Init ESP-NOW
   if (esp_now_init() != ESP_OK) {
@@ -1004,12 +1080,18 @@ void setup(){
   encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
   encoder4.attachHalfQuad(ENC_4_CLK, ENC_4_DT);
   Button1.attachClick(mxclick);
-  Button1.setDebounceMs(50);
-  Button2.attachClick(click2);
-  Button3.attachClick(click3);
-  Button3.attachLongPressStart(c3long);
-  Button3.attachDoubleClick(c3double);
-
+  Button1.attachDoubleClick(mxdouble);
+  Button1.attachLongPressStart(mxlong);
+  Button1.setDebounceMs(80);
+  Button1.setLongPressIntervalMs(400);
+  Button2.attachClick(clickLeft);
+  Button2.setDebounceMs(80);
+  Button3.attachClick(clickRight);
+  Button3.setDebounceMs(80);
+  Button3.attachLongPressStart(clickRightLong);
+  Button3.setLongPressIntervalMs(400);
+  Button3.attachDoubleClick(clickRightDouble);
+  
   // Initialize `disp_buf` display buffer with the buffer(s).
   // lv_draw_buf_init(&draw_buf, LV_HOR_RES_MAX, LV_VER_RES_MAX);
   M5.Display.setEpdMode(epd_mode_t::epd_fastest); // fastest but very-low quality.
@@ -1034,30 +1116,34 @@ void setup(){
   ui_init();  
   register_event_debug_callbacks();
 
+  // --- Restore stroke invert state from NVS and apply to UI (after ui_init) ---
+  if (strokeinvert_mode) {
+    lv_obj_add_state(ui_strokeinvert, LV_STATE_CHECKED);
+  } else {
+    lv_obj_clear_state(ui_strokeinvert, LV_STATE_CHECKED);
+  }
+
   // Auto-connect once ui_Start has finished loading (first rendered frame).
   lv_obj_add_event_cb(ui_Start, [](lv_event_t *) { connectbutton(nullptr); },
                       LV_EVENT_SCREEN_LOADED, nullptr);
 
   lv_obj_clear_state(ui_HomeButtonL, LV_STATE_DISABLED);
   if(eject_status == true){
-  lv_obj_add_state(ui_ejectaddon, LV_STATE_CHECKED);
-  lv_obj_clear_state(ui_EJECTSettingButton, LV_STATE_DISABLED);
+    lv_obj_add_state(ui_ejectaddon, LV_STATE_CHECKED);
+    lv_obj_clear_state(ui_EJECTSettingButton, LV_STATE_DISABLED);
   }
   if(dark_mode == true){
-  lv_obj_add_state(ui_darkmode, LV_STATE_CHECKED);
+    lv_obj_add_state(ui_darkmode, LV_STATE_CHECKED);
   }
   if(vibrate_mode == true){
-  lv_obj_add_state(ui_vibrate, LV_STATE_CHECKED);
+    lv_obj_add_state(ui_vibrate, LV_STATE_CHECKED);
   }
   if(touch_home == true){
-  lv_obj_add_state(ui_lefty, LV_STATE_CHECKED);
+    lv_obj_add_state(ui_lefty, LV_STATE_CHECKED);
   }
   lv_roller_set_selected(ui_PatternS,2,LV_ANIM_OFF);
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
   lv_label_set_text(ui_HomePatternLabel,patternstr);
-
-  // Initialize X-Toys mode
-  XToysInit();
 
   LogDebug("Setup complete");
 }
@@ -1066,10 +1152,9 @@ void loop()
 {
 
      bool changed=false;
-     
-     // Update X-Toys mode status (check timeouts, BLE connection, etc.)
-     XToysUpdate();
-     
+     if(encoder1.getCount()+encoder2.getCount()+encoder3.getCount()+encoder4.getCount() != 0){
+       screensaver_check_activity();
+     }
      const int BatteryLevel = M5.Power.getBatteryLevel();
      String BatteryValue = (String(BatteryLevel, DEC) + "%");
      const char *battVal = BatteryValue.c_str();
@@ -1077,6 +1162,14 @@ void loop()
      lv_label_set_text(ui_BattValue, battVal);
      lv_bar_set_value(ui_Battery1, BatteryLevel, LV_ANIM_OFF);
      lv_label_set_text(ui_BattValue1, battVal);
+
+     // --- Screen Saver Logic ---
+     if (!screensaver_active && (millis() - last_activity_ms > (unsigned long)screensaver_timeout_ms)) {
+       screensaver_prev_brightness = g_brightness_value;
+       M5.Lcd.setBrightness(screensaver_dim_brightness);
+       screensaver_active = true;
+     }
+
      lv_bar_set_value(ui_Battery2, BatteryLevel, LV_ANIM_OFF);
      lv_label_set_text(ui_BattValue2, battVal);
      lv_bar_set_value(ui_Battery3, BatteryLevel, LV_ANIM_OFF);
@@ -1097,7 +1190,7 @@ void loop()
       
      case ST_UI_START: //Menu With logo after boot
       {
-        if (OssmBleIsMode() && OssmBleIsWaitingForReady() && !XToysIsActive()) {
+        if (OssmBleIsMode() && OssmBleIsWaitingForReady()) {
           static uint32_t lastBleHomingPollMs = 0;
           uint32_t nowPollMs = millis();
           if ((nowPollMs - lastBleHomingPollMs) >= 500UL) {
@@ -1110,12 +1203,12 @@ void loop()
           touch_disabled = true;
         }
 
-        if(click2_short_waspressed == true){
+        if(clickLeft_short_waspressed == true){
          lv_obj_send_event(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
          LogDebug("mx: ST_UI_START -> sending StartButtonM click");
          lv_obj_send_event(ui_StartButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
+        } else if(clickRight_short_waspressed == true){
          lv_obj_send_event(ui_StartButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
@@ -1148,32 +1241,6 @@ void loop()
 
           lastHomeTransportMode = currentTransportMode;
         }
-
-          // If using BLE transport, poll the device for updated limits and apply them.
-          if (OssmBleIsMode()) {
-            float bleMaxDepth = 0.0f;
-            float bleMaxSpeed = 0.0f;
-            if (OssmBlePollLimits(&bleMaxDepth, &bleMaxSpeed)) {
-              if (bleMaxSpeed > 0.0f) {
-                speedlimit = bleMaxSpeed;
-                lv_slider_set_range(ui_homespeedslider, 0, speedlimit);
-              }
-              if (bleMaxDepth > 0.0f) {
-                maxdepthinmm = bleMaxDepth;
-                lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
-                lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
-              }
-            }
-
-            OssmBleMachineState bleState;
-            if (OssmBleGetCurrentState(&bleState, false)) {
-              if (OssmBleIsHoming(bleState)) {
-                OSSM_On = false;
-              } else if (OssmBleIsReadyForStrokeEngine(bleState)) {
-                OSSM_On = (bleState.speed > 0);
-              }
-            }
-          }
 
         if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
           touch_disabled = true;
@@ -1277,20 +1344,29 @@ void loop()
         //
         if(lv_slider_is_dragged(ui_homestrokeslider) == false){ //if knob gets rotated
           changed = false;
-          lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
-          lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
-
+          if (!strokeinvert_mode) {
+            lv_slider_set_mode(ui_homestrokeslider, LV_SLIDER_MODE_NORMAL);
+            lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
+          } else {  
+            lv_slider_set_mode(ui_homestrokeslider, LV_SLIDER_MODE_RANGE);
+            lv_slider_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
+            lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
+          }
 
           long strokeCount = encoder3.getCount();
           int strokeDetents = (int)(strokeCount / 2);
           if (strokeDetents != 0) {
             changed = true;
-            stroke -= getRampedDetentDelta(3, strokeDetents);   //make left turn increase Stroke value
+            if (!strokeinvert_mode) {
+              stroke += getRampedDetentDelta(3, strokeDetents); // CW increases stroke
+            } else {
+              stroke -= getRampedDetentDelta(3, strokeDetents); // CCW increases stroke
+            }
             encoder3.setCount(strokeCount % 2);
             markEncoderActivityForMxFilter();
           }
 
-          //Stoke min-max bounds
+          //Stroke min-max bounds
           if (stroke < 0){
             changed = true;
             stroke = 0;
@@ -1300,18 +1376,39 @@ void loop()
             changed = true;
             stroke = strokeMax;
           }
-          
+          // Clamp stroke to depth
+          if (stroke > depth) {
+            changed = true;
+            stroke = depth;
+          }
+
           //send stroke
           if (changed) {
             SendCommand(STROKE, stroke, OSSM_ID);
           }
 
-        } else if(lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke){
-            stroke = depth - lv_slider_get_left_value(ui_homestrokeslider);
-            SendCommand(STROKE, stroke, OSSM_ID);
-        } else if(lv_slider_get_value(ui_homestrokeslider) != depth){
-            depth = lv_slider_get_value(ui_homestrokeslider);
-            SendCommand(DEPTH, depth, OSSM_ID);
+        } else {
+          if (!strokeinvert_mode) {
+            if(lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke){
+              stroke = depth - lv_slider_get_left_value(ui_homestrokeslider);
+              // Clamp stroke to depth
+              if (stroke > depth) stroke = depth;
+              SendCommand(STROKE, stroke, OSSM_ID);
+            } else if(lv_slider_get_value(ui_homestrokeslider) != depth){
+              depth = lv_slider_get_value(ui_homestrokeslider);
+              SendCommand(DEPTH, depth, OSSM_ID);
+            }
+          } else {
+            if(lv_slider_get_value(ui_homestrokeslider) != depth){
+              depth = lv_slider_get_value(ui_homestrokeslider);
+              SendCommand(DEPTH, depth, OSSM_ID);
+            } else if(lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke){
+              stroke = depth - lv_slider_get_left_value(ui_homestrokeslider);
+              // Clamp stroke to depth
+              if (stroke > depth) stroke = depth;
+              SendCommand(STROKE, stroke, OSSM_ID);
+            }
+          }
         }
 
         char stroke_v[12];
@@ -1356,7 +1453,7 @@ void loop()
             SendCommand(SENSATION, sensation, OSSM_ID);
         }
 
-        if(click2_short_waspressed == true){
+        if(clickLeft_short_waspressed == true){
          lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
          // Physical MX is handled directly only on Home, where the middle action
@@ -1366,12 +1463,12 @@ void loop()
          // this routing/filtering decision may need to be expanded carefully.
          LogDebug("mx: ST_UI_HOME -> direct HomeButtonM action");
          homebuttonm_action(true);
-        } else if(click3_short_waspressed == true){
+        } else if(clickRight_short_waspressed == true){
          lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
-        } else if(click3_long_waspressed == true){
+        } else if(clickRight_long_waspressed == true){
           sensation = 0;        //reset sensation to zero
           SendCommand(SENSATION, sensation, OSSM_ID);
-        }else if(click3_double_waspressed == true){
+        }else if(clickRight_double_waspressed == true){
           if (dynamicStroke == false){
             dynamicStroke = true;;            /// dynamicStroke = !dynamicStroke; crashes M5 for some reason
           }else{
@@ -1399,15 +1496,14 @@ void loop()
           encoder4_enc = encoder4.getCount();
         }
 
-        if(click2_short_waspressed == true){
+        if(clickLeft_short_waspressed == true){
          lv_obj_send_event(ui_MenueButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
          LogDebug("mx: ST_UI_MENUE -> sending MenueButtonM click");
          lv_obj_send_event(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
+        } else if(clickRight_short_waspressed == true){
          lv_obj_send_event(lv_group_get_focused(ui_g_menue), LV_EVENT_CLICKED, NULL);
-         lv_obj_send_event(ui_MenueButtonR, LV_EVENT_CLICKED, NULL);
-        } else if(click3_long_waspressed == true){
+        } else if(clickRight_long_waspressed == true){
          SendCommand(REBOOT, 0, OSSM_ID);
         } 
       }
@@ -1429,12 +1525,12 @@ void loop()
           LogDebug("Preview");
           encoder4_enc = encoder4.getCount();
         }
-         if(click2_short_waspressed == true){
+         if(clickLeft_short_waspressed == true){
          lv_obj_send_event(ui_PatternButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
          LogDebug("mx: ST_UI_PATTERN -> sending PatternButtonM click");
          lv_obj_send_event(ui_PatternButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
+        } else if(clickRight_short_waspressed == true){
          lv_obj_send_event(ui_PatternButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
@@ -1491,12 +1587,12 @@ void loop()
         dtostrf(torqe_r, 6, 0, torqe_r_v);
         lv_label_set_text(ui_introqevalue, torqe_r_v);
 
-         if(click2_short_waspressed == true){
+         if(clickLeft_short_waspressed == true){
          lv_obj_send_event(ui_TorqeButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
          LogDebug("mx: ST_UI_Torqe -> sending TorqeButtonM click");
          lv_obj_send_event(ui_TorqeButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
+        } else if(clickRight_short_waspressed == true){
          lv_obj_send_event(ui_TorqeButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
@@ -1508,12 +1604,12 @@ void loop()
           touch_disabled = true;
         }
         
-         if(click2_short_waspressed == true){
+         if(clickLeft_short_waspressed == true){
          lv_obj_send_event(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
          LogDebug("mx: ST_UI_EJECTSETTINGS -> sending EJECTButtonM click");
          lv_obj_send_event(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
+        } else if(clickRight_short_waspressed == true){
          
         }
       }
@@ -1523,33 +1619,92 @@ void loop()
       {
         touch_disabled = false;
 
+        if (encoder3.getCount() > encoder3_enc + 2) {
+          int val = lv_slider_get_value(ui_brightness_slider);
+          int max = lv_slider_get_max_value(ui_brightness_slider);
+          if (val < max) {
+            int newval = (val + 5 <= max) ? val + 5 : max;
+            lv_slider_set_value(ui_brightness_slider, newval, LV_ANIM_OFF);
+            M5.Display.setBrightness(newval);
+          }
+          encoder3_enc = encoder3.getCount();
+        } else if (encoder3.getCount() < encoder3_enc - 2) {
+          int val = lv_slider_get_value(ui_brightness_slider);
+          int min = lv_slider_get_min_value(ui_brightness_slider);
+          if (val > min) {
+            int newval = (val - 5 >= min) ? val - 5 : min;
+            lv_slider_set_value(ui_brightness_slider, newval, LV_ANIM_OFF);
+            M5.Display.setBrightness(newval);
+          }
+          encoder3_enc = encoder3.getCount();
+        }
+
         if(encoder4.getCount() > encoder4_enc + 2){
-          LogDebug("next");
+          LogDebug("next setting");
           lv_group_focus_next(ui_g_settings);
           encoder4_enc = encoder4.getCount();
         } else if(encoder4.getCount() < encoder4_enc -2){
           lv_group_focus_prev(ui_g_settings);
-          LogDebug("Preview");
+          LogDebug("previous setting");
           encoder4_enc = encoder4.getCount();
         }
 
-        if(click2_short_waspressed == true){
-         lv_obj_send_event(ui_MenueButtonL, LV_EVENT_CLICKED, NULL);
-        } else if(mxclick_short_waspressed == true){
-         LogDebug("mx: ST_UI_SETTINGS -> sending MenueButtonM click");
-         lv_obj_send_event(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
-         lv_obj_send_event(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
+        if(encoder3.getCount() > encoder3_enc + 2){
+          LogDebug("next setting");
+          lv_group_focus_next(ui_g_settings);
+          encoder3_enc = encoder3.getCount();
+        } else if(encoder3.getCount() < encoder3_enc -2){
+          lv_group_focus_prev(ui_g_settings);
+          LogDebug("previous setting");
+          encoder3_enc = encoder3.getCount();
+        }
+
+        if (mxclick_long_waspressed || mxclick_double_waspressed) {
+          // If a long or double MX click is detected, handle as needed (currently: do nothing)
+          // Clear all mxclick flags immediately to prevent phantom events
+          mxclick_short_waspressed = false;
+          mxclick_long_waspressed = false;
+          mxclick_double_waspressed = false;
+        } else if (clickRight_short_waspressed == true) {
+          lv_obj_t *focused = lv_group_get_focused(ui_g_settings);
+          if (focused) {
+            // If focused object is a known checkbox, toggle its state manually
+            if (focused == ui_vibrate || focused == ui_lefty || focused == ui_strokeinvert || focused == ui_darkmode) {
+              bool checked = lv_obj_has_state(focused, LV_STATE_CHECKED);
+              if (checked) {
+                lv_obj_clear_state(focused, LV_STATE_CHECKED);
+              } else {
+                lv_obj_add_state(focused, LV_STATE_CHECKED);
+              }
+              // Call the event handler for value changed if needed
+              lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
+            } else {
+              lv_obj_send_event(focused, LV_EVENT_CLICKED, NULL);
+            }
+          }
+          // Clear all right click flags immediately after handling
+          clickRight_short_waspressed = false;
+          clickRight_long_waspressed = false;
+          clickRight_double_waspressed = false;
+        } else if (mxclick_short_waspressed) {
+          LogDebug("mx: ST_UI_SETTINGS -> go to menu");
+          lv_obj_send_event(ui_SettingsButtonM, LV_EVENT_CLICKED, NULL);
+          mxclick_short_waspressed = false;
+          mxclick_long_waspressed = false;
+          mxclick_double_waspressed = false;
+        } else if (clickLeft_short_waspressed == true) {
+          lv_obj_send_event(ui_SettingsButtonL, LV_EVENT_CLICKED, NULL);
+          clickLeft_short_waspressed = false;
         }
       }
       break;
 
      }
      mxclick_short_waspressed = false;
-     click2_short_waspressed = false;
-     click3_short_waspressed = false;
-     click3_long_waspressed = false;
-     click3_double_waspressed = false;
+     clickLeft_short_waspressed = false;
+     clickRight_short_waspressed = false;
+     clickRight_long_waspressed = false;
+     clickRight_double_waspressed = false;
 
   vTaskDelay(pdMS_TO_TICKS(5));
 }
@@ -1567,78 +1722,46 @@ void espNowRemoteTask(void *pvParameters)
   }
 }
 
-/*
-void cumscreentask(void *pvParameters)
-{
-  for(;;)
-  {
-    M5.Lcd.setTextColor(FrontColor);
-    if(encoder1.getCount() != cum_s_enc)
-    {
-    cum_s_enc = encoder1.getCount();
-    cum_speed = map(constrain(cum_s_enc,0,Encoder_MAP),0,Encoder_MAP,1000,30000);
-    M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S1Pos+progheight-5);
-    M5.Lcd.print(cum_speed);
-    SendCommand(CUMSPEED, cum_speed, CUM);
-    }
-
-  if(encoder2.getCount() != cum_t_enc)
-    {
-    cum_t_enc = encoder2.getCount();
-    cum_time = map(constrain(cum_t_enc,0,Encoder_MAP),0,Encoder_MAP,0,60);
-    M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S2Pos+progheight-5);
-    M5.Lcd.print(cum_time);
-    SendCommand(CUMTIME, cum_time, CUM);
-    }
-
-   if(encoder3.getCount() != cum_si_enc)
-    {
-    cum_si_enc = encoder3.getCount();
-    cum_size = map(constrain(cum_si_enc,0,Encoder_MAP),0,Encoder_MAP,0,40);
-    M5.Lcd.fillRect(199,S3Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S3Pos+progheight-5);
-    M5.Lcd.print(cum_size);
-    SendCommand(CUMSIZE, cum_size, CUM);
-    }
-
-   if(encoder4.getCount() != cum_a_enc)
-    {
-    cum_a_enc = encoder4.getCount();
-    cum_accel = map(constrain(cum_a_enc,0,Encoder_MAP),0,Encoder_MAP,0,20);
-    M5.Lcd.fillRect(199,S4Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S4Pos+progheight-5);
-    M5.Lcd.print(cum_accel);
-    SendCommand(CUMACCEL, cum_accel, CUM);
-    }
-  vTaskDelay(100);
-  }
-}
-*/
-
 
 void mxclick() {
   vibrate();
   mxclick_short_waspressed = true;
+  screensaver_check_activity(); // Reset screensaver timer on MX click
 } 
 
-void click2() {
+void mxdouble() {
   vibrate();
-  click2_short_waspressed = true;
-} // click2
+  mxclick_double_waspressed = true;
+  screensaver_check_activity(); // Reset screensaver timer on MX double click
+} 
 
-void click3() {
+void mxlong() {
   vibrate();
-  click3_short_waspressed = true;
-} // click3
+  mxclick_long_waspressed = true;
+  screensaver_check_activity(); // Reset screensaver timer on MX long click
+} 
 
-void c3long() {
-    vibrate();
-  click3_long_waspressed = true;
+void clickLeft() {
+  vibrate();
+  clickLeft_short_waspressed = true;
+  screensaver_check_activity(); // Reset screensaver timer on left click
+} // clickLeft
+
+void clickRight() {
+  vibrate();
+  clickRight_short_waspressed = true;
+  screensaver_check_activity(); // Reset screensaver timer on right click
+  LogDebug("clickRight_short_waspressed set to true");
+} // clickRight
+
+void clickRightLong() {
+  vibrate();
+  clickRight_long_waspressed = true;
+  screensaver_check_activity(); // Reset screensaver timer on right long click
 }
 
-void c3double() {
+void clickRightDouble() {
     vibrate();
-  click3_double_waspressed = true;
+  clickRight_double_waspressed = true;
+  screensaver_check_activity(); // Reset screensaver timer on right double click
 }
