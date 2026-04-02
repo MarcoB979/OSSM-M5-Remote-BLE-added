@@ -63,6 +63,7 @@ extern lv_obj_t * ui_MenueButtonM;
 extern lv_obj_t * ui_MenueButtonMText;
 extern lv_obj_t * ui_MenueButtonR;
 extern lv_obj_t * ui_MenueButtonRText;
+extern lv_obj_t * ui_brightness_slider;
 extern lv_obj_t * ui_Batt3;
 extern lv_obj_t * ui_BattValue3;
 extern lv_obj_t * ui_Battery3;
@@ -129,10 +130,12 @@ extern lv_obj_t * ui_SettingsButtonM;
 extern lv_obj_t * ui_SettingsButtonMText;
 extern lv_obj_t * ui_SettingsButtonR;
 extern lv_obj_t * ui_SettingsButtonRText;
+extern lv_obj_t * ui_brightness_icon;
 extern lv_obj_t * ui_Batt1;
 extern lv_obj_t * ui_BattValue1;
 extern lv_obj_t * ui_Battery1;
 extern lv_obj_t * ui_ejectaddon;
+extern lv_obj_t * ui_strokeinvert;
 extern lv_obj_t * ui_darkmode;
 extern lv_obj_t * ui_vibrate;
 extern lv_obj_t * ui_lefty;
@@ -154,6 +157,7 @@ void screenmachine(lv_event_t * e);
 void screenmachine(lv_event_t * e);
 void screenmachine(lv_event_t * e);
 void savesettings(lv_event_t * e);
+void brightness_slider_event_cb(lv_event_t * e);
 
 LV_IMG_DECLARE(image50x50);    // assets\logo.svg
 

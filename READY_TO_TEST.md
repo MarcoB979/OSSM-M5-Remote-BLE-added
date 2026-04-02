@@ -17,7 +17,7 @@ Your Solution 4 (M5 Silent Watcher) is fully implemented and ready for testing.
 - ✅ Added include: `#include "Xtoys.h"`
 - ✅ Added init: `XToysInit();` in setup()
 - ✅ Added update: `XToysUpdate();` in loop()
-- ✅ Modified right button handler `click2()` to toggle X-Toys mode
+- ✅ Modified right button handler `clickLeft()` to toggle X-Toys mode
 - **Total changes: ~5 lines** 
 
 ### Compilation
@@ -37,7 +37,7 @@ pio run -e development -t upload
 ### Test Workflow
 1. M5 boots → auto-connects to OSSM
 2. Navigate to **Home screen** (with BLE mode active)
-3. **Press Right Button** (click2 handler)
+3. **Press Right Button** (clickLeft handler)
    - M5 enters StrokeEngine mode
    - Motor pauses (speed=0)
    - Display shows "X-TOYS" / "Waiting..."

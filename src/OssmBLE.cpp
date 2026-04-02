@@ -3,6 +3,12 @@
 #include <NimBLEDevice.h>
 #include <math.h>
 
+//***********************SHOW DEBUG INFO */
+
+bool ShowBLECommandResponses = true; // Set to true to enable serial printing of BLE command responses for debugging
+bool logState = ShowBLECommandResponses;
+//***********************SHOW DEBUG INFO */
+
 static const char* OSSM_BLE_DEVICE_NAME = "OSSM";
 static const char* OSSM_BLE_SERVICE_UUID = "522b443a-4f53-534d-0001-420badbabe69";
 static const char* OSSM_BLE_COMMAND_CHAR_UUID = "522b443a-4f53-534d-1000-420badbabe69";
@@ -12,7 +18,7 @@ static const char* OSSM_BLE_STATE_CHAR_UUID = "522b443a-4f53-534d-2000-420badbab
 static bool ble_initialized = false;
 static bool use_ble_transport = false;
 
-static bool sendBleTextInternal(const String& command, String* response, bool preferFastWrite);
+//static bool sendBleTextInternal(const String& command, String* response, bool preferFastWrite);
 
 static NimBLEClient* ble_client = nullptr;
 static NimBLERemoteCharacteristic* ble_command_char = nullptr;
@@ -273,11 +279,11 @@ static bool parseBleMachineState(const String& rawState, OssmBleMachineState* ou
     return false;
   }
 
-  float parsedSpeed = extractValueAfterKey(rawState, "\"speed\"");
-  float parsedStroke = extractValueAfterKey(rawState, "\"stroke\"");
-  float parsedSensation = extractValueAfterKey(rawState, "\"sensation\"");
-  float parsedDepth = extractValueAfterKey(rawState, "\"depth\"");
-  float parsedPattern = extractValueAfterKey(rawState, "\"pattern\"");
+  float parsedSpeed = extractValueAfterKey(rawState, "speed");
+  float parsedStroke = extractValueAfterKey(rawState, "stroke");
+  float parsedSensation = extractValueAfterKey(rawState, "sensation");
+  float parsedDepth = extractValueAfterKey(rawState, "depth");
+  float parsedPattern = extractValueAfterKey(rawState, "pattern");
 
   if (parsedSpeed < 0.0f || parsedStroke < 0.0f || parsedSensation < 0.0f || parsedDepth < 0.0f || parsedPattern < 0.0f) {
     return false;
@@ -617,8 +623,10 @@ static bool sendBleTextInternal(const String& command, String* response, bool pr
 
   if (ble_command_char->canRead()) {
     std::string raw = ble_command_char->readValue();
-    Serial.print("BLE rx (command response): ");
-    Serial.println(raw.c_str());
+    if (ShowBLECommandResponses) {
+      Serial.print("BLE rx (command response): ");
+      Serial.println(raw.c_str());
+    }
     if (response != nullptr) {
       *response = String(raw.c_str());
     }
@@ -836,7 +844,11 @@ bool OssmBleReadState(String* stateText, bool logState)
   }
 
   *stateText = String(raw.c_str());
+//  Serial.print("[BLE] Raw state: ");
+//  Serial.println(stateText->c_str());
   updateBleMachineStateCache(*stateText);
+  return true; //comment if you want to log state on every read, but it can be chatty and impact performance
+
   if (logState) {
     Serial.print("BLE rx (state): ");
     Serial.println(stateText->c_str());
@@ -907,4 +919,39 @@ bool OssmBlePollLimits(float* outMaxDepthMm, float* outMaxSpeedValue)
   }
 
   return updated;
+}
+
+// Helper to compare two OssmBleMachineState objects (mode, speed, depth, stroke, sensation)
+static bool OssmBleStatesAreDifferent(const OssmBleMachineState& a, const OssmBleMachineState& b) {
+    return a.mode != b.mode ||
+           a.speed != b.speed ||
+           a.depth != b.depth ||
+           a.stroke != b.stroke ||
+           a.sensation != b.sensation ||
+           a.pattern != b.pattern;
+}
+
+// Polls the OSSM BLE device for the latest machine state every 100ms
+// Updates ble_last_machine_state and returns true if successful
+bool OssmBlePollState() {
+    if (!OssmBleConnected()) {
+        ble_last_machine_state.valid = false;
+        return false;
+    }
+    OssmBleMachineState newState;
+
+    if (OssmBleGetCurrentState(&newState, true)) {
+        bool changed = OssmBleStatesAreDifferent(newState, ble_last_machine_state);
+        ble_last_machine_state = newState;
+        ble_last_machine_state.valid = true;
+        ble_last_state_poll_ms = millis();
+        if (changed) {
+            Serial.printf("[BLE] State changed: mode=%d speed=%d depth=%d stroke=%d sensation=%d pattern=%d\n",
+                newState.mode, newState.speed, newState.depth, newState.stroke, newState.sensation, newState.pattern);
+        }
+        return true;
+    } else {
+        ble_last_machine_state.valid = false;
+        return false;
+    }
 }

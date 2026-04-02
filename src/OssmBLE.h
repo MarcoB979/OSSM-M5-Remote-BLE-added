@@ -52,7 +52,7 @@ enum class OssmBleHomeToggleResult {
 
 bool OssmBleTryConnect(void (*postInitCallback)() = nullptr);
 bool OssmBleConnected();
-
+bool OssmBlePollState();
 void OssmBleSetMode(bool enabled);
 bool OssmBleIsMode();
 void OssmBleBeginConnectFlow();
@@ -89,3 +89,13 @@ bool OssmBleResume();
 bool OssmBleSendIsPaused(int paused);
 // Compatibility shim only. OSSM BLE does not support set:pausedSpeed.
 bool OssmBleSendPausedSpeed(float speed);
+void OssmUiUpdateFromPolledState(const OssmBleMachineState& bleState);
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+// If needed, declare UI objects here for use in OssmUiUpdateFromPolledState.cpp
+#ifdef __cplusplus
+}
+#endif
+static bool sendBleTextInternal(const String& command, String* response, bool preferFastWrite);

@@ -36,7 +36,7 @@ All code changes have been implemented with minimal modifications to main.cpp. T
 2. **Setup Initialization** (setup function)
    - Added: `XToysInit();` before "Setup complete" log
 
-3. **Right Button Handler** (click2() function)
+3. **Right Button Handler** (clickLeft() function)
    - Repurposed right button for X-Toys mode toggle
    - Only active in Home screen with BLE mode
    - Toggle behavior:
@@ -58,7 +58,7 @@ All code changes have been implemented with minimal modifications to main.cpp. T
 
 2. **Activate X-Toys Mode**
    - User is on Home screen in BLE mode
-   - **Press Right Button** (click2)
+   - **Press Right Button** (clickLeft)
    - M5 does the following:
      a) Sends `go:strokeEngine` → OSSM enters StrokeEngine
      b) Sends `set:speed:0` → Motor pauses
