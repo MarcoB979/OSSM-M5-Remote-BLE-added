@@ -331,6 +331,9 @@ bool clickRight_long_waspressed = false;
 void clickRightDouble();
 bool clickRight_double_waspressed = false;
 
+// Keep this configurable for future non-blocking interaction modes.
+static bool g_notification_blocks_inputs = true;
+
 // Home-only MX anti-ghost filter: ignore very fast repeated physical MX clicks.
 static unsigned long mx_last_home_action_ms = 0;
 static constexpr unsigned long MX_HOME_MIN_GAP_MS = 220;
@@ -350,6 +353,159 @@ static void updateMxReleaseStability()
   } else {
     mx_release_since_ms = 0;
   }
+}
+
+int showNotification(const char *title,
+                     const char *text,
+                     uint32_t duration,
+                     bool showLeftButton,
+                     const char *leftButtonText,
+                     bool showRightButton,
+                     const char *rightButtonText)
+{
+  const bool hasButtons = showLeftButton || showRightButton;
+  const bool prevTouchDisabled = touch_disabled;
+  const uint32_t startMs = millis();
+  int result = NOTIFICATION_RESULT_NONE;
+
+  if (g_notification_blocks_inputs) {
+    touch_disabled = true;
+  }
+
+  // Drain stale button states before opening the modal.
+  mxclick_short_waspressed = false;
+  mxclick_long_waspressed = false;
+  mxclick_double_waspressed = false;
+  clickLeft_short_waspressed = false;
+  clickRight_short_waspressed = false;
+  clickRight_long_waspressed = false;
+  clickRight_double_waspressed = false;
+
+  lv_obj_t *overlay = lv_obj_create(lv_layer_top());
+  lv_obj_remove_style_all(overlay);
+  lv_obj_set_size(overlay, HOR_RES, VER_RES);
+  lv_obj_center(overlay);
+  lv_obj_set_style_bg_opa(overlay, LV_OPA_50, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(overlay, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
+
+  lv_obj_t *panel = lv_obj_create(overlay);
+  lv_obj_set_size(panel, (HOR_RES * 90) / 100, (VER_RES * 75) / 100);
+  lv_obj_center(panel);
+  lv_obj_set_style_radius(panel, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_width(panel, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_color(panel, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(panel, lv_color_hex(0xD691D0), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+  lv_obj_t *titleBar = lv_obj_create(panel);
+  lv_obj_remove_style_all(titleBar);
+  lv_obj_set_size(titleBar, lv_pct(100), 32);
+  lv_obj_align(titleBar, LV_ALIGN_TOP_MID, 0, 0);
+  lv_obj_set_style_bg_opa(titleBar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(titleBar, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_DEFAULT);
+
+  lv_obj_t *titleLabel = lv_label_create(titleBar);
+  lv_label_set_text(titleLabel, (title != nullptr && title[0] != '\0') ? title : "Notification");
+  lv_obj_set_style_text_color(titleLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_text_font(titleLabel, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_center(titleLabel);
+
+  lv_obj_t *bodyLabel = lv_label_create(panel);
+  lv_obj_set_width(bodyLabel, lv_pct(90));
+  lv_label_set_long_mode(bodyLabel, LV_LABEL_LONG_WRAP);
+  lv_label_set_text(bodyLabel, (text != nullptr) ? text : "");
+  lv_obj_set_style_text_color(bodyLabel, lv_color_hex(0x2E0A2B), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_text_font(bodyLabel, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_align(bodyLabel, LV_ALIGN_TOP_MID, 0, 48);
+
+  if (hasButtons) {
+    lv_obj_t *buttonRow = lv_obj_create(panel);
+    lv_obj_remove_style_all(buttonRow);
+    lv_obj_set_size(buttonRow, lv_pct(94), 44);
+    lv_obj_align(buttonRow, LV_ALIGN_BOTTOM_MID, 0, -12);
+    lv_obj_set_flex_flow(buttonRow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(buttonRow, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+
+    if (showLeftButton) {
+      lv_obj_t *leftBtn = lv_btn_create(buttonRow);
+      lv_obj_set_size(leftBtn, 120, 36);
+      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_PRESSED);
+      lv_obj_set_style_border_width(leftBtn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+      lv_obj_t *leftLbl = lv_label_create(leftBtn);
+      lv_label_set_text(leftLbl, (leftButtonText != nullptr && leftButtonText[0] != '\0') ? leftButtonText : "Left");
+      lv_obj_set_style_text_color(leftLbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_center(leftLbl);
+    }
+
+    if (showRightButton) {
+      lv_obj_t *rightBtn = lv_btn_create(buttonRow);
+      lv_obj_set_size(rightBtn, 120, 36);
+      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_PRESSED);
+      lv_obj_set_style_border_width(rightBtn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+      lv_obj_t *rightLbl = lv_label_create(rightBtn);
+      lv_label_set_text(rightLbl, (rightButtonText != nullptr && rightButtonText[0] != '\0') ? rightButtonText : "Right");
+      lv_obj_set_style_text_color(rightLbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_center(rightLbl);
+    }
+  }
+
+  while (true) {
+    M5.update();
+    lv_task_handler();
+    updateMxReleaseStability();
+    Button1.tick();
+    Button2.tick();
+    Button3.tick();
+
+    if (hasButtons) {
+      if (showLeftButton && clickLeft_short_waspressed) {
+        result = NOTIFICATION_RESULT_LEFT;
+        break;
+      }
+      if (showRightButton && clickRight_short_waspressed) {
+        result = NOTIFICATION_RESULT_RIGHT;
+        break;
+      }
+    } else {
+      if ((millis() - startMs) >= duration) {
+        result = NOTIFICATION_RESULT_NONE;
+        break;
+      }
+    }
+
+    // Consume all activity so the current screen never receives latent button events.
+    mxclick_short_waspressed = false;
+    mxclick_long_waspressed = false;
+    mxclick_double_waspressed = false;
+    clickLeft_short_waspressed = false;
+    clickRight_short_waspressed = false;
+    clickRight_long_waspressed = false;
+    clickRight_double_waspressed = false;
+
+    vTaskDelay(pdMS_TO_TICKS(5));
+  }
+
+  lv_obj_del(overlay);
+
+  mxclick_short_waspressed = false;
+  mxclick_long_waspressed = false;
+  mxclick_double_waspressed = false;
+  clickLeft_short_waspressed = false;
+  clickRight_short_waspressed = false;
+  clickRight_long_waspressed = false;
+  clickRight_double_waspressed = false;
+
+  if (g_notification_blocks_inputs) {
+    touch_disabled = prevTouchDisabled;
+  }
+
+  return result;
 }
 
 static void markEncoderActivityForMxFilter()
@@ -898,6 +1054,11 @@ void screenmachine(lv_event_t * e)
 void homebuttonLevent(lv_event_t * e){
   //Pullout button
   lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
+
+  // Temporary test: always show a no-button notification and exit.
+  if(showNotification("Pullout test", "Testing notification without buttons", 2000, true, "Confirm", true, "RECHTS") == NOTIFICATION_RESULT_LEFT)
+{  
+
   if (eject_status == false) {
     // No eject addon: button does a pullout manoeuvre
     // Ensure remote sees an immediate stop and paused state.
@@ -932,8 +1093,11 @@ void homebuttonLevent(lv_event_t * e){
       //SendCommand(SETUP_D_I_F, 0.0, OSSM_ID); // eject forward
     }
   }
+} 
+  else {
+  showNotification("Pullout canceled", "Pullout action was canceled by the user.", 2000);
 }
-
+}
 void savepattern(lv_event_t * e){
   pattern = lv_roller_get_selected(ui_PatternS);
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
