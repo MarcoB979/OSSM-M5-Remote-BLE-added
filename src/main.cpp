@@ -245,7 +245,37 @@ uint8_t OSSM_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Broadcast to a
 // Bool
 
 bool EJECT_On = false;
-bool OSSM_On = false;
+
+#define state_OFF 0
+#define state_ON 1
+#define state_STOP 3
+#define state_MENU 4
+
+#define state_FALSE state_OFF
+#define state_TRUE state_ON
+
+int OSSM_On = state_FALSE;
+
+static void refreshHomeMxButtonUi()
+{
+  if (ui_HomeButtonM == nullptr || ui_HomeButtonMText == nullptr) {
+    return;
+  }
+
+  if (OSSM_On == state_TRUE) {
+    lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_label_set_text(ui_HomeButtonMText, T_STOP);
+  } else {
+    lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_label_set_text(ui_HomeButtonMText, T_START);
+  }
+}
+
+static void setOssmState(int newState)
+{
+  OSSM_On = newState;
+  refreshHomeMxButtonUi();
+}
 
 // Tasks:
 
@@ -339,7 +369,6 @@ static unsigned long mx_last_home_action_ms = 0;
 static constexpr unsigned long MX_HOME_MIN_GAP_MS = 220;
 static unsigned long mx_suppress_until_ms = 0;
 static constexpr unsigned long MX_SUPPRESS_AFTER_ENCODER_MS = 300;
-static constexpr unsigned long MX_MIN_RELEASE_STABLE_MS = 45; // Minimum time the MX must be stably released before accepting a new click, to filter out ghost clicks from contact bounce or partial presses. Set empirically based on measurements, and should be longer if the physical button is worn.
 static unsigned long mx_release_since_ms = 0;
 
 static void updateMxReleaseStability()
@@ -526,12 +555,6 @@ static bool filterMxPhysicalHomeClick()
 
   if ((long)(now - mx_suppress_until_ms) < 0) {
     LogDebugPrioFormatted("mx: ST_UI_HOME -> filtered after encoder move (%ld ms left)\n", (long)(mx_suppress_until_ms - now));
-    return false;
-  }
-
-  if (mx_release_since_ms == 0 || (now - mx_release_since_ms) < MX_MIN_RELEASE_STABLE_MS) {
-    LogDebugPrioFormatted("mx: ST_UI_HOME -> filtered unstable release (stable=%lu ms)\n",
-      mx_release_since_ms == 0 ? 0UL : (now - mx_release_since_ms));
     return false;
   }
 
@@ -803,12 +826,12 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     {
     case OFF: 
     {
-    OSSM_On = false;
+    setOssmState(state_FALSE);
     }
     break;
     case ON:
     {
-    OSSM_On = true;
+    setOssmState(state_TRUE);
     }
     break;
     }
@@ -818,10 +841,10 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 bool SendCommand(int Command, float Value, int Target){
   // Immediately update local paused/running state when sending ON/OFF
   if (Command == OFF) {
-    OSSM_On = false;
+    setOssmState(state_FALSE);
     LogDebug("Local OSSM_On set to false (sent OFF)");
   } else if (Command == ON) {
-    OSSM_On = true;
+    setOssmState(state_TRUE);
     LogDebug("Local OSSM_On set to true (sent ON)");
   }
   if(Target == OSSM_ID && OssmBleIsMode()){
@@ -832,7 +855,7 @@ bool SendCommand(int Command, float Value, int Target){
       speed,
       depth,
       stroke,
-      OSSM_On,
+      OSSM_On == state_TRUE,
       maxdepthinmm,
       speedlimit,
       &response);
@@ -1023,6 +1046,8 @@ void screenmachine(lv_event_t * e)
       lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
     }
 
+    refreshHomeMxButtonUi();
+
             
   } else if (lv_scr_act() == ui_Menue){
     st_screens = ST_UI_MENUE;
@@ -1055,10 +1080,6 @@ void homebuttonLevent(lv_event_t * e){
   //Pullout button
   lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
 
-  // Temporary test: always show a no-button notification and exit.
-  if(showNotification("Pullout test", "Testing notification without buttons", 2000, true, "Confirm", true, "RECHTS") == NOTIFICATION_RESULT_LEFT)
-{  
-
   if (eject_status == false) {
     // No eject addon: button does a pullout manoeuvre
     // Ensure remote sees an immediate stop and paused state.
@@ -1066,7 +1087,7 @@ void homebuttonLevent(lv_event_t * e){
       depth = 0;
       stroke = 0;
       OssmBleExecutePulloutStop(speed, maxdepthinmm, speedlimit);
-      OSSM_On = false;
+      setOssmState(state_FALSE);
       screenmachine(e);
       EJECT_On = true;
     } else {
@@ -1075,12 +1096,10 @@ void homebuttonLevent(lv_event_t * e){
       SendCommand(SETUP_D_I, 0.0, OSSM_ID);
       SendCommand(DEPTH, depth, OSSM_ID);
       SendCommand(STROKE, stroke, OSSM_ID);
-      OSSM_On = false;
+      setOssmState(state_FALSE);
       screenmachine(e);
       EJECT_On = true;
     }
-
-
   } 
   //FROM HERE EJECT CODE COULD BE INSERTED IF THE ADDON IS PRESENT, FOR NOW IT JUST TOGGLES THE EJECT STATE
   else {
@@ -1093,10 +1112,6 @@ void homebuttonLevent(lv_event_t * e){
       //SendCommand(SETUP_D_I_F, 0.0, OSSM_ID); // eject forward
     }
   }
-} 
-  else {
-  showNotification("Pullout canceled", "Pullout action was canceled by the user.", 2000);
-}
 }
 void savepattern(lv_event_t * e){
   pattern = lv_roller_get_selected(ui_PatternS);
@@ -1115,17 +1130,17 @@ static void homebuttonm_action(bool fromPhysicalMx = false)
 
   // BLE mode: toggle paused state when on Home screen.
   if (OssmBleIsMode() && st_screens == ST_UI_HOME) {
-    switch (OssmBleHandleHomeToggle(OSSM_On, speed)) {
+    switch (OssmBleHandleHomeToggle(OSSM_On == state_TRUE, speed)) {
       case OssmBleHomeToggleResult::Paused:
-        OSSM_On = false;
+        setOssmState(state_FALSE);
         LogDebugFormatted("Sent BLE pause command with paused speed: %f\n", speed);
         break;
       case OssmBleHomeToggleResult::Resumed:
-        OSSM_On = true;
+        setOssmState(state_TRUE);
         LogDebugFormatted("Sent BLE resume command (speed:%f)\n", OssmBleGetUnpauseSpeed());
         break;
       case OssmBleHomeToggleResult::Started:
-        OSSM_On = true;
+        setOssmState(state_TRUE);
         LogDebugFormatted("Sent BLE start command (speed:%f)\n", OssmBleGetUnpauseSpeed());
         break;
       case OssmBleHomeToggleResult::BlockedNotReady:
@@ -1140,18 +1155,18 @@ static void homebuttonm_action(bool fromPhysicalMx = false)
   }
 
   // Non-BLE (ESP-NOW) or other screens: original behavior
-  if(OSSM_On == false){
+  if(OSSM_On == state_FALSE){
     if (OssmBleIsMode()) {
       OssmBleGoToStrokeEngine();
     }
     SendCommand(ON, 0, OSSM_ID);
     if (OssmBleIsMode()) {
-      OSSM_On = true;
+      setOssmState(state_TRUE);
     }
-  } else if(OSSM_On == true){
+  } else if(OSSM_On == state_TRUE){
     SendCommand(OFF, 0, OSSM_ID);
     if (OssmBleIsMode()) {
-      OSSM_On = false;
+      setOssmState(state_FALSE);
     }
   }
 }
@@ -1279,6 +1294,7 @@ void setup(){
   lv_indev_set_read_cb(indev, my_touchpad_read);
   ui_init();  
   register_event_debug_callbacks();
+  refreshHomeMxButtonUi();
 
   // --- Restore stroke invert state from NVS and apply to UI (after ui_init) ---
   if (strokeinvert_mode) {

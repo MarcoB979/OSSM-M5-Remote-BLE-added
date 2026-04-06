@@ -22,7 +22,7 @@
 #define T_RESUME            "Resume"
 #define T_RUNNING           "Running"
 #define T_PAUSE             "Pause"
-#define T_STOP              "STOPPED"
+#define T_STOP              "STOP"
 #define T_FAIL              "Failed"
 #define T_BLOCKED           "Blocked/Not Ready"
 #define T_CUM               "Cum"
