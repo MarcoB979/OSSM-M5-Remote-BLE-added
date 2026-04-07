@@ -29,8 +29,6 @@ static uint32_t ble_last_state_poll_ms = 0;
 static String ble_last_state_raw;
 static OssmBleMachineState ble_last_machine_state;
 static const uint32_t BLE_STATE_POLL_INTERVAL_MS = 1000;
-static OssmBleReadyState ble_ready_state = OssmBleReadyState::Unknown;
-static uint32_t ble_last_go_to_stroke_engine_ms = 0;
 static bool ble_paused_state = false;
 
 static constexpr int APP_CMD_SPEED = 1;
@@ -102,18 +100,7 @@ static void resetBleSessionState()
   ble_last_state_poll_ms = 0;
   ble_last_state_raw.remove(0);
   ble_last_machine_state = OssmBleMachineState();
-  ble_ready_state = OssmBleReadyState::Unknown;
-  ble_last_go_to_stroke_engine_ms = 0;
   ble_paused_state = false;
-}
-
-static void requestBleStrokeEngineIfNeeded()
-{
-  uint32_t now = millis();
-  if ((now - ble_last_go_to_stroke_engine_ms) >= 2000UL) {
-    OssmBleGoToStrokeEngine();
-    ble_last_go_to_stroke_engine_ms = now;
-  }
 }
 
 static bool mapAppCommandToBleCommand(int appCommand, OssmBleCommand* outCommand)
@@ -301,39 +288,13 @@ static bool parseBleMachineState(const String& rawState, OssmBleMachineState* ou
   return true;
 }
 
-const char* OssmBleMachineModeName(OssmBleMachineMode mode)
-{
-  switch (mode) {
-    case OssmBleMachineMode::Unknown:
-      return "unknown";
-    case OssmBleMachineMode::HomingForward:
-      return "homing.forward";
-    case OssmBleMachineMode::HomingBackward:
-      return "homing.backward";
-    case OssmBleMachineMode::StrokeEngineIdle:
-      return "strokeEngine.idle";
-    case OssmBleMachineMode::StrokeEngineActive:
-      return "strokeEngine.active";
-    case OssmBleMachineMode::SimplePenetration:
-      return "simplePenetration";
-    case OssmBleMachineMode::Streaming:
-      return "streaming";
-    case OssmBleMachineMode::Menu:
-      return "menu";
-    case OssmBleMachineMode::Other:
-      return "other";
-    default:
-      return "unknown";
-  }
-}
-
-bool OssmBleIsHoming(const OssmBleMachineState& state)
+static bool isBleHoming(const OssmBleMachineState& state)
 {
   return state.mode == OssmBleMachineMode::HomingForward ||
          state.mode == OssmBleMachineMode::HomingBackward;
 }
 
-bool OssmBleIsReadyForStrokeEngine(const OssmBleMachineState& state)
+static bool isBleReadyForStrokeEngine(const OssmBleMachineState& state)
 {
   return state.mode == OssmBleMachineMode::StrokeEngineIdle ||
          state.mode == OssmBleMachineMode::StrokeEngineActive ||
@@ -515,47 +476,9 @@ bool OssmBleIsMode()
   return use_ble_transport;
 }
 
-void OssmBleBeginConnectFlow()
-{
-  ble_ready_state = OssmBleReadyState::WaitingForStrokeEngine;
-  ble_last_go_to_stroke_engine_ms = 0;
-}
-
-OssmBleReadyState OssmBleUpdateReadyState(bool forceRefresh)
-{
-  if (!OssmBleIsMode()) {
-    return OssmBleReadyState::Unknown;
-  }
-
-  OssmBleMachineState bleState;
-  if (!OssmBleGetCurrentState(&bleState, forceRefresh)) {
-    if (ble_ready_state != OssmBleReadyState::Ready) {
-      ble_ready_state = OssmBleReadyState::WaitingForStrokeEngine;
-      requestBleStrokeEngineIfNeeded();
-    }
-    return ble_ready_state;
-  }
-
-  if (OssmBleIsReadyForStrokeEngine(bleState)) {
-    ble_ready_state = OssmBleReadyState::Ready;
-    return ble_ready_state;
-  }
-
-  ble_ready_state = OssmBleReadyState::WaitingForStrokeEngine;
-  if (!OssmBleIsHoming(bleState)) {
-    requestBleStrokeEngineIfNeeded();
-  }
-  return ble_ready_state;
-}
-
-bool OssmBleIsWaitingForReady()
-{
-  return ble_ready_state == OssmBleReadyState::WaitingForStrokeEngine;
-}
-
 bool OssmBleCanSendControlCommands()
 {
-  return OssmBleIsMode() && ble_ready_state == OssmBleReadyState::Ready;
+  return OssmBleIsMode();
 }
 
 OssmBleHomeToggleResult OssmBleHandleHomeToggle(bool isRunning, float currentSpeed)
@@ -577,8 +500,13 @@ OssmBleHomeToggleResult OssmBleHandleHomeToggle(bool isRunning, float currentSpe
     return OssmBleHomeToggleResult::Failed;
   }
 
-  if (OssmBleUpdateReadyState(true) != OssmBleReadyState::Ready) {
-    return OssmBleHomeToggleResult::BlockedNotReady;
+  // Start path: ensure OSSM is in stroke engine mode before restoring speed.
+  if (!OssmBleGoToStrokeEngine()) {
+    return OssmBleHomeToggleResult::Failed;
+  }
+
+  if (currentSpeed > 0.0f) {
+    OssmBleStoreUnpauseSpeed(currentSpeed);
   }
 
   if (OssmBleResume()) {
@@ -694,7 +622,7 @@ bool OssmBleSendAppCommand(int appCommand, float value, float currentSpeed, floa
 bool OssmBleSendMappedAppCommand(int appCommand, float value, float speedValue, bool clearDepthAndStrokeFirst, float maxDepthMm, float maxSpeedValue, String* response)
 {
   if (!OssmBleCanSendControlCommands()) {
-    Serial.printf("BLE command blocked while waiting for readiness: command=%d value=%f\n", appCommand, value);
+    Serial.printf("BLE command blocked (BLE mode disabled): command=%d value=%f\n", appCommand, value);
     return false;
   }
 
@@ -737,7 +665,7 @@ static bool waitForBleDepthAndStrokeZero(uint32_t timeoutMs)
 bool OssmBleExecutePulloutStop(float currentSpeed, float maxDepthMm, float maxSpeedValue)
 {
   if (!OssmBleCanSendControlCommands()) {
-    Serial.println("BLE pullout stop blocked while waiting for readiness");
+    Serial.println("BLE pullout stop blocked (BLE mode disabled)");
     return false;
   }
 
@@ -844,15 +772,11 @@ bool OssmBleReadState(String* stateText, bool logState)
   }
 
   *stateText = String(raw.c_str());
-//  Serial.print("[BLE] Raw state: ");
-//  Serial.println(stateText->c_str());
-  updateBleMachineStateCache(*stateText);
-  return true; //comment if you want to log state on every read, but it can be chatty and impact performance
-
   if (logState) {
     Serial.print("BLE rx (state): ");
     Serial.println(stateText->c_str());
   }
+  updateBleMachineStateCache(*stateText);
   return true;
 }
 
@@ -921,37 +845,3 @@ bool OssmBlePollLimits(float* outMaxDepthMm, float* outMaxSpeedValue)
   return updated;
 }
 
-// Helper to compare two OssmBleMachineState objects (mode, speed, depth, stroke, sensation)
-static bool OssmBleStatesAreDifferent(const OssmBleMachineState& a, const OssmBleMachineState& b) {
-    return a.mode != b.mode ||
-           a.speed != b.speed ||
-           a.depth != b.depth ||
-           a.stroke != b.stroke ||
-           a.sensation != b.sensation ||
-           a.pattern != b.pattern;
-}
-
-// Polls the OSSM BLE device for the latest machine state every 100ms
-// Updates ble_last_machine_state and returns true if successful
-bool OssmBlePollState() {
-    if (!OssmBleConnected()) {
-        ble_last_machine_state.valid = false;
-        return false;
-    }
-    OssmBleMachineState newState;
-
-    if (OssmBleGetCurrentState(&newState, true)) {
-        bool changed = OssmBleStatesAreDifferent(newState, ble_last_machine_state);
-        ble_last_machine_state = newState;
-        ble_last_machine_state.valid = true;
-        ble_last_state_poll_ms = millis();
-        if (changed) {
-            Serial.printf("[BLE] State changed: mode=%d speed=%d depth=%d stroke=%d sensation=%d pattern=%d\n",
-                newState.mode, newState.speed, newState.depth, newState.stroke, newState.sensation, newState.pattern);
-        }
-        return true;
-    } else {
-        ble_last_machine_state.valid = false;
-        return false;
-    }
-}

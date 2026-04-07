@@ -36,12 +36,6 @@ enum class OssmBleCommand {
 	On,
 };
 
-enum class OssmBleReadyState {
-	Unknown,
-	WaitingForStrokeEngine,
-	Ready,
-};
-
 enum class OssmBleHomeToggleResult {
 	BlockedNotReady,
 	Paused,
@@ -52,12 +46,8 @@ enum class OssmBleHomeToggleResult {
 
 bool OssmBleTryConnect(void (*postInitCallback)() = nullptr);
 bool OssmBleConnected();
-bool OssmBlePollState();
 void OssmBleSetMode(bool enabled);
 bool OssmBleIsMode();
-void OssmBleBeginConnectFlow();
-OssmBleReadyState OssmBleUpdateReadyState(bool forceRefresh = true);
-bool OssmBleIsWaitingForReady();
 bool OssmBleCanSendControlCommands();
 OssmBleHomeToggleResult OssmBleHandleHomeToggle(bool isRunning, float currentSpeed);
 
@@ -76,9 +66,6 @@ bool OssmBleStreamPosition(float position, int timeMs);
 bool OssmBleReadState(String* stateText, bool logState = true);
 bool OssmBleGetCurrentState(OssmBleMachineState* outState, bool forceRefresh = true);
 bool OssmBlePollLimits(float* outMaxDepthMm, float* outMaxSpeedValue);
-const char* OssmBleMachineModeName(OssmBleMachineMode mode);
-bool OssmBleIsHoming(const OssmBleMachineState& state);
-bool OssmBleIsReadyForStrokeEngine(const OssmBleMachineState& state);
 
 // BLE-specific pause/resume helpers
 void OssmBleStoreUnpauseSpeed(float speed);
@@ -89,7 +76,6 @@ bool OssmBleResume();
 bool OssmBleSendIsPaused(int paused);
 // Compatibility shim only. OSSM BLE does not support set:pausedSpeed.
 bool OssmBleSendPausedSpeed(float speed);
-void OssmUiUpdateFromPolledState(const OssmBleMachineState& bleState);
 
 #ifdef __cplusplus
 extern "C" {

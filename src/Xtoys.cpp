@@ -64,7 +64,7 @@ extern bool OssmBleIsMode();
 extern float speed;
 extern float depth;
 extern float stroke;
-extern bool OSSM_On;
+extern bool OSSM_State;
 extern bool SendCommand(int Command, float Value, int Target);
 // Note: OSSM_ID is a #define in config.h — no extern needed
 extern int st_screens;
@@ -271,7 +271,7 @@ void XToysUpdate() {
             depth = 100.0f;
             stroke = 100.0f;
             speed = 100.0f;
-            OSSM_On = true;
+            OSSM_State = true;
 
             // Reflect primed values on-screen immediately when Home is visible.
             if (lv_scr_act() == ui_Home) {

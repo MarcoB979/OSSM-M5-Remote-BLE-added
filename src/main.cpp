@@ -17,6 +17,7 @@
 
 #include "language.h"
 #include <esp_timer.h>
+#include <esp_sleep.h>
 #include "Xtoys.h"
 
 constexpr int32_t HOR_RES=320;
@@ -172,10 +173,13 @@ float unpause_speed = 0.0;
 
 // --- Screen Saver Variables ---
 unsigned long last_activity_ms = 0;
-int screensaver_timeout_ms = 1 * 10 * 1000; // 1 minute, configurable
+int screensaver_timeout_ms = 2 * 60 * 1000; // 2 minutes, configurable
 int screensaver_dim_brightness = 15; // Value for dimmed screen
 int screensaver_prev_brightness = 180; // Default, will be set at startup
 bool screensaver_active = true;
+unsigned long deep_sleep_timeout_ms = 10 * 60 * 1000; // 10 minutes
+static uint32_t ble_home_go_strokeengine_ms = 0;
+static uint32_t ossm_state_monitor_hold_until_ms = 0;
 
 unsigned long nowMs;
 unsigned long rampMs = 0;
@@ -248,34 +252,31 @@ bool EJECT_On = false;
 
 #define state_OFF 0
 #define state_ON 1
+#define state_PAUSE 2
 #define state_STOP 3
 #define state_MENU 4
+#define state_HOMING 5
+#define state_STREAMING 6
+#define state_SIMPLE_PENETRATION 7
+#define state_STROKE_ENGINE 8
+#define state_ERROR 9
 
 #define state_FALSE state_OFF
 #define state_TRUE state_ON
 
-int OSSM_On = state_FALSE;
+int OSSM_State = state_FALSE;
 
-static void refreshHomeMxButtonUi()
-{
-  if (ui_HomeButtonM == nullptr || ui_HomeButtonMText == nullptr) {
-    return;
-  }
-
-  if (OSSM_On == state_TRUE) {
-    lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_label_set_text(ui_HomeButtonMText, T_STOP);
-  } else {
-    lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_label_set_text(ui_HomeButtonMText, T_START);
-  }
-}
-
-static void setOssmState(int newState)
-{
-  OSSM_On = newState;
-  refreshHomeMxButtonUi();
-}
+#define APPLY_HOME_MX_START_STOP_UI() do { \
+  if (ui_HomeButtonM != nullptr && ui_HomeButtonMText != nullptr) { \
+    if (OSSM_State == state_TRUE) { \
+      lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT); \
+      lv_label_set_text(ui_HomeButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP); \
+    } else { \
+      lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT); \
+      lv_label_set_text(ui_HomeButtonMText, T_START); \
+    } \
+  } \
+} while (0)
 
 // Tasks:
 
@@ -313,17 +314,106 @@ static void waitForPairingOrTimeout(uint32_t timeoutMs, uint32_t heartbeatInterv
 
 static void syncBleConnectUi(bool forceRefresh)
 {
-  OssmBleReadyState readyState = OssmBleUpdateReadyState(forceRefresh);
-  if (readyState == OssmBleReadyState::Ready) {
-    lv_label_set_text(ui_connect, "BLE");
+  (void)forceRefresh;
+  if (OssmBleConnected()) {
     lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
     return;
   }
+}
 
-  if (readyState == OssmBleReadyState::WaitingForStrokeEngine) {
-    lv_label_set_text(ui_Welcome, T_HOMING);
-    lv_label_set_text(ui_connect, T_HOMING);
+static const char* ossmStateToText(int state)
+{
+  switch (state) {
+    case state_OFF: return "OFF";
+    case state_ON: return "ON";
+    case state_PAUSE: return "PAUSE";
+    case state_STOP: return "STOP";
+    case state_MENU: return "MENU";
+    case state_HOMING: return "HOMING";
+    case state_STREAMING: return "STREAM";
+    case state_SIMPLE_PENETRATION: return "SIMPLE";
+    case state_STROKE_ENGINE: return "STROKE";
+    case state_ERROR: return "ERROR";
+    default: return "UNKNOWN";
   }
+}
+
+static void updateHomeTopLeftStateLabel()
+{
+  if (ui_connect == nullptr) {
+    return;
+  }
+
+  char labelText[32];
+  if (OssmBleIsMode()) {
+    if (OssmBleConnected()) {
+      snprintf(labelText, sizeof(labelText), "%s", ossmStateToText(OSSM_State));
+    } else {
+      snprintf(labelText, sizeof(labelText), "%s", T_CONNECTING);
+    }
+  } else {
+    snprintf(labelText, sizeof(labelText), "%s", ossmStateToText(OSSM_State));
+  }
+
+  lv_label_set_text(ui_connect, labelText);
+}
+
+static void monitorOssmState(bool forceBlePoll = false)
+{
+  static uint32_t lastBlePollMs = 0;
+  const uint32_t now = millis();
+  int nextState = OSSM_State;
+
+  if (OssmBleIsMode()) {
+    if (!forceBlePoll && now < ossm_state_monitor_hold_until_ms) {
+      APPLY_HOME_MX_START_STOP_UI();
+      updateHomeTopLeftStateLabel();
+      return;
+    }
+
+    bool shouldPoll = forceBlePoll || ((now - lastBlePollMs) >= 300U);
+    if (shouldPoll) {
+      lastBlePollMs = now;
+      OssmBleMachineState bleState;
+      if (OssmBleGetCurrentState(&bleState, true)) {
+        switch (bleState.mode) {
+          case OssmBleMachineMode::HomingForward:
+          case OssmBleMachineMode::HomingBackward:
+            nextState = state_HOMING;
+            break;
+          case OssmBleMachineMode::Menu:
+            nextState = state_MENU;
+            break;
+          case OssmBleMachineMode::Streaming:
+            nextState = state_STREAMING;
+            break;
+          case OssmBleMachineMode::SimplePenetration:
+            nextState = state_SIMPLE_PENETRATION;
+            break;
+          case OssmBleMachineMode::StrokeEngineActive:
+            nextState = (bleState.speed > 0) ? state_ON : state_PAUSE;
+            break;
+          case OssmBleMachineMode::StrokeEngineIdle:
+            nextState = (bleState.speed > 0) ? state_ON : state_PAUSE;
+            break;
+          default:
+            break;
+        }
+      }
+    }
+  }
+
+  if (st_screens == ST_UI_MENUE && nextState != state_HOMING && nextState != state_ERROR) {
+    nextState = state_MENU;
+  }
+
+  if (nextState != OSSM_State) {
+    OSSM_State = nextState;
+    LogDebugFormatted("OSSM_State -> %d\n", OSSM_State);
+  }
+
+  APPLY_HOME_MX_START_STOP_UI();
+  updateHomeTopLeftStateLabel();
 }
 
 // Makes vibration motor go Brrrrr
@@ -346,6 +436,7 @@ void brightness_slider_event_cb(lv_event_t * e)
 
 // Forward declaration for mxclick
 void mxclick();
+void screensaver_check_activity();
 bool mxclick_short_waspressed = false;
 void mxlong();
 bool mxclick_long_waspressed = false;
@@ -623,6 +714,29 @@ void screensaver_check_activity() {
   }
 }
 
+static bool canEnterDeepSleep()
+{
+  // Only allow deep sleep while OSSM is not moving.
+  return OSSM_State == state_FALSE;
+}
+
+static void enterDeepSleep()
+{
+  gpio_num_t mxPin = static_cast<gpio_num_t>(Button1.pin());
+  gpio_num_t leftPin = static_cast<gpio_num_t>(Button2.pin());
+  gpio_num_t rightPin = static_cast<gpio_num_t>(Button3.pin());
+  uint64_t wakeMask = (1ULL << mxPin) | (1ULL << leftPin) | (1ULL << rightPin);
+
+  LogDebug("Entering deep sleep (wake on MX/left/right)");
+  M5.Display.setBrightness(0);
+  M5.Power.setVibration(0);
+
+  // Buttons are active-high on this hardware mapping.
+  esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_HIGH);
+  delay(50);
+  esp_deep_sleep_start();
+}
+
 void my_touchpad_read(lv_indev_t * drv, lv_indev_data_t * data) {
   M5.update();
   auto count = M5.Touch.getCount();
@@ -826,12 +940,14 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     {
     case OFF: 
     {
-    setOssmState(state_FALSE);
+    OSSM_State = state_FALSE;
+    APPLY_HOME_MX_START_STOP_UI();
     }
     break;
     case ON:
     {
-    setOssmState(state_TRUE);
+    OSSM_State = state_TRUE;
+    APPLY_HOME_MX_START_STOP_UI();
     }
     break;
     }
@@ -841,11 +957,13 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 bool SendCommand(int Command, float Value, int Target){
   // Immediately update local paused/running state when sending ON/OFF
   if (Command == OFF) {
-    setOssmState(state_FALSE);
-    LogDebug("Local OSSM_On set to false (sent OFF)");
+    OSSM_State = state_FALSE;
+    APPLY_HOME_MX_START_STOP_UI();
+    LogDebug("Local OSSM_State set to false (sent OFF)");
   } else if (Command == ON) {
-    setOssmState(state_TRUE);
-    LogDebug("Local OSSM_On set to true (sent ON)");
+    OSSM_State = state_TRUE;
+    APPLY_HOME_MX_START_STOP_UI();
+    LogDebug("Local OSSM_State set to true (sent ON)");
   }
   if(Target == OSSM_ID && OssmBleIsMode()){
     String response;
@@ -855,7 +973,7 @@ bool SendCommand(int Command, float Value, int Target){
       speed,
       depth,
       stroke,
-      OSSM_On == state_TRUE,
+      OSSM_State == state_TRUE,
       maxdepthinmm,
       speedlimit,
       &response);
@@ -908,7 +1026,6 @@ void connectbutton(lv_event_t * e)
           lv_label_set_text(ui_Welcome, T_BLECONNECTED);
 
           OssmBleSetMode(true);
-          OssmBleBeginConnectFlow();
           Ossm_paired = true;
           syncBleConnectUi(true);
           break;
@@ -1017,6 +1134,7 @@ m5prf.end();
 
 void screenmachine(lv_event_t * e)
 {
+  (void)e;
   if (lv_scr_act() == ui_Start){
     st_screens = ST_UI_START;
   } else if (lv_scr_act() == ui_Home){
@@ -1040,13 +1158,19 @@ void screenmachine(lv_event_t * e)
       lv_slider_set_range(ui_homespeedslider, 0, 100);
       lv_slider_set_range(ui_homedepthslider, 0, 100);
       lv_slider_set_range(ui_homestrokeslider, 0, 100);
+
+      uint32_t nowMs = millis();
+      if ((nowMs - ble_home_go_strokeengine_ms) > 1200U) {
+        OssmBleGoToStrokeEngine();
+        ble_home_go_strokeengine_ms = nowMs;
+      }
     } else {
       lv_slider_set_range(ui_homespeedslider, 0, speedlimit);
       lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
       lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
     }
 
-    refreshHomeMxButtonUi();
+    APPLY_HOME_MX_START_STOP_UI();
 
             
   } else if (lv_scr_act() == ui_Menue){
@@ -1074,6 +1198,8 @@ void screenmachine(lv_event_t * e)
   } else if (lv_scr_act() == ui_Settings){
     st_screens = ST_UI_SETTINGS;
   }
+
+  monitorOssmState(true);
 }
 
 void homebuttonLevent(lv_event_t * e){
@@ -1087,7 +1213,8 @@ void homebuttonLevent(lv_event_t * e){
       depth = 0;
       stroke = 0;
       OssmBleExecutePulloutStop(speed, maxdepthinmm, speedlimit);
-      setOssmState(state_FALSE);
+      OSSM_State = state_FALSE;
+      APPLY_HOME_MX_START_STOP_UI();
       screenmachine(e);
       EJECT_On = true;
     } else {
@@ -1096,7 +1223,8 @@ void homebuttonLevent(lv_event_t * e){
       SendCommand(SETUP_D_I, 0.0, OSSM_ID);
       SendCommand(DEPTH, depth, OSSM_ID);
       SendCommand(STROKE, stroke, OSSM_ID);
-      setOssmState(state_FALSE);
+      OSSM_State = state_FALSE;
+      APPLY_HOME_MX_START_STOP_UI();
       screenmachine(e);
       EJECT_On = true;
     }
@@ -1124,23 +1252,25 @@ void savepattern(lv_event_t * e){
 
 static void homebuttonm_action(bool fromPhysicalMx = false)
 {
-  if (fromPhysicalMx && !filterMxPhysicalHomeClick()) {
-    return;
-  }
+  (void)fromPhysicalMx;
 
   // BLE mode: toggle paused state when on Home screen.
   if (OssmBleIsMode() && st_screens == ST_UI_HOME) {
-    switch (OssmBleHandleHomeToggle(OSSM_On == state_TRUE, speed)) {
+    ossm_state_monitor_hold_until_ms = millis() + 1U;
+    switch (OssmBleHandleHomeToggle(OSSM_State == state_TRUE, speed)) {
       case OssmBleHomeToggleResult::Paused:
-        setOssmState(state_FALSE);
+        OSSM_State = state_FALSE;
+        APPLY_HOME_MX_START_STOP_UI();
         LogDebugFormatted("Sent BLE pause command with paused speed: %f\n", speed);
         break;
       case OssmBleHomeToggleResult::Resumed:
-        setOssmState(state_TRUE);
+        OSSM_State = state_TRUE;
+        APPLY_HOME_MX_START_STOP_UI();
         LogDebugFormatted("Sent BLE resume command (speed:%f)\n", OssmBleGetUnpauseSpeed());
         break;
       case OssmBleHomeToggleResult::Started:
-        setOssmState(state_TRUE);
+        OSSM_State = state_TRUE;
+        APPLY_HOME_MX_START_STOP_UI();
         LogDebugFormatted("Sent BLE start command (speed:%f)\n", OssmBleGetUnpauseSpeed());
         break;
       case OssmBleHomeToggleResult::BlockedNotReady:
@@ -1155,18 +1285,20 @@ static void homebuttonm_action(bool fromPhysicalMx = false)
   }
 
   // Non-BLE (ESP-NOW) or other screens: original behavior
-  if(OSSM_On == state_FALSE){
+  if(OSSM_State == state_FALSE){
     if (OssmBleIsMode()) {
       OssmBleGoToStrokeEngine();
     }
     SendCommand(ON, 0, OSSM_ID);
     if (OssmBleIsMode()) {
-      setOssmState(state_TRUE);
+      OSSM_State = state_TRUE;
+      APPLY_HOME_MX_START_STOP_UI();
     }
-  } else if(OSSM_On == state_TRUE){
+  } else if(OSSM_State == state_TRUE){
     SendCommand(OFF, 0, OSSM_ID);
     if (OssmBleIsMode()) {
-      setOssmState(state_FALSE);
+      OSSM_State = state_FALSE;
+      APPLY_HOME_MX_START_STOP_UI();
     }
   }
 }
@@ -1189,6 +1321,7 @@ void setup(){
   Serial.begin(115200);
   vTaskDelay(pdMS_TO_TICKS(50));
   Serial.println("\n\nBooting...");
+  esp_sleep_wakeup_cause_t wakeCause = esp_sleep_get_wakeup_cause();
   auto cfg = M5.config();
   M5.begin(cfg);
   LogDebugFormatted("MX boot raw pin%d=%d\n", Button1.pin(), digitalRead(Button1.pin()));
@@ -1293,8 +1426,12 @@ void setup(){
   lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
   lv_indev_set_read_cb(indev, my_touchpad_read);
   ui_init();  
+  if (wakeCause == ESP_SLEEP_WAKEUP_EXT1 || wakeCause == ESP_SLEEP_WAKEUP_EXT0) {
+    // After deep sleep wake, return to start screen so reconnect can happen cleanly.
+    lv_scr_load(ui_Start);
+  }
   register_event_debug_callbacks();
-  refreshHomeMxButtonUi();
+  APPLY_HOME_MX_START_STOP_UI();
 
   // --- Restore stroke invert state from NVS and apply to UI (after ui_init) ---
   if (strokeinvert_mode) {
@@ -1324,6 +1461,7 @@ void setup(){
   lv_roller_set_selected(ui_PatternS,2,LV_ANIM_OFF);
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
   lv_label_set_text(ui_HomePatternLabel,patternstr);
+  last_activity_ms = millis();
 
   LogDebug("Setup complete");
 }
@@ -1350,6 +1488,13 @@ void loop()
        screensaver_active = true;
      }
 
+     // --- Deep Sleep Logic ---
+     if (millis() - last_activity_ms > deep_sleep_timeout_ms) {
+       if (canEnterDeepSleep()) {
+         enterDeepSleep();
+       }
+     }
+
      lv_bar_set_value(ui_Battery2, BatteryLevel, LV_ANIM_OFF);
      lv_label_set_text(ui_BattValue2, battVal);
      lv_bar_set_value(ui_Battery3, BatteryLevel, LV_ANIM_OFF);
@@ -1366,11 +1511,13 @@ void loop()
      Button2.tick();
      Button3.tick();
 
+    monitorOssmState(false);
+
      switch(st_screens){
       
      case ST_UI_START: //Menu With logo after boot
       {
-        if (OssmBleIsMode() && OssmBleIsWaitingForReady()) {
+        if (OssmBleIsMode()) {
           static uint32_t lastBleHomingPollMs = 0;
           uint32_t nowPollMs = millis();
           if ((nowPollMs - lastBleHomingPollMs) >= 500UL) {
@@ -1635,6 +1782,7 @@ void loop()
 
         if(clickLeft_short_waspressed == true){
          lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
+         clickLeft_short_waspressed = false;
         } else if(mxclick_short_waspressed == true){
          // Physical MX is handled directly only on Home, where the middle action
          // controls start/stop in ESP-NOW mode and pause/resume in BLE mode.
@@ -1643,11 +1791,14 @@ void loop()
          // this routing/filtering decision may need to be expanded carefully.
          LogDebug("mx: ST_UI_HOME -> direct HomeButtonM action");
          homebuttonm_action(true);
+         mxclick_short_waspressed = false;
         } else if(clickRight_short_waspressed == true){
          lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
+         clickRight_short_waspressed = false;
         } else if(clickRight_long_waspressed == true){
           sensation = 0;        //reset sensation to zero
           SendCommand(SENSATION, sensation, OSSM_ID);
+          clickRight_long_waspressed = false;
         }else if(clickRight_double_waspressed == true){
           if (dynamicStroke == false){
             dynamicStroke = true;;            /// dynamicStroke = !dynamicStroke; crashes M5 for some reason

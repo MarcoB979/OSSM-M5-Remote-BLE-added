@@ -207,7 +207,7 @@ static void ui_event_HomeButtonM(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_PRESSED || event == LV_EVENT_CLICKED || event == LV_EVENT_LONG_PRESSED) {
+    if(event == LV_EVENT_CLICKED) {
         homebuttonmevent(e);
     }
 }
