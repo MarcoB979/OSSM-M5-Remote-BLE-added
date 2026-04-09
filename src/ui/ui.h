@@ -55,7 +55,7 @@ extern lv_obj_t * ui_Battery2;
 extern lv_obj_t * ui_HomePatternLabel1;
 extern lv_obj_t * ui_HomePatternLabel;
 extern lv_obj_t * ui_connect;
-extern lv_obj_t * ui_Menue;
+/*extern lv_obj_t * ui_Menue;
 extern lv_obj_t * ui_Logo3;
 extern lv_obj_t * ui_MenueButtonL;
 extern lv_obj_t * ui_MenueButtonLText;
@@ -63,6 +63,7 @@ extern lv_obj_t * ui_MenueButtonM;
 extern lv_obj_t * ui_MenueButtonMText;
 extern lv_obj_t * ui_MenueButtonR;
 extern lv_obj_t * ui_MenueButtonRText;
+*/
 extern lv_obj_t * ui_brightness_slider;
 extern lv_obj_t * ui_Batt3;
 extern lv_obj_t * ui_BattValue3;
@@ -139,8 +140,71 @@ extern lv_obj_t * ui_strokeinvert;
 extern lv_obj_t * ui_darkmode;
 extern lv_obj_t * ui_vibrate;
 extern lv_obj_t * ui_lefty;
+
+// UI_MENU screen objects
+extern lv_obj_t * ui_Menu;
+extern lv_obj_t * ui_LogoMenu;
+extern lv_obj_t * ui_MenuButtonTL;
+extern lv_obj_t * ui_MenuButtonTLText;
+extern lv_obj_t * ui_MenuButtonTR;
+extern lv_obj_t * ui_MenuButtonTRText;
+extern lv_obj_t * ui_MenuButtonML;
+extern lv_obj_t * ui_MenuButtonMLText;
+extern lv_obj_t * ui_MenuButtonMR;
+extern lv_obj_t * ui_MenuButtonMRText;
+extern lv_obj_t * ui_MenuButtonBL;
+extern lv_obj_t * ui_MenuButtonBLText;
+extern lv_obj_t * ui_MenuButtonBR;
+extern lv_obj_t * ui_MenuButtonBRText;
+extern lv_obj_t * ui_Batt7;
+extern lv_obj_t * ui_BattValue7;
+extern lv_obj_t * ui_Battery7;
+extern lv_obj_t * ui_MenuButtonL;
+extern lv_obj_t * ui_MenuButtonLText;
+extern lv_obj_t * ui_MenuButtonM;
+extern lv_obj_t * ui_MenuButtonMText;
+extern lv_obj_t * ui_MenuButtonR;
+extern lv_obj_t * ui_MenuButtonRText;
+
+// UI_STREAMING screen objects
+extern lv_obj_t * ui_Streaming;
+extern lv_obj_t * ui_LogoStreaming;
+extern lv_obj_t * ui_StreamingButtonL;
+extern lv_obj_t * ui_StreamingButtonLText;
+extern lv_obj_t * ui_StreamingButtonM;
+extern lv_obj_t * ui_StreamingButtonMText;
+extern lv_obj_t * ui_StreamingButtonR;
+extern lv_obj_t * ui_StreamingButtonRText;
+extern lv_obj_t * ui_StreamingSpeedL;
+extern lv_obj_t * ui_streamingspeedslider;
+extern lv_obj_t * ui_streamingspeedvalue;
+extern lv_obj_t * ui_StreamingDepthL;
+extern lv_obj_t * ui_streamingdepthslider;
+extern lv_obj_t * ui_streamingdepthvalue;
+extern lv_obj_t * ui_StreamingStrokeL;
+extern lv_obj_t * ui_streamingstrokeslider;
+extern lv_obj_t * ui_streamingstrokevalue;
+extern lv_obj_t * ui_Batt8;
+extern lv_obj_t * ui_BattValue8;
+extern lv_obj_t * ui_Battery8;
+
+// UI_ADDONS screen objects
+extern lv_obj_t * ui_Addons;
+extern lv_obj_t * ui_LogoAddons;
+extern lv_obj_t * ui_AddonsHint;
+extern lv_obj_t * ui_AddonsItem0;
+extern lv_obj_t * ui_AddonsItem0Text;
+extern lv_obj_t * ui_AddonsItem1;
+extern lv_obj_t * ui_AddonsItem1Text;
+extern lv_obj_t * ui_AddonsButtonR;
+extern lv_obj_t * ui_AddonsButtonRText;
+extern lv_obj_t * ui_darkmode;
+extern lv_obj_t * ui_vibrate;
+extern lv_obj_t * ui_lefty;
+extern lv_group_t * ui_g_menu;
 extern lv_group_t * ui_g_menue;
 extern lv_group_t * ui_g_settings;
+extern lv_group_t * ui_g_addons;
 
 
 void screenmachine(lv_event_t * e);
@@ -148,6 +212,7 @@ void connectbutton(lv_event_t * e);
 void screenmachine(lv_event_t * e);
 void homebuttonLevent(lv_event_t * e);
 void homebuttonmevent(lv_event_t * e);
+void streamingbuttonmevent(lv_event_t * e);
 void screenmachine(lv_event_t * e);
 void setupDepthInter(lv_event_t * e);
 void setupdepthF(lv_event_t * e);

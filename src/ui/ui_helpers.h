@@ -12,6 +12,10 @@
     #include "lvgl/lvgl.h"
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define _UI_TEMPORARY_STRING_BUFFER_SIZE 32
 #define _UI_BAR_PROPERTY_VALUE 0
 #define _UI_BAR_PROPERTY_VALUE_WITH_ANIM 1
@@ -93,5 +97,9 @@ void _ui_arc_set_text_value(lv_obj_t * trg, lv_obj_t * src, char * prefix, char 
 void _ui_slider_set_text_value(lv_obj_t * trg, lv_obj_t * src, char * prefix, char * postfix);
 
 void _ui_checked_set_text_value(lv_obj_t * trg, lv_obj_t * src, char * txt_on, char * txt_off);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

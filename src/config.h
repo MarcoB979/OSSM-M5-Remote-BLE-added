@@ -48,6 +48,23 @@ OneButton Button3(34, false, true); //Encoder Right
 #define LV_HOR_RES_MAX 320
 #define LV_VER_RES_MAX 240
 
+// Addons catalog used by the Addons UI and dynamic Home double-click bindings.
+typedef struct AddonDefinition {
+	const char* id;
+	const char* displayName;
+} AddonDefinition;
+
+#define ADDON_SLOT_NONE  0
+#define ADDON_SLOT_LEFT  1
+#define ADDON_SLOT_RIGHT 2
+
+static const AddonDefinition ADDON_DEFINITIONS[] = {
+	{"eject_cumpump", "Eject Cumpump"},
+	{"fist_it", "Fist-IT"},
+};
+
+#define ADDON_DEFINITIONS_COUNT (sizeof(ADDON_DEFINITIONS) / sizeof(ADDON_DEFINITIONS[0]))
+
 // Color 
 #define TextColor  TFT_PURPLE
 #define BgColor    TFT_WHITE

@@ -17,6 +17,11 @@ extern "C" {
 #endif
 
 void xtoysMenuButtonRToggle(void);
+void requestStreamingEntryFlow(void);
+void streamingReturnToMenu(void);
+void requestMenuEntryAction(void);
+void addonsScreenLoaded(void);
+void addonsSelectIndex(int index);
 
 #ifdef __cplusplus
 }
@@ -27,7 +32,9 @@ int showNotification(const char *title,
                      bool showLeftButton = false,
                      const char *leftButtonText = nullptr,
                      bool showRightButton = false,
-                     const char *rightButtonText = nullptr);
+                     const char *rightButtonText = nullptr,
+                     bool showFullScreen = false);
+void handleStreamingEntryFlow();
 #endif
 
 

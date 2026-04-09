@@ -2,7 +2,7 @@
 // Language
 #define T_HEADER            "OSSM Remote"
 #define T_BLANK             ""
-#define T_MENUE             "Menu"
+#define T_MENU             "Menu"
 #define T_DEMO              "Demo"
 #define T_CONNECT           "Connect"
 #define T_CONNECTING        "Connecting..."
@@ -73,3 +73,37 @@
 #define T_CUM_Accel         "CUM Force"
 
 #define T_FUCKS_MIN         " F/m"
+
+// UI_MENU buttons
+#define T_HOMESCREEN        "Home screen"
+#define T_HOMESCREEN_SUB    "(Stroke engine)"
+#define T_STREAMING         "Streaming"
+#define T_STREAMING_SUB     "mode"
+#define T_ADDONS            "Addons"
+#define T_PATTERN_GENERATOR "Pattern Generator"
+#define T_OVERRIDE          "Override"  //was added, but removed now (safety)
+#define T_STOP_STREAMING    "Stop streaming"
+#define T_STREAMING_CAUTION_TITLE "Caution - Homing"
+#define T_STREAMING_CAUTION_TEXT  "The OSSM will now start a homing procedure. Move away from the OSSM for your safety"
+#define T_STREAMING_ACTIVE_TITLE  "OSSM in Streaming mode"
+#define T_STREAMING_ACTIVE_TEXT   "The OSSM is now in STREAMING MODE. Press Start to arm streaming. Movement begins when an external stream source sends position frames.\nTo stop streaming, go to menu."
+#define T_STREAMING_FAIL_TITLE    "Streaming failed"
+#define T_STREAMING_FAIL_TEXT     "The OSSM could not enter streaming mode."
+
+// Screen titles
+#define T_SCREEN_START            "Start"
+#define T_SCREEN_STROKE_ENGINE    "Stroke Engine"
+#define T_SCREEN_MENU             "Menu"
+#define T_SCREEN_STREAMING        "Streaming"
+#define T_SCREEN_SETTINGS         "Settings"
+#define T_SCREEN_ADDONS           "Addons"
+#define T_SCREEN_PATTERN          "Pattern"
+#define T_SCREEN_TORQUE           "Torque"
+#define T_SCREEN_EJECT            "Eject Settings"
+
+// Addons screen
+#define T_ADDONS_HINT             "Click addon to assign: Left -> Right -> Off"
+#define T_ADDONS_SLOT_LEFT        "Left"
+#define T_ADDONS_SLOT_RIGHT       "Right"
+#define T_ADDONS_SLOT_OFF         "Off"
+#define T_BACK                    "Back"

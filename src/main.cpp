@@ -7,10 +7,12 @@
 #include "OneButton.h"          //For Button Debounce and Longpress
 #include "config.h"
 #include <Arduino.h>
+#include <cstring>
 #include <Wire.h>
 #include <lvgl.h>
 #include <SPI.h>
 #include "ui/ui.h"
+#include "ui/ui_helpers.h"
 #include "main.h"
 #include "Preferences.h"      //EEPROM replacement function
 #include "OssmBLE.h"
@@ -61,12 +63,14 @@ constexpr int32_t VER_RES=240;
 #define ST_UI_START 0
 #define ST_UI_HOME 1
 #define ST_UI_MENUE 10
-
-#define ST_UI_MENUE 10
+//duplicate removed
 #define ST_UI_PATTERN 11
 #define ST_UI_Torqe 12
 #define ST_UI_EJECTSETTINGS 13
 #define ST_UI_SETTINGS 20
+#define ST_UI_MENU 21
+#define ST_UI_STREAMING 22
+#define ST_UI_ADDONS 23
 
 // EEPROM replacement function using Non-volatie memory (NVS)
 Preferences m5prf; //initiate an instance of the Preferences library
@@ -142,6 +146,9 @@ long speedenc = 0;
 long depthenc = 0;
 long strokeenc = 0;
 long sensationenc = 0;
+long streamingSpeedEnc = 0;
+long streamingDepthEnc = 0;
+long streamingStrokeEnc = 0;
 long torqe_f_enc = 0;
 long torqe_r_enc = 0;
 long cum_t_enc = 0;
@@ -176,7 +183,7 @@ unsigned long last_activity_ms = 0;
 int screensaver_timeout_ms = 2 * 60 * 1000; // 2 minutes, configurable
 int screensaver_dim_brightness = 15; // Value for dimmed screen
 int screensaver_prev_brightness = 180; // Default, will be set at startup
-bool screensaver_active = true;
+bool screensaver_active = false;
 unsigned long deep_sleep_timeout_ms = 10 * 60 * 1000; // 10 minutes
 static uint32_t ble_home_go_strokeengine_ms = 0;
 static uint32_t ossm_state_monitor_hold_until_ms = 0;
@@ -266,9 +273,14 @@ bool EJECT_On = false;
 
 int OSSM_State = state_FALSE;
 
+static inline bool isRunningUiState(int state)
+{
+  return state == state_TRUE || state == state_STREAMING;
+}
+
 #define APPLY_HOME_MX_START_STOP_UI() do { \
   if (ui_HomeButtonM != nullptr && ui_HomeButtonMText != nullptr) { \
-    if (OSSM_State == state_TRUE) { \
+    if (isRunningUiState(OSSM_State)) { \
       lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT); \
       lv_label_set_text(ui_HomeButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP); \
     } else { \
@@ -276,6 +288,23 @@ int OSSM_State = state_FALSE;
       lv_label_set_text(ui_HomeButtonMText, T_START); \
     } \
   } \
+} while (0)
+
+#define APPLY_STREAMING_MX_START_STOP_UI() do { \
+  if (ui_StreamingButtonM != nullptr && ui_StreamingButtonMText != nullptr) { \
+    if (isRunningUiState(OSSM_State)) { \
+      lv_obj_set_style_bg_color(ui_StreamingButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT); \
+      lv_label_set_text(ui_StreamingButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP); \
+    } else { \
+      lv_obj_set_style_bg_color(ui_StreamingButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT); \
+      lv_label_set_text(ui_StreamingButtonMText, T_START); \
+    } \
+  } \
+} while (0)
+
+#define APPLY_HOME_AND_STREAMING_MX_START_STOP_UI() do { \
+  APPLY_HOME_MX_START_STOP_UI(); \
+  APPLY_STREAMING_MX_START_STOP_UI(); \
 } while (0)
 
 // Tasks:
@@ -366,12 +395,16 @@ static void monitorOssmState(bool forceBlePoll = false)
 
   if (OssmBleIsMode()) {
     if (!forceBlePoll && now < ossm_state_monitor_hold_until_ms) {
-      APPLY_HOME_MX_START_STOP_UI();
+      APPLY_HOME_AND_STREAMING_MX_START_STOP_UI();
       updateHomeTopLeftStateLabel();
       return;
     }
 
-    bool shouldPoll = forceBlePoll || ((now - lastBlePollMs) >= 300U);
+    // While OSSM is confirmed streaming, back off polling to 3 s.
+    // Frequent blocking BLE reads compete with external stream frames (e.g.
+    // X-Toys) on the same connection and cause motor stalls.
+    const uint32_t pollInterval = (OSSM_State == state_STREAMING) ? 3000U : 300U;
+    bool shouldPoll = forceBlePoll || ((now - lastBlePollMs) >= pollInterval);
     if (shouldPoll) {
       lastBlePollMs = now;
       OssmBleMachineState bleState;
@@ -403,7 +436,7 @@ static void monitorOssmState(bool forceBlePoll = false)
     }
   }
 
-  if (st_screens == ST_UI_MENUE && nextState != state_HOMING && nextState != state_ERROR) {
+  if (st_screens == ST_UI_MENU && nextState != state_HOMING && nextState != state_ERROR) {
     nextState = state_MENU;
   }
 
@@ -412,7 +445,7 @@ static void monitorOssmState(bool forceBlePoll = false)
     LogDebugFormatted("OSSM_State -> %d\n", OSSM_State);
   }
 
-  APPLY_HOME_MX_START_STOP_UI();
+  APPLY_HOME_AND_STREAMING_MX_START_STOP_UI();
   updateHomeTopLeftStateLabel();
 }
 
@@ -445,6 +478,8 @@ bool mxclick_double_waspressed = false;
 
 void clickLeft();
 bool clickLeft_short_waspressed = false;
+void clickLeftDouble();
+bool clickLeft_double_waspressed = false;
 void clickRight();
 bool clickRight_short_waspressed = false;
 void clickRightLong();
@@ -454,6 +489,16 @@ bool clickRight_double_waspressed = false;
 
 // Keep this configurable for future non-blocking interaction modes.
 static bool g_notification_blocks_inputs = true;
+static bool g_streaming_entry_flow_pending = false;
+static bool g_streaming_controls_locked = false;
+static void streamingbuttonm_action(bool fromPhysicalMx);
+static void streamingStartOnlyAction();
+static int g_addon_slots[ADDON_DEFINITIONS_COUNT] = {ADDON_SLOT_NONE};
+static bool g_addons_loaded_from_nvs = false;
+
+static void refreshAddonsUi();
+static void applyHomeDefaultsForModeChange();
+static void updateScreenTitleLabels();
 
 // Home-only MX anti-ghost filter: ignore very fast repeated physical MX clicks.
 static unsigned long mx_last_home_action_ms = 0;
@@ -475,20 +520,37 @@ static void updateMxReleaseStability()
   }
 }
 
+static volatile int g_notification_touch_result = NOTIFICATION_RESULT_NONE;
+
+static void notification_left_button_cb(lv_event_t *e)
+{
+  (void)e;
+  g_notification_touch_result = NOTIFICATION_RESULT_LEFT;
+}
+
+static void notification_right_button_cb(lv_event_t *e)
+{
+  (void)e;
+  g_notification_touch_result = NOTIFICATION_RESULT_RIGHT;
+}
+
 int showNotification(const char *title,
                      const char *text,
                      uint32_t duration,
                      bool showLeftButton,
                      const char *leftButtonText,
                      bool showRightButton,
-                     const char *rightButtonText)
+                     const char *rightButtonText,
+                     bool showFullScreen)
 {
   const bool hasButtons = showLeftButton || showRightButton;
   const bool prevTouchDisabled = touch_disabled;
+  const bool shouldBlockTouch = g_notification_blocks_inputs && !hasButtons;
   const uint32_t startMs = millis();
   int result = NOTIFICATION_RESULT_NONE;
+  g_notification_touch_result = NOTIFICATION_RESULT_NONE;
 
-  if (g_notification_blocks_inputs) {
+  if (shouldBlockTouch) {
     touch_disabled = true;
   }
 
@@ -510,8 +572,15 @@ int showNotification(const char *title,
   lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
 
   lv_obj_t *panel = lv_obj_create(overlay);
-  lv_obj_set_size(panel, (HOR_RES * 90) / 100, (VER_RES * 75) / 100);
-  lv_obj_center(panel);
+  if (showFullScreen) {
+    const int topOffset = 32;
+    const int bottomPadding = 5;
+    lv_obj_set_size(panel, 310, VER_RES - topOffset - bottomPadding);
+    lv_obj_set_pos(panel, 5, topOffset);
+  } else {
+    lv_obj_set_size(panel, (HOR_RES * 90) / 100, (VER_RES * 75) / 100);
+    lv_obj_align(panel, LV_ALIGN_CENTER, 0, 5);
+  }
   lv_obj_set_style_radius(panel, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_border_width(panel, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_border_color(panel, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -559,6 +628,7 @@ int showNotification(const char *title,
       lv_label_set_text(leftLbl, (leftButtonText != nullptr && leftButtonText[0] != '\0') ? leftButtonText : "Left");
       lv_obj_set_style_text_color(leftLbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(leftLbl);
+      lv_obj_add_event_cb(leftBtn, notification_left_button_cb, LV_EVENT_CLICKED, nullptr);
     }
 
     if (showRightButton) {
@@ -572,8 +642,11 @@ int showNotification(const char *title,
       lv_label_set_text(rightLbl, (rightButtonText != nullptr && rightButtonText[0] != '\0') ? rightButtonText : "Right");
       lv_obj_set_style_text_color(rightLbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(rightLbl);
+      lv_obj_add_event_cb(rightBtn, notification_right_button_cb, LV_EVENT_CLICKED, nullptr);
     }
   }
+
+  static uint32_t notif_last_state_log_ms = 0;
 
   while (true) {
     M5.update();
@@ -583,18 +656,30 @@ int showNotification(const char *title,
     Button2.tick();
     Button3.tick();
 
+    // Periodic BLE state log inside modal (every 2 s) so streaming activity
+    // is visible on serial even while notification blocks the main loop.
+    if (OssmBleIsMode() && (millis() - notif_last_state_log_ms) >= 2000U) {
+      notif_last_state_log_ms = millis();
+      String stateText;
+      OssmBleReadState(&stateText, true);
+    }
+
+    if (duration > 0 && (millis() - startMs) >= duration) {
+      result = NOTIFICATION_RESULT_NONE;
+      break;
+    }
+
     if (hasButtons) {
+      if (g_notification_touch_result != NOTIFICATION_RESULT_NONE) {
+        result = g_notification_touch_result;
+        break;
+      }
       if (showLeftButton && clickLeft_short_waspressed) {
         result = NOTIFICATION_RESULT_LEFT;
         break;
       }
       if (showRightButton && clickRight_short_waspressed) {
         result = NOTIFICATION_RESULT_RIGHT;
-        break;
-      }
-    } else {
-      if ((millis() - startMs) >= duration) {
-        result = NOTIFICATION_RESULT_NONE;
         break;
       }
     }
@@ -621,11 +706,264 @@ int showNotification(const char *title,
   clickRight_long_waspressed = false;
   clickRight_double_waspressed = false;
 
-  if (g_notification_blocks_inputs) {
+  if (shouldBlockTouch) {
     touch_disabled = prevTouchDisabled;
   }
 
   return result;
+}
+
+extern "C" void requestStreamingEntryFlow(void)
+{
+  g_streaming_entry_flow_pending = true;
+}
+
+extern "C" void requestMenuEntryAction(void)
+{
+  if (OssmBleIsMode()) {
+    OssmBleGoToMenu();
+  }
+}
+
+static const char* addonSlotLabel(int slot)
+{
+  switch (slot) {
+    case ADDON_SLOT_LEFT: return T_ADDONS_SLOT_LEFT;
+    case ADDON_SLOT_RIGHT: return T_ADDONS_SLOT_RIGHT;
+    default: return T_ADDONS_SLOT_OFF;
+  }
+}
+
+static void loadAddonBindingsIfNeeded()
+{
+  if (g_addons_loaded_from_nvs) {
+    return;
+  }
+
+  Preferences pref;
+  pref.begin("m5-ctnr", true);
+  for (size_t i = 0; i < ADDON_DEFINITIONS_COUNT; ++i) {
+    char key[24];
+    snprintf(key, sizeof(key), "AddonSlot%u", (unsigned)i);
+    int slot = pref.getInt(key, ADDON_SLOT_NONE);
+    if (slot != ADDON_SLOT_LEFT && slot != ADDON_SLOT_RIGHT) {
+      slot = ADDON_SLOT_NONE;
+    }
+    g_addon_slots[i] = slot;
+  }
+  pref.end();
+
+  // Enforce unique left/right bindings after loading potentially stale settings.
+  int leftOwner = -1;
+  int rightOwner = -1;
+  for (size_t i = 0; i < ADDON_DEFINITIONS_COUNT; ++i) {
+    if (g_addon_slots[i] == ADDON_SLOT_LEFT) {
+      if (leftOwner >= 0) {
+        g_addon_slots[i] = ADDON_SLOT_NONE;
+      } else {
+        leftOwner = (int)i;
+      }
+    } else if (g_addon_slots[i] == ADDON_SLOT_RIGHT) {
+      if (rightOwner >= 0) {
+        g_addon_slots[i] = ADDON_SLOT_NONE;
+      } else {
+        rightOwner = (int)i;
+      }
+    }
+  }
+
+  g_addons_loaded_from_nvs = true;
+}
+
+static void saveAddonBindings()
+{
+  Preferences pref;
+  pref.begin("m5-ctnr", false);
+  for (size_t i = 0; i < ADDON_DEFINITIONS_COUNT; ++i) {
+    char key[24];
+    snprintf(key, sizeof(key), "AddonSlot%u", (unsigned)i);
+    pref.putInt(key, g_addon_slots[i]);
+  }
+  pref.end();
+}
+
+static void refreshAddonsUi()
+{
+  if (ui_AddonsItem0Text != nullptr && ADDON_DEFINITIONS_COUNT > 0) {
+    char line[96];
+    snprintf(line, sizeof(line), "%s  [%s]", ADDON_DEFINITIONS[0].displayName, addonSlotLabel(g_addon_slots[0]));
+    lv_label_set_text(ui_AddonsItem0Text, line);
+  }
+  if (ui_AddonsItem1Text != nullptr && ADDON_DEFINITIONS_COUNT > 1) {
+    char line[96];
+    snprintf(line, sizeof(line), "%s  [%s]", ADDON_DEFINITIONS[1].displayName, addonSlotLabel(g_addon_slots[1]));
+    lv_label_set_text(ui_AddonsItem1Text, line);
+  }
+}
+
+static void cycleAddonSelection(size_t addonIndex)
+{
+  if (addonIndex >= ADDON_DEFINITIONS_COUNT) {
+    return;
+  }
+
+  int current = g_addon_slots[addonIndex];
+  int next = ADDON_SLOT_NONE;
+  if (current == ADDON_SLOT_NONE) {
+    next = ADDON_SLOT_LEFT;
+  } else if (current == ADDON_SLOT_LEFT) {
+    next = ADDON_SLOT_RIGHT;
+  } else {
+    next = ADDON_SLOT_NONE;
+  }
+
+  if (next == ADDON_SLOT_LEFT || next == ADDON_SLOT_RIGHT) {
+    for (size_t i = 0; i < ADDON_DEFINITIONS_COUNT; ++i) {
+      if (i != addonIndex && g_addon_slots[i] == next) {
+        g_addon_slots[i] = ADDON_SLOT_NONE;
+      }
+    }
+  }
+
+  g_addon_slots[addonIndex] = next;
+  saveAddonBindings();
+}
+
+extern "C" void addonsScreenLoaded(void)
+{
+  loadAddonBindingsIfNeeded();
+  refreshAddonsUi();
+}
+
+extern "C" void addonsSelectIndex(int index)
+{
+  loadAddonBindingsIfNeeded();
+  if (index < 0) {
+    return;
+  }
+  cycleAddonSelection((size_t)index);
+  refreshAddonsUi();
+}
+
+static void updateScreenTitleLabels()
+{
+  if (ui_Logo != nullptr) lv_label_set_text(ui_Logo, T_SCREEN_START);
+  if (ui_Logo2 != nullptr) lv_label_set_text(ui_Logo2, T_SCREEN_STROKE_ENGINE);
+//  if (ui_Logo3 != nullptr) lv_label_set_text(ui_Logo3, T_SCREEN_MENU);
+  if (ui_Logo1 != nullptr) lv_label_set_text(ui_Logo1, T_SCREEN_SETTINGS);
+  if (ui_Logo4 != nullptr) lv_label_set_text(ui_Logo4, T_SCREEN_TORQUE);
+  if (ui_Logo5 != nullptr) lv_label_set_text(ui_Logo5, T_SCREEN_PATTERN);
+  if (ui_Logo6 != nullptr) lv_label_set_text(ui_Logo6, T_SCREEN_EJECT);
+  if (ui_LogoMenu != nullptr) lv_label_set_text(ui_LogoMenu, T_SCREEN_MENU);
+  if (ui_LogoStreaming != nullptr) lv_label_set_text(ui_LogoStreaming, T_SCREEN_STREAMING);
+  if (ui_LogoAddons != nullptr) lv_label_set_text(ui_LogoAddons, T_SCREEN_ADDONS);
+}
+
+static void applyHomeDefaultsForModeChange()
+{
+  speed = 0.0f;
+  depth = 0.0f;
+  stroke = 0.0f;
+  sensation = 50.0f;
+
+  if (ui_homespeedslider != nullptr) lv_slider_set_value(ui_homespeedslider, 0, LV_ANIM_OFF);
+  if (ui_homedepthslider != nullptr) lv_slider_set_value(ui_homedepthslider, 0, LV_ANIM_OFF);
+  if (ui_homestrokeslider != nullptr) lv_slider_set_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
+  if (ui_homesensationslider != nullptr) lv_slider_set_value(ui_homesensationslider, 50, LV_ANIM_OFF);
+  if (ui_homespeedvalue != nullptr) lv_label_set_text(ui_homespeedvalue, "0");
+  if (ui_homedepthvalue != nullptr) lv_label_set_text(ui_homedepthvalue, "0");
+  if (ui_homestrokevalue != nullptr) lv_label_set_text(ui_homestrokevalue, "0");
+
+  SendCommand(SPEED, 0, OSSM_ID);
+  SendCommand(DEPTH, 0, OSSM_ID);
+  SendCommand(STROKE, 0, OSSM_ID);
+  SendCommand(SENSATION, 50, OSSM_ID);
+}
+
+extern "C" void streamingReturnToMenu(void)
+{
+  g_streaming_controls_locked = false;
+  if (OssmBleIsMode()) {
+    OssmBleGoToMenu();
+  }
+  _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+}
+
+static void prepareStreamingAtFullScale()
+{
+  speed = 100;
+  depth = 100;
+  stroke = 100;
+
+  lv_slider_set_value(ui_streamingspeedslider, 100, LV_ANIM_OFF);
+  lv_slider_set_value(ui_streamingdepthslider, 100, LV_ANIM_OFF);
+  lv_slider_set_value(ui_streamingstrokeslider, 100, LV_ANIM_OFF);
+  lv_label_set_text(ui_streamingspeedvalue, "100");
+  lv_label_set_text(ui_streamingdepthvalue, "100");
+  lv_label_set_text(ui_streamingstrokevalue, "100");
+
+  SendCommand(SPEED, 100, OSSM_ID);
+  SendCommand(DEPTH, 100, OSSM_ID);
+  SendCommand(STROKE, 100, OSSM_ID);
+}
+
+void handleStreamingEntryFlow()
+{
+  g_streaming_entry_flow_pending = false;
+  g_streaming_controls_locked = true;
+
+  showNotification(T_STREAMING_CAUTION_TITLE,
+                   T_STREAMING_CAUTION_TEXT,
+                   5000,
+                   false,
+                   nullptr,
+                   false,
+                   nullptr,
+                   true);
+
+  if (OssmBleIsMode()) {
+    if (!OssmBleGoToStreaming()) {
+      showNotification(T_STREAMING_FAIL_TITLE,
+                       T_STREAMING_FAIL_TEXT,
+                       2500,
+                       false,
+                       nullptr,
+                       false,
+                       nullptr,
+                       true);
+      streamingReturnToMenu();
+      return;
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    // Set buffer to 0: OSSM acts on each stream:pos:time frame immediately,
+    // with no pre-buffering delay. Required for low-latency external stream sources.
+    OssmBleSetBuffer(0.0f);
+  }
+
+  prepareStreamingAtFullScale();
+
+  while (true) {
+    int result = showNotification(T_STREAMING_ACTIVE_TITLE,
+                                  T_STREAMING_ACTIVE_TEXT,
+                                  0,
+                                  true,
+                                  T_STOP_STREAMING,
+                                  true,
+                                  T_START,
+                                  true);
+
+    if (result == NOTIFICATION_RESULT_LEFT) {
+      streamingReturnToMenu();
+      return;
+    }
+
+    if (result == NOTIFICATION_RESULT_RIGHT) {
+      streamingStartOnlyAction();
+      continue;
+    }
+  }
 }
 
 static void markEncoderActivityForMxFilter()
@@ -716,8 +1054,19 @@ void screensaver_check_activity() {
 
 static bool canEnterDeepSleep()
 {
-  // Only allow deep sleep while OSSM is not moving.
-  return OSSM_State == state_FALSE;
+  // Allow deep sleep only when the OSSM motor is not actively moving.
+  // PAUSE, STOP, and MENU are safe — the motor is stationary.
+  // In BLE mode the monitor keeps OSSM_State at state_PAUSE (never state_OFF)
+  // when the machine is idle, so we must allow those states too.
+  switch (OSSM_State) {
+    case state_OFF:
+    case state_PAUSE:
+    case state_STOP:
+    case state_MENU:
+      return true;
+    default:
+      return false;
+  }
 }
 
 static void enterDeepSleep()
@@ -762,15 +1111,15 @@ static void event_cb(lv_event_t *e)
   const char *eventName = nullptr;
   const char *buttonName = "unknown";
 
-  if (target == ui_StartButtonL || target == ui_HomeButtonL || target == ui_MenueButtonL ||
+  if (target == ui_StartButtonL || target == ui_HomeButtonL || target == ui_MenuButtonL ||
       target == ui_PatternButtonL || target == ui_TorqeButtonL || target == ui_EJECTButtonL ||
       target == ui_SettingsButtonL) {
     buttonName = "left";
-  } else if (target == ui_StartButtonM || target == ui_HomeButtonM || target == ui_MenueButtonM ||
+  } else if (target == ui_StartButtonM || target == ui_HomeButtonM || target == ui_MenuButtonM ||
              target == ui_PatternButtonM || target == ui_TorqeButtonM || target == ui_EJECTButtonM ||
              target == ui_SettingsButtonM) {
     buttonName = "mx";
-  } else if (target == ui_StartButtonR || target == ui_HomeButtonR || target == ui_MenueButtonR ||
+  } else if (target == ui_StartButtonR || target == ui_HomeButtonR || target == ui_MenuButtonR ||
              target == ui_PatternButtonR || target == ui_TorqeButtonR || target == ui_EJECTButtonR ||
              target == ui_SettingsButtonR) {
     buttonName = "right";
@@ -813,7 +1162,7 @@ static void register_event_debug_callbacks()
   lv_obj_t *debugButtons[] = {
     ui_StartButtonL, ui_StartButtonM, ui_StartButtonR,
     ui_HomeButtonL, ui_HomeButtonM, ui_HomeButtonR,
-    ui_MenueButtonL, ui_MenueButtonM, ui_MenueButtonR,
+
     ui_PatternButtonL, ui_PatternButtonM, ui_PatternButtonR,
     ui_TorqeButtonL, ui_TorqeButtonM, ui_TorqeButtonR,
     ui_EJECTButtonL, ui_EJECTButtonM, ui_EJECTButtonR,
@@ -941,13 +1290,13 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     case OFF: 
     {
     OSSM_State = state_FALSE;
-    APPLY_HOME_MX_START_STOP_UI();
+    APPLY_HOME_AND_STREAMING_MX_START_STOP_UI();
     }
     break;
     case ON:
     {
     OSSM_State = state_TRUE;
-    APPLY_HOME_MX_START_STOP_UI();
+    APPLY_HOME_AND_STREAMING_MX_START_STOP_UI();
     }
     break;
     }
@@ -958,11 +1307,11 @@ bool SendCommand(int Command, float Value, int Target){
   // Immediately update local paused/running state when sending ON/OFF
   if (Command == OFF) {
     OSSM_State = state_FALSE;
-    APPLY_HOME_MX_START_STOP_UI();
+    APPLY_HOME_AND_STREAMING_MX_START_STOP_UI();
     LogDebug("Local OSSM_State set to false (sent OFF)");
   } else if (Command == ON) {
     OSSM_State = state_TRUE;
-    APPLY_HOME_MX_START_STOP_UI();
+    APPLY_HOME_AND_STREAMING_MX_START_STOP_UI();
     LogDebug("Local OSSM_State set to true (sent ON)");
   }
   if(Target == OSSM_ID && OssmBleIsMode()){
@@ -973,7 +1322,7 @@ bool SendCommand(int Command, float Value, int Target){
       speed,
       depth,
       stroke,
-      OSSM_State == state_TRUE,
+      isRunningUiState(OSSM_State),
       maxdepthinmm,
       speedlimit,
       &response);
@@ -1135,10 +1484,18 @@ m5prf.end();
 void screenmachine(lv_event_t * e)
 {
   (void)e;
+  const int previousScreen = st_screens;
+  updateScreenTitleLabels();
+
   if (lv_scr_act() == ui_Start){
     st_screens = ST_UI_START;
   } else if (lv_scr_act() == ui_Home){
     st_screens = ST_UI_HOME;
+
+    if (previousScreen == ST_UI_STREAMING) {
+      applyHomeDefaultsForModeChange();
+    }
+
     speed = lv_slider_get_value(ui_homespeedslider);
     LogDebug(speedenc);
     LogDebug(speed);
@@ -1170,11 +1527,9 @@ void screenmachine(lv_event_t * e)
       lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
     }
 
-    APPLY_HOME_MX_START_STOP_UI();
+    APPLY_HOME_AND_STREAMING_MX_START_STOP_UI();
 
             
-  } else if (lv_scr_act() == ui_Menue){
-    st_screens = ST_UI_MENUE;
   } else if (lv_scr_act() == ui_Pattern){
     st_screens = ST_UI_PATTERN;
     // Pattern screen only uses encoder4 (roller navigation).
@@ -1197,49 +1552,51 @@ void screenmachine(lv_event_t * e)
     st_screens = ST_UI_EJECTSETTINGS;
   } else if (lv_scr_act() == ui_Settings){
     st_screens = ST_UI_SETTINGS;
+  } else if (lv_scr_act() == ui_Menu){
+    st_screens = ST_UI_MENU;
+    encoder4_enc = encoder4.getCount();
+    if (ui_g_menu != nullptr && ui_MenuButtonTL != nullptr) {
+      lv_group_focus_obj(ui_MenuButtonTL);
+    }
+  } else if (lv_scr_act() == ui_Streaming){
+    st_screens = ST_UI_STREAMING;
+    encoder1.setCount(0);
+    encoder2.setCount(0);
+    encoder3.setCount(0);
+  } else if (lv_scr_act() == ui_Addons){
+    st_screens = ST_UI_ADDONS;
+    encoder4_enc = encoder4.getCount();
+    if (ui_g_addons != nullptr && ui_AddonsItem0 != nullptr) {
+      lv_group_focus_obj(ui_AddonsItem0);
+    }
   }
 
   monitorOssmState(true);
 }
 
 void homebuttonLevent(lv_event_t * e){
-  //Pullout button
+  // Pullout then return to Menu.
   lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
 
-  if (eject_status == false) {
-    // No eject addon: button does a pullout manoeuvre
-    // Ensure remote sees an immediate stop and paused state.
-    if (OssmBleIsMode()) {
-      depth = 0;
-      stroke = 0;
-      OssmBleExecutePulloutStop(speed, maxdepthinmm, speedlimit);
-      OSSM_State = state_FALSE;
-      APPLY_HOME_MX_START_STOP_UI();
-      screenmachine(e);
-      EJECT_On = true;
-    } else {
-      depth = 0;
-      stroke = 0;
-      SendCommand(SETUP_D_I, 0.0, OSSM_ID);
-      SendCommand(DEPTH, depth, OSSM_ID);
-      SendCommand(STROKE, stroke, OSSM_ID);
-      OSSM_State = state_FALSE;
-      APPLY_HOME_MX_START_STOP_UI();
-      screenmachine(e);
-      EJECT_On = true;
-    }
-  } 
-  //FROM HERE EJECT CODE COULD BE INSERTED IF THE ADDON IS PRESENT, FOR NOW IT JUST TOGGLES THE EJECT STATE
-  else {
-    // Eject addon enabled: toggle eject/cumpump
-    if (EJECT_On == true) {
-      EJECT_On = false;
-      //SendCommand(SETUP_D_I, 0.0, OSSM_ID);  // retract
-    } else {
-      EJECT_On = true;
-      //SendCommand(SETUP_D_I_F, 0.0, OSSM_ID); // eject forward
-    }
+  depth = 0;
+  stroke = 0;
+  if (ui_homedepthslider != nullptr) lv_slider_set_value(ui_homedepthslider, 0, LV_ANIM_OFF);
+  if (ui_homestrokeslider != nullptr) lv_slider_set_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
+
+  if (OssmBleIsMode()) {
+    OssmBleExecutePulloutStop(speed, maxdepthinmm, speedlimit);
+    OssmBleGoToMenu();
+  } else {
+    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
+    SendCommand(DEPTH, 0.0, OSSM_ID);
+    SendCommand(STROKE, 0.0, OSSM_ID);
+    vTaskDelay(pdMS_TO_TICKS(300));
+    SendCommand(SPEED, 0.0, OSSM_ID);
   }
+
+  OSSM_State = state_FALSE;
+  APPLY_HOME_AND_STREAMING_MX_START_STOP_UI();
+  _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
 }
 void savepattern(lv_event_t * e){
   pattern = lv_roller_get_selected(ui_PatternS);
@@ -1250,14 +1607,15 @@ void savepattern(lv_event_t * e){
   SendCommand(PATTERN, patterns, OSSM_ID);
 }
 
-static void homebuttonm_action(bool fromPhysicalMx = false)
+static void homebuttonm_action(bool fromPhysicalMx)
 {
   (void)fromPhysicalMx;
+  const bool isRunning = isRunningUiState(OSSM_State);
 
   // BLE mode: toggle paused state when on Home screen.
   if (OssmBleIsMode() && st_screens == ST_UI_HOME) {
     ossm_state_monitor_hold_until_ms = millis() + 1U;
-    switch (OssmBleHandleHomeToggle(OSSM_State == state_TRUE, speed)) {
+    switch (OssmBleHandleHomeToggle(isRunning, speed)) {
       case OssmBleHomeToggleResult::Paused:
         OSSM_State = state_FALSE;
         APPLY_HOME_MX_START_STOP_UI();
@@ -1294,11 +1652,109 @@ static void homebuttonm_action(bool fromPhysicalMx = false)
       OSSM_State = state_TRUE;
       APPLY_HOME_MX_START_STOP_UI();
     }
-  } else if(OSSM_State == state_TRUE){
+  } else if(isRunning){
     SendCommand(OFF, 0, OSSM_ID);
     if (OssmBleIsMode()) {
       OSSM_State = state_FALSE;
       APPLY_HOME_MX_START_STOP_UI();
+    }
+  }
+}
+
+static void streamingbuttonm_action(bool fromPhysicalMx)
+{
+  (void)fromPhysicalMx;
+  const bool isRunning = isRunningUiState(OSSM_State);
+
+  if (OssmBleIsMode() && st_screens == ST_UI_STREAMING) {
+    ossm_state_monitor_hold_until_ms = millis() + 1U;
+    switch (OssmBleHandleStreamingToggle(isRunning, speed)) {
+      case OssmBleHomeToggleResult::Paused:
+        OSSM_State = state_FALSE;
+        APPLY_STREAMING_MX_START_STOP_UI();
+        LogDebugFormatted("Sent BLE streaming pause command with paused speed: %f\n", speed);
+        break;
+      case OssmBleHomeToggleResult::Resumed:
+        OSSM_State = state_TRUE;
+        APPLY_STREAMING_MX_START_STOP_UI();
+        LogDebugFormatted("Sent BLE streaming resume command (speed:%f)\n", OssmBleGetUnpauseSpeed());
+        LogDebugPrio("Streaming armed: waiting for external stream frames");
+        break;
+      case OssmBleHomeToggleResult::Started:
+        OSSM_State = state_TRUE;
+        APPLY_STREAMING_MX_START_STOP_UI();
+        LogDebugFormatted("Sent BLE streaming start command (speed:%f)\n", OssmBleGetUnpauseSpeed());
+        LogDebugPrio("Streaming armed: waiting for external stream frames");
+        break;
+      case OssmBleHomeToggleResult::BlockedNotReady:
+        LogDebugPrio("BLE streaming start blocked: OSSM is not ready for streaming mode");
+        break;
+      case OssmBleHomeToggleResult::Failed:
+      default:
+        LogDebugPrio("BLE streaming toggle failed");
+        break;
+    }
+    return;
+  }
+
+  if(OSSM_State == state_FALSE){
+    SendCommand(ON, 0, OSSM_ID);
+    if (OssmBleIsMode()) {
+      OSSM_State = state_TRUE;
+      APPLY_STREAMING_MX_START_STOP_UI();
+    }
+  } else if(isRunning){
+    SendCommand(OFF, 0, OSSM_ID);
+    if (OssmBleIsMode()) {
+      OSSM_State = state_FALSE;
+      APPLY_STREAMING_MX_START_STOP_UI();
+    }
+  }
+}
+
+static void streamingStartOnlyAction()
+{
+  const bool isRunning = isRunningUiState(OSSM_State);
+
+  if (OssmBleIsMode() && st_screens == ST_UI_STREAMING) {
+    if (isRunning) {
+      LogDebugPrio("BLE streaming start ignored: already running");
+      return;
+    }
+
+    ossm_state_monitor_hold_until_ms = millis() + 1U;
+    switch (OssmBleHandleStreamingToggle(false, speed)) {
+      case OssmBleHomeToggleResult::Resumed:
+        OSSM_State = state_TRUE;
+        APPLY_STREAMING_MX_START_STOP_UI();
+        LogDebugFormatted("Sent BLE streaming resume command (speed:%f)\n", OssmBleGetUnpauseSpeed());
+        LogDebugPrio("Streaming armed: waiting for external stream frames");
+        break;
+      case OssmBleHomeToggleResult::Started:
+        OSSM_State = state_TRUE;
+        APPLY_STREAMING_MX_START_STOP_UI();
+        LogDebugFormatted("Sent BLE streaming start command (speed:%f)\n", OssmBleGetUnpauseSpeed());
+        LogDebugPrio("Streaming armed: waiting for external stream frames");
+        break;
+      case OssmBleHomeToggleResult::Paused:
+        LogDebugPrio("BLE streaming start-only action unexpectedly returned pause");
+        break;
+      case OssmBleHomeToggleResult::BlockedNotReady:
+        LogDebugPrio("BLE streaming start blocked: OSSM is not ready for streaming mode");
+        break;
+      case OssmBleHomeToggleResult::Failed:
+      default:
+        LogDebugPrio("BLE streaming start-only action failed");
+        break;
+    }
+    return;
+  }
+
+  if (!isRunning) {
+    SendCommand(ON, 0, OSSM_ID);
+    if (OssmBleIsMode()) {
+      OSSM_State = state_TRUE;
+      APPLY_STREAMING_MX_START_STOP_UI();
     }
   }
 }
@@ -1309,12 +1765,46 @@ void homebuttonmevent(lv_event_t * e){
   homebuttonm_action(false);
 }
 
+void streamingbuttonmevent(lv_event_t * e){
+  (void)e;
+  LogDebugPrio("StreamingButton (touch/LVGL)");
+  streamingbuttonm_action(false);
+}
+
 void setupDepthInter(lv_event_t * e){
     SendCommand(SETUP_D_I, 0, OSSM_ID);
 }
 
 void setupdepthF(lv_event_t * e){
     SendCommand(SETUP_D_I_F, 0, OSSM_ID);
+}
+
+static bool triggerAddonForSlot(int slot)
+{
+  loadAddonBindingsIfNeeded();
+  int addonIndex = -1;
+  for (size_t i = 0; i < ADDON_DEFINITIONS_COUNT; ++i) {
+    if (g_addon_slots[i] == slot) {
+      addonIndex = (int)i;
+      break;
+    }
+  }
+
+  if (addonIndex < 0) {
+    return false;
+  }
+
+  if (strcmp(ADDON_DEFINITIONS[addonIndex].id, "eject_cumpump") == 0) {
+    _ui_screen_change(ui_EJECTSettings, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    return true;
+  }
+
+  if (strcmp(ADDON_DEFINITIONS[addonIndex].id, "fist_it") == 0) {
+    _ui_screen_change(ui_Addons, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    return true;
+  }
+
+  return false;
 }
 
 void setup(){
@@ -1397,6 +1887,7 @@ void setup(){
   Button1.setDebounceMs(80);
   Button1.setLongPressIntervalMs(400);
   Button2.attachClick(clickLeft);
+  Button2.attachDoubleClick(clickLeftDouble);
   Button2.setDebounceMs(80);
   Button3.attachClick(clickRight);
   Button3.setDebounceMs(80);
@@ -1425,13 +1916,17 @@ void setup(){
   indev = lv_indev_create();
   lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
   lv_indev_set_read_cb(indev, my_touchpad_read);
+
+  LogDebug("Works till step 1");
   ui_init();  
+  
   if (wakeCause == ESP_SLEEP_WAKEUP_EXT1 || wakeCause == ESP_SLEEP_WAKEUP_EXT0) {
     // After deep sleep wake, return to start screen so reconnect can happen cleanly.
     lv_scr_load(ui_Start);
   }
   register_event_debug_callbacks();
-  APPLY_HOME_MX_START_STOP_UI();
+  APPLY_HOME_AND_STREAMING_MX_START_STOP_UI();
+  XToysInit();
 
   // --- Restore stroke invert state from NVS and apply to UI (after ui_init) ---
   if (strokeinvert_mode) {
@@ -1476,10 +1971,10 @@ void loop()
      const int BatteryLevel = M5.Power.getBatteryLevel();
      String BatteryValue = (String(BatteryLevel, DEC) + "%");
      const char *battVal = BatteryValue.c_str();
-     lv_bar_set_value(ui_Battery, BatteryLevel, LV_ANIM_OFF);
-     lv_label_set_text(ui_BattValue, battVal);
-     lv_bar_set_value(ui_Battery1, BatteryLevel, LV_ANIM_OFF);
-     lv_label_set_text(ui_BattValue1, battVal);
+    if (ui_Battery != nullptr) lv_bar_set_value(ui_Battery, BatteryLevel, LV_ANIM_OFF);
+    if (ui_BattValue != nullptr) lv_label_set_text(ui_BattValue, battVal);
+    if (ui_Battery1 != nullptr) lv_bar_set_value(ui_Battery1, BatteryLevel, LV_ANIM_OFF);
+    if (ui_BattValue1 != nullptr) lv_label_set_text(ui_BattValue1, battVal);
 
      // --- Screen Saver Logic ---
      if (!screensaver_active && (millis() - last_activity_ms > (unsigned long)screensaver_timeout_ms)) {
@@ -1497,8 +1992,8 @@ void loop()
 
      lv_bar_set_value(ui_Battery2, BatteryLevel, LV_ANIM_OFF);
      lv_label_set_text(ui_BattValue2, battVal);
-     lv_bar_set_value(ui_Battery3, BatteryLevel, LV_ANIM_OFF);
-     lv_label_set_text(ui_BattValue3, battVal);
+//     lv_bar_set_value(ui_Battery3, BatteryLevel, LV_ANIM_OFF);
+//     lv_label_set_text(ui_BattValue3, battVal);
      lv_bar_set_value(ui_Battery4, BatteryLevel, LV_ANIM_OFF);
      lv_label_set_text(ui_BattValue4, battVal);
      lv_bar_set_value(ui_Battery5, BatteryLevel, LV_ANIM_OFF);
@@ -1510,6 +2005,8 @@ void loop()
      Button1.tick();
      Button2.tick();
      Button3.tick();
+
+    XToysUpdate();
 
     monitorOssmState(false);
 
@@ -1783,6 +2280,9 @@ void loop()
         if(clickLeft_short_waspressed == true){
          lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
          clickLeft_short_waspressed = false;
+        } else if (clickLeft_double_waspressed == true) {
+         triggerAddonForSlot(ADDON_SLOT_LEFT);
+         clickLeft_double_waspressed = false;
         } else if(mxclick_short_waspressed == true){
          // Physical MX is handled directly only on Home, where the middle action
          // controls start/stop in ESP-NOW mode and pause/resume in BLE mode.
@@ -1796,23 +2296,16 @@ void loop()
          lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
          clickRight_short_waspressed = false;
         } else if(clickRight_long_waspressed == true){
-          sensation = 0;        //reset sensation to zero
-          SendCommand(SENSATION, sensation, OSSM_ID);
+          _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
           clickRight_long_waspressed = false;
         }else if(clickRight_double_waspressed == true){
-          if (dynamicStroke == false){
-            dynamicStroke = true;;            /// dynamicStroke = !dynamicStroke; crashes M5 for some reason
-          }else{
-            dynamicStroke = false;;
-          }
-          if (stroke >= depth){
-            stroke = depth;
-          }
+          triggerAddonForSlot(ADDON_SLOT_RIGHT);
+          clickRight_double_waspressed = false;
         }
       }
       break;
 
-      case ST_UI_MENUE:
+/*      case ST_UI_MENUE:
       {
         if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
           touch_disabled = true;
@@ -1839,7 +2332,7 @@ void loop()
         } 
       }
       break;
-
+*/
       case ST_UI_PATTERN:
       {
         if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
@@ -1934,14 +2427,14 @@ void loop()
         if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
           touch_disabled = true;
         }
-        
-         if(clickLeft_short_waspressed == true){
+
+        if(clickLeft_short_waspressed == true){
          lv_obj_send_event(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
         } else if(mxclick_short_waspressed == true){
          LogDebug("mx: ST_UI_EJECTSETTINGS -> sending EJECTButtonM click");
          lv_obj_send_event(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
         } else if(clickRight_short_waspressed == true){
-         
+         lv_obj_send_event(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
         }
       }
       break;
@@ -2030,9 +2523,194 @@ void loop()
       }
       break;
 
+      case ST_UI_MENU: // Menu screen
+      {
+        if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
+          touch_disabled = true;
+        }
+
+        if(encoder4.getCount() > encoder4_enc + 2){
+          lv_group_focus_next(ui_g_menu);
+          encoder4_enc = encoder4.getCount();
+        } else if(encoder4.getCount() < encoder4_enc - 2){
+          lv_group_focus_prev(ui_g_menu);
+          encoder4_enc = encoder4.getCount();
+        }
+
+        if(clickRight_short_waspressed == true){
+          lv_obj_send_event(lv_group_get_focused(ui_g_menu), LV_EVENT_CLICKED, NULL);
+          clickRight_short_waspressed = false;
+        }
+      }
+      break;
+
+      case ST_UI_ADDONS:
+      {
+        if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
+          touch_disabled = true;
+        }
+
+        if(encoder4.getCount() > encoder4_enc + 2){
+          lv_group_focus_next(ui_g_addons);
+          encoder4_enc = encoder4.getCount();
+        } else if(encoder4.getCount() < encoder4_enc - 2){
+          lv_group_focus_prev(ui_g_addons);
+          encoder4_enc = encoder4.getCount();
+        }
+
+        if(clickLeft_short_waspressed == true){
+          _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+          clickLeft_short_waspressed = false;
+        } else if(clickRight_short_waspressed == true){
+          lv_obj_send_event(lv_group_get_focused(ui_g_addons), LV_EVENT_CLICKED, NULL);
+          clickRight_short_waspressed = false;
+        }
+      }
+      break;
+
+      case ST_UI_STREAMING: // Streaming screen
+      {
+        if (g_streaming_entry_flow_pending) {
+          handleStreamingEntryFlow();
+          if (lv_scr_act() != ui_Streaming) {
+            break;
+          }
+        }
+
+        if (g_streaming_controls_locked) {
+          encoder1.setCount(0);
+          encoder2.setCount(0);
+          encoder3.setCount(0);
+          break;
+        }
+
+        static int lastStreamingTransportMode = -1;
+        int currentTransportMode = OssmBleIsMode() ? 1 : 0;
+        if (lastStreamingTransportMode != currentTransportMode) {
+          lv_slider_set_max_value(ui_streamingspeedslider, 100);
+          lv_slider_set_max_value(ui_streamingdepthslider, 100);
+          lv_slider_set_max_value(ui_streamingstrokeslider, 100);
+
+          if (speed > lv_slider_get_max_value(ui_streamingspeedslider)) {
+            speed = lv_slider_get_max_value(ui_streamingspeedslider);
+          }
+          if (depth > lv_slider_get_max_value(ui_streamingdepthslider)) {
+            depth = lv_slider_get_max_value(ui_streamingdepthslider);
+          }
+          if (stroke > lv_slider_get_max_value(ui_streamingstrokeslider)) {
+            stroke = lv_slider_get_max_value(ui_streamingstrokeslider);
+          }
+
+          lastStreamingTransportMode = currentTransportMode;
+        }
+
+        if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
+          touch_disabled = true;
+        }
+
+        // Encoder 1 Speed
+        if(lv_slider_is_dragged(ui_streamingspeedslider) == false){
+          changed = false;
+          lv_slider_set_value(ui_streamingspeedslider, speed, LV_ANIM_OFF);
+
+          streamingSpeedEnc = encoder1.getCount();
+          int speedDetents = (int)(streamingSpeedEnc / 2);
+          if(speedDetents != 0){
+            changed = true;
+            speed += getRampedDetentDelta(1, speedDetents);
+            encoder1.setCount(streamingSpeedEnc % 2);
+            markEncoderActivityForMxFilter();
+          }
+          if(speed < 0){ changed = true; speed = 0; }
+          const float streamSpeedMax = 100.0f;
+          if(speed > streamSpeedMax){ changed = true; speed = streamSpeedMax; }
+          if(changed){ SendCommand(SPEED, speed, OSSM_ID); }
+        } else if(lv_slider_get_value(ui_streamingspeedslider) != speed){
+          speed = lv_slider_get_value(ui_streamingspeedslider);
+          SendCommand(SPEED, speed, OSSM_ID);
+        }
+        char speed_v[12];
+        if(OssmBleIsMode()){
+          snprintf(speed_v, sizeof(speed_v), "%d", (int)(speed + 0.5f));
+        } else {
+          dtostrf(speed, 6, 0, speed_v);
+        }
+        lv_label_set_text(ui_streamingspeedvalue, speed_v);
+
+        // Encoder 2 Depth
+        if(lv_slider_is_dragged(ui_streamingdepthslider) == false){
+          changed = false;
+          lv_slider_set_value(ui_streamingdepthslider, depth, LV_ANIM_OFF);
+
+          streamingDepthEnc = encoder2.getCount();
+          int depthDetents = (int)(streamingDepthEnc / 2);
+          if(depthDetents != 0){
+            changed = true;
+            depth += getRampedDetentDelta(2, depthDetents);
+            encoder2.setCount(streamingDepthEnc % 2);
+            markEncoderActivityForMxFilter();
+          }
+          if(depth < 0){ changed = true; depth = 0; }
+          const float streamDepthMax = 100.0f;
+          if(depth > streamDepthMax){ changed = true; depth = streamDepthMax; }
+          if(changed){ SendCommand(DEPTH, depth, OSSM_ID); }
+        } else if(lv_slider_get_value(ui_streamingdepthslider) != depth){
+          depth = lv_slider_get_value(ui_streamingdepthslider);
+          SendCommand(DEPTH, depth, OSSM_ID);
+        }
+        char depth_v[12];
+        if(OssmBleIsMode()){
+          snprintf(depth_v, sizeof(depth_v), "%d", (int)(depth + 0.5f));
+        } else {
+          dtostrf(depth, 6, 0, depth_v);
+        }
+        lv_label_set_text(ui_streamingdepthvalue, depth_v);
+
+        // Encoder 3 Stroke
+        if(lv_slider_is_dragged(ui_streamingstrokeslider) == false){
+          changed = false;
+          lv_slider_set_value(ui_streamingstrokeslider, stroke, LV_ANIM_OFF);
+
+          streamingStrokeEnc = encoder3.getCount();
+          int strokeDetents = (int)(streamingStrokeEnc / 2);
+          if(strokeDetents != 0){
+            changed = true;
+            stroke += getRampedDetentDelta(3, strokeDetents);
+            encoder3.setCount(streamingStrokeEnc % 2);
+            markEncoderActivityForMxFilter();
+          }
+          if(stroke < 0){ changed = true; stroke = 0; }
+          const float streamStrokeMax = 100.0f;
+          if(stroke > streamStrokeMax){ changed = true; stroke = streamStrokeMax; }
+          if(stroke > depth){ changed = true; stroke = depth; }
+          if(changed){ SendCommand(STROKE, stroke, OSSM_ID); }
+        } else if(lv_slider_get_value(ui_streamingstrokeslider) != stroke){
+          stroke = lv_slider_get_value(ui_streamingstrokeslider);
+          SendCommand(STROKE, stroke, OSSM_ID);
+        }
+        char stroke_v[12];
+        if(OssmBleIsMode()){
+          snprintf(stroke_v, sizeof(stroke_v), "%d", (int)(stroke + 0.5f));
+        } else {
+          dtostrf(stroke, 6, 0, stroke_v);
+        }
+        lv_label_set_text(ui_streamingstrokevalue, stroke_v);
+
+        if(mxclick_short_waspressed == true){
+         LogDebug("mx: ST_UI_STREAMING -> direct StreamingButtonM action");
+         streamingbuttonm_action(true);
+         mxclick_short_waspressed = false;
+        } else if(clickRight_short_waspressed == true){
+         lv_obj_send_event(ui_StreamingButtonR, LV_EVENT_CLICKED, NULL);
+         clickRight_short_waspressed = false;
+        }
+      }
+      break;
+
      }
      mxclick_short_waspressed = false;
      clickLeft_short_waspressed = false;
+    clickLeft_double_waspressed = false;
      clickRight_short_waspressed = false;
      clickRight_long_waspressed = false;
      clickRight_double_waspressed = false;
@@ -2077,6 +2755,12 @@ void clickLeft() {
   clickLeft_short_waspressed = true;
   screensaver_check_activity(); // Reset screensaver timer on left click
 } // clickLeft
+
+void clickLeftDouble() {
+  vibrate();
+  clickLeft_double_waspressed = true;
+  screensaver_check_activity();
+}
 
 void clickRight() {
   vibrate();

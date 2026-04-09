@@ -1065,7 +1065,7 @@ void homebuttonmevent(lv_event_t * e) {
     // Emergency stop: long or double press
     if (mxclick_long_waspressed || mxclick_double_waspressed) {
       ossmStopMovement();
-      lv_label_set_text(ui_connect, T_MENUE); // Show menu state after stop
+      lv_label_set_text(ui_connect, T_MENU); // Show menu state after stop
       setHomeButtonState(T_STOP, 0xFF0000); // Red, STOP
       resetMxFlags();
       return;
@@ -1089,7 +1089,7 @@ void homebuttonmevent(lv_event_t * e) {
       } else if (bleState.stateName.indexOf("resume") >= 0) {
         lv_label_set_text(ui_connect, T_RESUME);
       } else {
-        lv_label_set_text(ui_connect, T_MENUE);
+        lv_label_set_text(ui_connect, T_MENU);
       }
       setHomeButtonState(T_STOP, 0xFF0000); // Red, STOP
       resetMxFlags();
@@ -1098,7 +1098,7 @@ void homebuttonmevent(lv_event_t * e) {
 
     // Menu state
     if (bleState.mode == OssmBleMachineMode::Menu) {
-      lv_label_set_text(ui_connect, T_MENUE);
+      lv_label_set_text(ui_connect, T_MENU);
       setHomeButtonState(T_STOP, 0xFF0000); // Red, STOP
       OssmBleGoToStrokeEngine();
       resetMxFlags();

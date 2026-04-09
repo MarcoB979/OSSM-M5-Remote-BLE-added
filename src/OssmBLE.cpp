@@ -517,6 +517,37 @@ OssmBleHomeToggleResult OssmBleHandleHomeToggle(bool isRunning, float currentSpe
   return OssmBleHomeToggleResult::Failed;
 }
 
+OssmBleHomeToggleResult OssmBleHandleStreamingToggle(bool isRunning, float currentSpeed)
+{
+  if (ble_paused_state) {
+    if (OssmBleResume()) {
+      ble_paused_state = false;
+      return OssmBleHomeToggleResult::Resumed;
+    }
+    return OssmBleHomeToggleResult::Failed;
+  }
+
+  if (isRunning) {
+    OssmBleSendPausedSpeed(currentSpeed);
+    if (OssmBlePause()) {
+      ble_paused_state = true;
+      return OssmBleHomeToggleResult::Paused;
+    }
+    return OssmBleHomeToggleResult::Failed;
+  }
+
+  if (currentSpeed > 0.0f) {
+    OssmBleStoreUnpauseSpeed(currentSpeed);
+  }
+
+  if (OssmBleResume()) {
+    ble_paused_state = false;
+    return OssmBleHomeToggleResult::Started;
+  }
+
+  return OssmBleHomeToggleResult::Failed;
+}
+
 bool OssmBleSendText(const String& command, String* response)
 {
   return sendBleTextInternal(command, response, false);
@@ -706,7 +737,8 @@ bool OssmBleGoToMenu()
 
 bool OssmBleSetBuffer(float value)
 {
-  return OssmBleSendText(String("set:buffer:") + String(clampPercent(value)), nullptr);
+  // Use fast write — buffer config is fire-and-forget.
+  return sendBleTextInternal(String("set:buffer:") + String(clampPercent(value)), nullptr, true);
 }
 
 bool OssmBleSetWifi(const String& ssid, const String& password)
@@ -727,7 +759,10 @@ bool OssmBleStreamPosition(float position, int timeMs)
     t = 0;
   }
   String cmd = String("stream:") + String(pos) + String(":") + String(t);
-  return OssmBleSendText(cmd, nullptr);
+  // Use fast (no-response) write: stream frames are high-frequency real-time
+  // commands. Waiting for a BLE ACK + read-back on every frame causes queuing
+  // latency and OSSM stalls.
+  return sendBleTextInternal(cmd, nullptr, true);
 }
 
 // Compatibility shim: OSSM does not support set:ispaused.
@@ -772,9 +807,13 @@ bool OssmBleReadState(String* stateText, bool logState)
   }
 
   *stateText = String(raw.c_str());
+  bool looksLikeCommandAck = stateText->startsWith("ok:") || stateText->startsWith("fail:");
   if (logState) {
-    Serial.print("BLE rx (state): ");
+    Serial.print(looksLikeCommandAck ? "BLE rx (state-ack): " : "BLE rx (state): ");
     Serial.println(stateText->c_str());
+  }
+  if (looksLikeCommandAck) {
+    return false;
   }
   updateBleMachineStateCache(*stateText);
   return true;

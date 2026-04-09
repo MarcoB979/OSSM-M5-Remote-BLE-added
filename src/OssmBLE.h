@@ -50,6 +50,7 @@ void OssmBleSetMode(bool enabled);
 bool OssmBleIsMode();
 bool OssmBleCanSendControlCommands();
 OssmBleHomeToggleResult OssmBleHandleHomeToggle(bool isRunning, float currentSpeed);
+OssmBleHomeToggleResult OssmBleHandleStreamingToggle(bool isRunning, float currentSpeed);
 
 bool OssmBleSendText(const String& command, String* response = nullptr);
 bool OssmBleSendCommand(OssmBleCommand command, float value, float speedValue, float maxDepthMm, float maxSpeedValue, String* response = nullptr);
