@@ -26,6 +26,8 @@ extern "C" {
 void colors_ui_screen_init(void);       // Build the LVGL Colors selector screen
 void colorSchemeScreenLoaded(void);     // Refresh selection indicators on screen load
 void colorSchemeSelectIndex(int index); // User tapped scheme N — apply + persist
+uint32_t getActivePrimaryColor(void);   // Get current scheme's primary color
+uint32_t getActiveSecondaryColor(void); // Get current scheme's secondary color
 
 #ifdef __cplusplus
 }

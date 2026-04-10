@@ -27,13 +27,13 @@
 // ---------------------------------------------------------------------------
 
 const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
-    // name            primary      secondary
-    { "Deep Purple",   0x83277B,    0xD591D5 },  // 0 — default (original OSSM)
-    { "Midnight Navy", 0x1E3A6E,    0x7A9FCC },  // 1 — deep navy + periwinkle
-    { "Crimson Pulse", 0x9B1B1B,    0xE07272 },  // 2 — deep red + rose
-    { "Forest Deep",   0x1E5E35,    0x6DB88A },  // 3 — dark green + sage
-    { "Steel Blue",    0x2C5F7A,    0x6AABCC },  // 4 — steel + sky blue
-    { "Amber Rush",    0x7A4E00,    0xD4A043 },  // 5 — dark amber + golden
+    // name                primary      secondary
+    { "Deep Purple",       0x83277B,    0xD591D5 },  // 0 — default (original OSSM)
+    { "Midnight Navy",     0x1E3A6E,    0x7A9FCC },  // 1 — deep navy + periwinkle
+    { "Forest Army",       0x3D5C3D,    0x8BA88B },  // 2 — army green dark + light, gray text
+    { "Steel Blue",        0x2C5F7A,    0x6AABCC },  // 3 — steel + sky blue
+    { "Amber Sunset",      0xB8860B,    0xFFD700 },  // 4 — dark amber + golden sunset
+    { "Rainbow",           0x83277B,    0xD591D5 },  // 5 — rainbow sliders (uses primary as base)
 };
 
 int g_active_color_scheme = 0;
@@ -143,18 +143,59 @@ void applyColorScheme(int index) {
     rs_btnFocused(ui_AddonsItem2, S);
 
     // --- 5. Sliders ---
-    lv_obj_t *sliders[] = {
-        ui_homespeedslider, ui_homedepthslider,
-        ui_homestrokeslider, ui_homesensationslider,
-        ui_outtroqeslider, ui_introqeslider,
-        ui_streamingspeedslider, ui_streamingdepthslider,
-        ui_streamingstrokeslider, ui_brightness_slider,
-    };
-    for (lv_obj_t *sl : sliders) {
-        rs_slider(sl, P, S);
+    // Special handling for rainbow theme
+    if (index == 5) {  // Rainbow theme
+        // Rainbow slider colors: red, orange, yellow, green, cyan, blue, purple
+        static const uint32_t rainbowColors[7] = {
+            0xFF0000,  // red
+            0xFF7F00,  // orange
+            0xFFFF00,  // yellow
+            0x00FF00,  // green
+            0x00FFFF,  // cyan
+            0x0000FF,  // blue
+            0xFF00FF,  // purple
+        };
+        lv_obj_t *sliders[] = {
+            ui_homespeedslider, ui_homedepthslider,
+            ui_homestrokeslider, ui_homesensationslider,
+            ui_outtroqeslider, ui_introqeslider,
+            ui_streamingspeedslider, ui_streamingdepthslider,
+            ui_streamingstrokeslider, ui_brightness_slider,
+        };
+        for (size_t i = 0; i < sizeof(sliders)/sizeof(sliders[0]) && i < 7; i++) {
+            if (!sliders[i]) continue;
+            uint32_t rainbowColor = rainbowColors[i];
+            uint32_t rainbowLight = 0xFFFFFF;  // light version (will be slightly modified)
+            // Blend the rainbow color with white for the light accent
+            uint8_t r = ((rainbowColor >> 16) & 0xFF);
+            uint8_t g = ((rainbowColor >> 8) & 0xFF);
+            uint8_t b = (rainbowColor & 0xFF);
+            uint32_t rainbowLighter = ((((r+0xFF)/2) & 0xFF) << 16) | ((((g+0xFF)/2) & 0xFF) << 8) | (((b+0xFF)/2) & 0xFF);
+            rs_slider(sliders[i], rainbowColor, rainbowLighter);
+        }
+    } else {
+        // Normal sliders with scheme colors
+        lv_obj_t *sliders[] = {
+            ui_homespeedslider, ui_homedepthslider,
+            ui_homestrokeslider, ui_homesensationslider,
+            ui_outtroqeslider, ui_introqeslider,
+            ui_streamingspeedslider, ui_streamingdepthslider,
+            ui_streamingstrokeslider, ui_brightness_slider,
+        };
+        for (lv_obj_t *sl : sliders) {
+            rs_slider(sl, P, S);
+        }
     }
 
-    // --- 6. Logo / header outlines ---
+    // --- 6. Pattern roller menu ---
+    if (ui_PatternS) {
+        lv_obj_set_style_bg_color(ui_PatternS, lv_color_hex(S), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa  (ui_PatternS, 255,            LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(ui_PatternS, lv_color_hex(P), LV_PART_SELECTED | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa  (ui_PatternS, 255,             LV_PART_SELECTED | LV_STATE_DEFAULT);
+    }
+
+    // --- 7. Logo / header outlines ---
     lv_obj_t *logos[] = {
         ui_Logo, ui_Logo2, ui_Logo1, ui_Logo4, ui_Logo5, ui_Logo6,
         ui_LogoMenu, ui_LogoStreaming, ui_LogoAddons,
@@ -164,7 +205,7 @@ void applyColorScheme(int index) {
         rs_outline(logo, P);
     }
 
-    // --- 7. Colors screen scheme buttons: each keeps its own scheme color ---
+    // --- 8. Colors screen scheme buttons: each keeps its own scheme color ---
     for (int i = 0; i < COLOR_SCHEME_COUNT; i++) {
         if (!s_schemeBtn[i]) continue;
         lv_obj_set_style_bg_color(s_schemeBtn[i],
@@ -173,7 +214,7 @@ void applyColorScheme(int index) {
             lv_color_hex(COLOR_SCHEMES[i].secondary), LV_PART_MAIN | LV_STATE_FOCUSED);
     }
 
-    // --- 8. Refresh Colors screen selection indicators ---
+    // --- 9. Refresh Colors screen selection indicators ---
     colorSchemeScreenLoaded();
 }
 
@@ -195,6 +236,24 @@ static void saveColorScheme(int index) {
     pref.begin("m5-ctnr", false);
     pref.putInt("ColorScheme", index);
     pref.end();
+}
+
+// ---------------------------------------------------------------------------
+// Color getters (for external use, e.g., from main_helper.cpp)
+// ---------------------------------------------------------------------------
+
+extern "C" uint32_t getActivePrimaryColor() {
+    if (g_active_color_scheme < 0 || g_active_color_scheme >= COLOR_SCHEME_COUNT) {
+        return COLOR_SCHEMES[0].primary;
+    }
+    return COLOR_SCHEMES[g_active_color_scheme].primary;
+}
+
+extern "C" uint32_t getActiveSecondaryColor() {
+    if (g_active_color_scheme < 0 || g_active_color_scheme >= COLOR_SCHEME_COUNT) {
+        return COLOR_SCHEMES[0].secondary;
+    }
+    return COLOR_SCHEMES[g_active_color_scheme].secondary;
 }
 
 // ---------------------------------------------------------------------------
@@ -392,5 +451,29 @@ extern "C" void colors_ui_screen_init() {
     lv_obj_center(backLbl);
     lv_label_set_text(backLbl, T_BACK);
     lv_obj_set_style_text_color(backLbl,
+        lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ── Select button (bottom-right) ─────────────────────────────────────────
+    lv_obj_t *selectBtn = lv_btn_create(ui_Colors);
+    lv_obj_set_width (selectBtn, 100);
+    lv_obj_set_height(selectBtn, 30);
+    lv_obj_set_y(selectBtn, 100);
+    lv_obj_set_x(selectBtn, lv_pct(33));
+    lv_obj_set_align(selectBtn, LV_ALIGN_CENTER);
+    lv_obj_clear_flag(selectBtn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(selectBtn,
+        lv_color_hex(COLOR_SCHEMES[0].primary), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(selectBtn, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // Same event callback as MX/right button — applies the focused scheme
+    lv_obj_add_event_cb(selectBtn, ev_schemeBtn, LV_EVENT_CLICKED, NULL);
+    
+    // Add to group so encoder can navigate to it and select via button
+    lv_group_add_obj(ui_g_colors, selectBtn);
+
+    lv_obj_t *selectLbl = lv_label_create(selectBtn);
+    lv_obj_center(selectLbl);
+    lv_label_set_text(selectLbl, T_SELECT);
+    lv_obj_set_style_text_color(selectLbl,
         lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
 }

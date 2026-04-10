@@ -8,6 +8,7 @@
 #include "OssmBLE.h"
 #include "language.h"
 #include "ui/ui.h"
+#include "colors.h"
 
 int st_screens = ST_UI_START;
 
@@ -185,6 +186,19 @@ int showNotification(const char *title,
   int result = NOTIFICATION_RESULT_NONE;
   g_notification_touch_result = NOTIFICATION_RESULT_NONE;
 
+  // Get active color scheme colors (defined in colors.cpp)
+  extern uint32_t getActivePrimaryColor(void);
+  extern uint32_t getActiveSecondaryColor(void);
+  uint32_t schemePrimary = getActivePrimaryColor();
+  uint32_t schemeSecondary = getActiveSecondaryColor();
+  // Derive darker color for overlay (approximately 60% of primary's brightness reduced)
+  uint8_t pr = (schemePrimary >> 16) & 0xFF;
+  uint8_t pg = (schemePrimary >> 8) & 0xFF;
+  uint8_t pb = schemePrimary & 0xFF;
+  uint32_t schemeDarker = 0x000000;  // Default to black if we can't compute
+  // Dark shade: reduce each component by 50%
+  schemeDarker = (((pr >> 1) & 0xFF) << 16) | (((pg >> 1) & 0xFF) << 8) | ((pb >> 1) & 0xFF);
+
   if (shouldBlockTouch) {
     touch_disabled = true;
   }
@@ -203,7 +217,7 @@ int showNotification(const char *title,
   lv_obj_set_size(overlay, HOR_RES, VER_RES);
   lv_obj_center(overlay);
   lv_obj_set_style_bg_opa(overlay, LV_OPA_50, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_color(overlay, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(overlay, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
 
   lv_obj_t *panel = lv_obj_create(overlay);
@@ -218,8 +232,8 @@ int showNotification(const char *title,
   }
   lv_obj_set_style_radius(panel, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_border_width(panel, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_color(panel, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_color(panel, lv_color_hex(0xD691D0), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_color(panel, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(panel, lv_color_hex(schemeSecondary), LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -228,7 +242,7 @@ int showNotification(const char *title,
   lv_obj_set_size(titleBar, lv_pct(100), 32);
   lv_obj_align(titleBar, LV_ALIGN_TOP_MID, 0, 0);
   lv_obj_set_style_bg_opa(titleBar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_color(titleBar, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(titleBar, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_DEFAULT);
 
   lv_obj_t *titleLabel = lv_label_create(titleBar);
   lv_label_set_text(titleLabel, (title != nullptr && title[0] != '\0') ? title : "Notification");
@@ -255,8 +269,8 @@ int showNotification(const char *title,
     if (showLeftButton) {
       lv_obj_t *leftBtn = lv_btn_create(buttonRow);
       lv_obj_set_size(leftBtn, 120, 36);
-      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_PRESSED);
+      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_PRESSED);
       lv_obj_set_style_border_width(leftBtn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
       lv_obj_t *leftLbl = lv_label_create(leftBtn);
@@ -269,8 +283,8 @@ int showNotification(const char *title,
     if (showRightButton) {
       lv_obj_t *rightBtn = lv_btn_create(buttonRow);
       lv_obj_set_size(rightBtn, 120, 36);
-      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_PRESSED);
+      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_PRESSED);
       lv_obj_set_style_border_width(rightBtn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
       lv_obj_t *rightLbl = lv_label_create(rightBtn);
