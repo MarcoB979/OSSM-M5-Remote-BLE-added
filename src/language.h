@@ -27,7 +27,6 @@
 #define T_BLOCKED           "Blocked/Not Ready"
 #define T_CUM               "Cum"
 #define T_HOME              "Home"
-#define T_XTOYS             "X-Toys"
 #define T_MEN1              "Up"
 #define T_MEN2              "Down"
 #define T_SPEED             "Speed:"
@@ -53,6 +52,7 @@
 #define T_VIBRATE           "Vibrate"
 #define T_TOUCHSETTING      "Touch Disabled"
 #define T_STROKEINVERT      "Stroke inverted"
+#define T_SLEEP             "Sleep"
 
 
 #define T_Patterns          "Pattern:"
@@ -86,7 +86,9 @@
 #define T_STREAMING_CAUTION_TITLE "Caution - Homing"
 #define T_STREAMING_CAUTION_TEXT  "The OSSM will now start a homing procedure. Move away from the OSSM for your safety"
 #define T_STREAMING_ACTIVE_TITLE  "OSSM in Streaming mode"
-#define T_STREAMING_ACTIVE_TEXT   "The OSSM is now in STREAMING MODE. Press Start to arm streaming. Movement begins when an external stream source sends position frames.\nTo stop streaming, go to menu."
+#define T_STREAMING_ACTIVE_TEXT   "The OSSM is now in STREAMING MODE. \nPress START to arm streaming.\nMovement begins when an external stream source sends position frames."
+#define T_STREAMING_RUNNING_TITLE "OSSM Streaming mode active"
+#define T_STREAMING_RUNNING_TEXT  "The OSSM is now in active streaming mode. Your M5 remote does not have control anymore. You can safely shut down the M5 remote, or you can stop streaming mode."
 #define T_STREAMING_FAIL_TITLE    "Streaming failed"
 #define T_STREAMING_FAIL_TEXT     "The OSSM could not enter streaming mode."
 

@@ -196,6 +196,8 @@ extern lv_obj_t * ui_AddonsItem0;
 extern lv_obj_t * ui_AddonsItem0Text;
 extern lv_obj_t * ui_AddonsItem1;
 extern lv_obj_t * ui_AddonsItem1Text;
+extern lv_obj_t * ui_AddonsButtonL;
+extern lv_obj_t * ui_AddonsButtonLText;
 extern lv_obj_t * ui_AddonsButtonR;
 extern lv_obj_t * ui_AddonsButtonRText;
 extern lv_obj_t * ui_darkmode;

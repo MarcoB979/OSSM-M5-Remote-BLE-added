@@ -1,7 +1,14 @@
-#define OSSM 1
+#pragma once
 
+#include <stdint.h>
+
+#ifdef __cplusplus
+#include "OneButton.h"
+#endif
+
+#define OSSM 1
 #define CUM 2
-uint8_t CUM_Address[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
+extern uint8_t CUM_Address[6];
 
 
 #define OSSM_ID  1 //OSSM_ID Default can be changed with M5 Remote in the Future will be Saved in EPROOM
@@ -22,9 +29,11 @@ uint8_t CUM_Address[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 #define ENC_4_CLK 7
 #define ENC_4_DT 6
-OneButton Button1(10, false); // MX Button
-OneButton Button2(8, false); // Encoder Left
-OneButton Button3(14, false, true); // Encoder Right
+#ifdef __cplusplus
+extern OneButton Button1;
+extern OneButton Button2;
+extern OneButton Button3;
+#endif
 #else
 
 #define ENC_1_CLK 25
@@ -38,9 +47,11 @@ OneButton Button3(14, false, true); // Encoder Right
 
 #define ENC_4_CLK 19
 #define ENC_4_DT 27
-OneButton Button1(35, false); //MX Button (idle LOW, pressed HIGH)
-OneButton Button2(36, false); //Encoder Left
-OneButton Button3(34, false, true); //Encoder Right
+#ifdef __cplusplus
+extern OneButton Button1;
+extern OneButton Button2;
+extern OneButton Button3;
+#endif
 #endif
 
 #define Encoder_MAP 144
@@ -70,4 +81,13 @@ static const AddonDefinition ADDON_DEFINITIONS[] = {
 #define BgColor    TFT_WHITE
 #define FrontColor TFT_PURPLE
 #define HighlightColor TFT_BLACK
+
+// Runtime power/screen policy defaults (edit these values here)
+#define SCREENSAVER_TIMEOUT_MS_DEFAULT (2 * 60 * 1000)
+#define SCREENSAVER_DIM_BRIGHTNESS_DEFAULT 15
+#define DEEP_SLEEP_TIMEOUT_MS_DEFAULT (10UL * 60UL * 1000UL)
+
+// Minimum time to keep Start screen visible before auto-switching to Home.
+#define START_SCREEN_MIN_DISPLAY_MS 3000UL
+
 
