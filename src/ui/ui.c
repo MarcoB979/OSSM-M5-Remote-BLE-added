@@ -202,6 +202,8 @@ lv_obj_t * ui_AddonsButtonLText;
 lv_obj_t * ui_AddonsButtonR;
 lv_obj_t * ui_AddonsButtonRText;
 lv_group_t * ui_g_addons;
+lv_obj_t * ui_AddonsItem2 = NULL;
+lv_obj_t * ui_AddonsItem2Text = NULL;
 
 
 ///////////////////// TEST LVGL SETTINGS ////////////////////
@@ -640,6 +642,14 @@ static void ui_event_AddonsItem1(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     if(event == LV_EVENT_CLICKED) {
         addonsSelectIndex(1);
+    }
+}
+
+static void ui_event_AddonsItem2(lv_event_t * e)
+{
+    lv_event_code_t event = lv_event_get_code(e);
+    if(event == LV_EVENT_CLICKED) {
+        addonsSelectIndex(2);
     }
 }
 
@@ -3306,10 +3316,11 @@ void ui_Addons_screen_init(void)
     lv_obj_set_style_text_font(ui_AddonsHint, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_align(ui_AddonsHint, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
 
+    // Three items: height 35px each, y offsets: -32, 10, 52 (gap 7px)
     ui_AddonsItem0 = lv_btn_create(ui_Addons);
     lv_obj_set_width(ui_AddonsItem0, 300);
-    lv_obj_set_height(ui_AddonsItem0, 50);
-    lv_obj_set_y(ui_AddonsItem0, -10);
+    lv_obj_set_height(ui_AddonsItem0, 35);
+    lv_obj_set_y(ui_AddonsItem0, -32);
     lv_obj_set_align(ui_AddonsItem0, LV_ALIGN_CENTER);
     lv_obj_add_event_cb(ui_AddonsItem0, ui_event_AddonsItem0, LV_EVENT_CLICKED, NULL);
     lv_obj_set_style_bg_color(ui_AddonsItem0, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -3322,8 +3333,8 @@ void ui_Addons_screen_init(void)
 
     ui_AddonsItem1 = lv_btn_create(ui_Addons);
     lv_obj_set_width(ui_AddonsItem1, 300);
-    lv_obj_set_height(ui_AddonsItem1, 50);
-    lv_obj_set_y(ui_AddonsItem1, 50);
+    lv_obj_set_height(ui_AddonsItem1, 35);
+    lv_obj_set_y(ui_AddonsItem1, 10);
     lv_obj_set_align(ui_AddonsItem1, LV_ALIGN_CENTER);
     lv_obj_add_event_cb(ui_AddonsItem1, ui_event_AddonsItem1, LV_EVENT_CLICKED, NULL);
     lv_obj_set_style_bg_color(ui_AddonsItem1, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -3333,6 +3344,20 @@ void ui_Addons_screen_init(void)
     lv_obj_center(ui_AddonsItem1Text);
     lv_label_set_text(ui_AddonsItem1Text, "");
     lv_obj_set_style_text_align(ui_AddonsItem1Text, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_AddonsItem2 = lv_btn_create(ui_Addons);
+    lv_obj_set_width(ui_AddonsItem2, 300);
+    lv_obj_set_height(ui_AddonsItem2, 35);
+    lv_obj_set_y(ui_AddonsItem2, 52);
+    lv_obj_set_align(ui_AddonsItem2, LV_ALIGN_CENTER);
+    lv_obj_add_event_cb(ui_AddonsItem2, ui_event_AddonsItem2, LV_EVENT_CLICKED, NULL);
+    lv_obj_set_style_bg_color(ui_AddonsItem2, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_color(ui_AddonsItem2, lv_color_hex(0xD591D5), LV_PART_MAIN | LV_STATE_FOCUSED);
+
+    ui_AddonsItem2Text = lv_label_create(ui_AddonsItem2);
+    lv_obj_center(ui_AddonsItem2Text);
+    lv_label_set_text(ui_AddonsItem2Text, "");
+    lv_obj_set_style_text_align(ui_AddonsItem2Text, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_AddonsButtonL = lv_btn_create(ui_Addons);
     lv_obj_set_width(ui_AddonsButtonL, 100);
@@ -3363,6 +3388,7 @@ void ui_Addons_screen_init(void)
     ui_g_addons = lv_group_create();
     lv_group_add_obj(ui_g_addons, ui_AddonsItem0);
     lv_group_add_obj(ui_g_addons, ui_AddonsItem1);
+    lv_group_add_obj(ui_g_addons, ui_AddonsItem2);
 }
 
 void ui_init(void)
@@ -3381,5 +3407,6 @@ void ui_init(void)
     ui_Menu_screen_init();
     ui_Streaming_screen_init();
     ui_Addons_screen_init();
+    colors_ui_screen_init();
     lv_disp_load_scr(ui_Start);
 }

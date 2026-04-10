@@ -6,6 +6,7 @@
 #include "ui/ui.h"
 #include "main.h"
 #include "screen.h"
+#include "colors.h"
 #include "Preferences.h"      //EEPROM replacement function
 #include <esp_sleep.h>
 
@@ -93,6 +94,7 @@ void setup(){
 
   LogDebug("Works till step 1");
   ui_init();  
+  colors_init();   // Load saved color scheme from NVS and apply to all widgets
   markStartScreenLoaded();
   
   if (wakeCause == ESP_SLEEP_WAKEUP_EXT1 || wakeCause == ESP_SLEEP_WAKEUP_EXT0) {

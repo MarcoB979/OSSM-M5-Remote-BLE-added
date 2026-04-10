@@ -9,6 +9,7 @@
 #include "language.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
+#include "colors.h"
 
 
 uint8_t CUM_Address[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -100,6 +101,17 @@ static void refreshAddonsUi()
              ADDON_DEFINITIONS[1].displayName, addonSlotLabel(g_addon_slots[1]));
     lv_label_set_text(ui_AddonsItem1Text, line);
   }
+  if (ui_AddonsItem2Text != nullptr && ADDON_DEFINITIONS_COUNT > 2) {
+    // Color Schemes is a direct launcher — show without slot info
+    if (strcmp(ADDON_DEFINITIONS[2].id, "color_schemes") == 0) {
+      lv_label_set_text(ui_AddonsItem2Text, ADDON_DEFINITIONS[2].displayName);
+    } else {
+      char line[96];
+      snprintf(line, sizeof(line), "%s  [%s]",
+               ADDON_DEFINITIONS[2].displayName, addonSlotLabel(g_addon_slots[2]));
+      lv_label_set_text(ui_AddonsItem2Text, line);
+    }
+  }
 }
 
 static void cycleAddonSelection(size_t addonIndex)
@@ -160,6 +172,11 @@ bool triggerAddonForSlot(int slot)
     return true;
   }
 
+  if (strcmp(ADDON_DEFINITIONS[addonIndex].id, "color_schemes") == 0) {
+    _ui_screen_change(ui_Colors, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    return true;
+  }
+
   return false;
 }
 
@@ -172,7 +189,12 @@ extern "C" void addonsScreenLoaded(void)
 extern "C" void addonsSelectIndex(int index)
 {
   loadAddonBindingsIfNeeded();
-  if (index < 0) {
+  if (index < 0 || (size_t)index >= ADDON_DEFINITIONS_COUNT) {
+    return;
+  }
+  // Color Schemes addon launches directly — no slot cycling
+  if (strcmp(ADDON_DEFINITIONS[index].id, "color_schemes") == 0) {
+    _ui_screen_change(ui_Colors, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     return;
   }
   cycleAddonSelection((size_t)index);

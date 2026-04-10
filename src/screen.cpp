@@ -6,6 +6,7 @@
 #include "main.h"
 #include "config.h"
 #include "screen.h"
+#include "colors.h"
 #include "OssmBLE.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
@@ -321,6 +322,12 @@ void screenmachine(lv_event_t * e)
     encoder4_enc = encoder4.getCount();
     if (ui_g_addons != nullptr && ui_AddonsItem0 != nullptr) {
       lv_group_focus_obj(ui_AddonsItem0);
+    }
+  } else if (lv_scr_act() == ui_Colors) {
+    st_screens = ST_UI_COLORS;
+    encoder4_enc = encoder4.getCount();
+    if (ui_g_colors != nullptr) {
+      lv_group_focus_next(ui_g_colors);
     }
   }
 
@@ -969,6 +976,7 @@ void handleCurrentScreen(){
     case ST_UI_SETTINGS:      handleSettingsScreen();      break;
     case ST_UI_MENU:          handleMenuScreen();          break;
     case ST_UI_ADDONS:        handleAddonsScreen();        break;
+    case ST_UI_COLORS:        handleColorsScreen();        break;
     case ST_UI_STREAMING:     handleStreamingScreen();     break;
     default: break;
   }

@@ -99,6 +99,7 @@
 #define T_SCREEN_STREAMING        "Streaming"
 #define T_SCREEN_SETTINGS         "Settings"
 #define T_SCREEN_ADDONS           "Addons"
+#define T_SCREEN_COLORS           "Color Schemes"
 #define T_SCREEN_PATTERN          "Pattern"
 #define T_SCREEN_TORQUE           "Torque"
 #define T_SCREEN_EJECT            "Eject Settings"

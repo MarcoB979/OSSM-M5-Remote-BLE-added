@@ -51,6 +51,7 @@
 #define ST_UI_MENU 21
 #define ST_UI_STREAMING 22
 #define ST_UI_ADDONS 23
+#define ST_UI_COLORS 24
 
 #define state_OFF 0
 #define state_ON 1
@@ -222,6 +223,9 @@ void menuSleepAction(void);
 void menuRestartAction(void);
 void addonsScreenLoaded(void);
 void addonsSelectIndex(int index);
+void colorSchemeScreenLoaded(void);
+void colorSchemeSelectIndex(int index);
+void colors_ui_screen_init(void);
 void homebuttonmevent(lv_event_t * e);
 void streamingbuttonmevent(lv_event_t * e);
 void setupDepthInter(lv_event_t * e);

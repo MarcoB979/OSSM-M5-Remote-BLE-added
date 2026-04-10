@@ -196,10 +196,16 @@ extern lv_obj_t * ui_AddonsItem0;
 extern lv_obj_t * ui_AddonsItem0Text;
 extern lv_obj_t * ui_AddonsItem1;
 extern lv_obj_t * ui_AddonsItem1Text;
+extern lv_obj_t * ui_AddonsItem2;
+extern lv_obj_t * ui_AddonsItem2Text;
 extern lv_obj_t * ui_AddonsButtonL;
 extern lv_obj_t * ui_AddonsButtonLText;
 extern lv_obj_t * ui_AddonsButtonR;
 extern lv_obj_t * ui_AddonsButtonRText;
+
+// UI_COLORS screen objects
+extern lv_obj_t   * ui_Colors;
+extern lv_group_t * ui_g_colors;
 extern lv_obj_t * ui_darkmode;
 extern lv_obj_t * ui_vibrate;
 extern lv_obj_t * ui_lefty;
