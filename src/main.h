@@ -182,9 +182,18 @@ void clickLeftDouble();
 void clickRight();
 void clickRightLong();
 void clickRightDouble();
+struct ButtonEvents {
+    bool mxShort;
+    bool mxLong;
+    bool mxDouble;
+    bool leftShort;
+    bool leftDouble;
+    bool rightShort;
+    bool rightLong;
+    bool rightDouble;
+};
+void pollButtonEvents(ButtonEvents &events);
 void clearButtonFlags();
-void updateMxReleaseStability();
-void markEncoderActivityForMxFilter();
 void register_event_debug_callbacks();
 
 // Screen dispatch

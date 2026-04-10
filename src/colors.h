@@ -9,6 +9,8 @@ typedef struct {
     const char* name;       // Display name shown on the selector screen
     uint32_t    primary;    // Main accent: buttons, slider knob/indicator, header outline
     uint32_t    secondary;  // Light accent: slider track bg, focused-state bg
+    uint32_t    text_primary;   // Text used on dark/accent backgrounds (usually white)
+    uint32_t    text_secondary; // Text used on light backgrounds (usually black)
 } UiColorScheme;
 
 #define COLOR_SCHEME_COUNT 6
@@ -28,13 +30,16 @@ void colorSchemeScreenLoaded(void);     // Refresh selection indicators on scree
 void colorSchemeSelectIndex(int index); // User tapped scheme N — apply + persist
 uint32_t getActivePrimaryColor(void);   // Get current scheme's primary color
 uint32_t getActiveSecondaryColor(void); // Get current scheme's secondary color
+uint32_t getActiveTextPrimaryColor(void);   // Get current scheme's primary text color
+uint32_t getActiveTextSecondaryColor(void); // Get current scheme's secondary text color
 
 #ifdef __cplusplus
 }
 
 // C++-only helpers
+struct ButtonEvents;
 void colors_init();             // Load saved scheme from NVS and apply at boot
 void applyColorScheme(int index); // Restyle all widgets to a given scheme index
-void handleColorsScreen();      // Per-loop input/encoder handler for Colors screen
+void handleColorsScreen(const ButtonEvents &events);      // Per-loop input/encoder handler for Colors screen
 
 #endif

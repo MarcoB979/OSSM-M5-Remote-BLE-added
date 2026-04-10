@@ -8,7 +8,6 @@
 #include "ui/ui.h"
 
 static constexpr int OSSM_TARGET_ID = 1;
-static constexpr int FILTER_MX = 1;
 
 #ifdef ARDUINO_M5STACK_CORES3
 OneButton Button1(10, false); // MX Button
@@ -25,6 +24,10 @@ ESP32Encoder encoder2;
 ESP32Encoder encoder3;
 ESP32Encoder encoder4;
 
+// Button lifecycle (single model used across the project):
+// 1) OneButton callbacks set these raw flags.
+// 2) pollButtonEvents() snapshots and consumes them once per loop tick.
+// 3) Screen/modal handlers act on the snapshot and optionally clear leftovers.
 bool mxclick_short_waspressed  = false;
 bool mxclick_long_waspressed   = false;
 bool mxclick_double_waspressed = false;
@@ -393,57 +396,10 @@ void savepattern(lv_event_t * e)
   SendCommand(PATTERN, patterns, OSSM_ID);
 }
 
-// ---------------------------------------------------------------------------
-// MX encoder anti-ghost filter
-// ---------------------------------------------------------------------------
-
-static unsigned long mx_last_home_action_ms = 0;
-static constexpr unsigned long MX_HOME_MIN_GAP_MS = 220;
-static unsigned long mx_suppress_until_ms = 0;
-static constexpr unsigned long MX_SUPPRESS_AFTER_ENCODER_MS = 300;
-static unsigned long mx_release_since_ms = 0;
-
-void updateMxReleaseStability()
+static bool consumeButtonFlag(bool &flag)
 {
-  // Core2 mapping: idle LOW, pressed HIGH for MX.
-  bool mxReleased = (digitalRead(Button1.pin()) == LOW);
-  if (mxReleased) {
-    if (mx_release_since_ms == 0) {
-      mx_release_since_ms = millis();
-    }
-  } else {
-    mx_release_since_ms = 0;
-  }
-}
-
-void markEncoderActivityForMxFilter()
-{
-  if (FILTER_MX == 1) {
-    mx_suppress_until_ms = millis() + MX_SUPPRESS_AFTER_ENCODER_MS;
-  }
-}
-
-static bool filterMxPhysicalHomeClick()
-{
-  if (FILTER_MX != 1) {
-    return true;
-  }
-
-  unsigned long now = millis();
-  unsigned long dt  = now - mx_last_home_action_ms;
-
-  if ((long)(now - mx_suppress_until_ms) < 0) {
-    LogDebugPrioFormatted("mx: ST_UI_HOME -> filtered after encoder move (%ld ms left)\n",
-                          (long)(mx_suppress_until_ms - now));
-    return false;
-  }
-
-  if (dt < MX_HOME_MIN_GAP_MS) {
-    LogDebugPrioFormatted("mx: ST_UI_HOME -> filtered phantom click (gap=%lu ms)\n", dt);
-    return false;
-  }
-
-  mx_last_home_action_ms = now;
+  if (!flag) return false;
+  flag = false;
   return true;
 }
 
@@ -508,6 +464,18 @@ void clickRightDouble()
   screensaver_check_activity();
 }
 
+void pollButtonEvents(ButtonEvents &events)
+{
+  events.mxShort     = consumeButtonFlag(mxclick_short_waspressed);
+  events.mxLong      = consumeButtonFlag(mxclick_long_waspressed);
+  events.mxDouble    = consumeButtonFlag(mxclick_double_waspressed);
+  events.leftShort   = consumeButtonFlag(clickLeft_short_waspressed);
+  events.leftDouble  = consumeButtonFlag(clickLeft_double_waspressed);
+  events.rightShort  = consumeButtonFlag(clickRight_short_waspressed);
+  events.rightLong   = consumeButtonFlag(clickRight_long_waspressed);
+  events.rightDouble = consumeButtonFlag(clickRight_double_waspressed);
+}
+
 // ---------------------------------------------------------------------------
 // Clear all button press flags (called from handleCurrentScreen after dispatch)
 // ---------------------------------------------------------------------------
@@ -515,6 +483,8 @@ void clickRightDouble()
 void clearButtonFlags()
 {
   mxclick_short_waspressed     = false;
+  mxclick_long_waspressed      = false;
+  mxclick_double_waspressed    = false;
   clickLeft_short_waspressed   = false;
   clickLeft_double_waspressed  = false;
   clickRight_short_waspressed  = false;

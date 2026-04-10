@@ -59,15 +59,18 @@ void setup(){
   Button1.attachClick(mxclick);
   Button1.attachDoubleClick(mxdouble);
   Button1.attachLongPressStart(mxlong);
-  Button1.setDebounceMs(80);
-  Button1.setLongPressIntervalMs(400);
+  Button1.setDebounceMs(50);
+  Button1.setClickMs(260);
+  Button1.setLongPressIntervalMs(380);
   Button2.attachClick(clickLeft);
   Button2.attachDoubleClick(clickLeftDouble);
-  Button2.setDebounceMs(80);
+  Button2.setDebounceMs(50);
+  Button2.setClickMs(260);
   Button3.attachClick(clickRight);
-  Button3.setDebounceMs(80);
+  Button3.setDebounceMs(50);
+  Button3.setClickMs(260);
   Button3.attachLongPressStart(clickRightLong);
-  Button3.setLongPressIntervalMs(400);
+  Button3.setLongPressIntervalMs(380);
   Button3.attachDoubleClick(clickRightDouble);
   
   // Initialize `disp_buf` display buffer with the buffer(s).
@@ -143,7 +146,6 @@ void loop(){
 
   M5.update();
   lv_task_handler();
-  updateMxReleaseStability();
   Button1.tick();
   Button2.tick();
   Button3.tick();

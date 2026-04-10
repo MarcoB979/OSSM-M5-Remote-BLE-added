@@ -88,7 +88,7 @@
 #define T_STREAMING_ACTIVE_TITLE  "OSSM in Streaming mode"
 #define T_STREAMING_ACTIVE_TEXT   "The OSSM is now in STREAMING MODE. \nPress START to arm streaming.\nMovement begins when an external stream source sends position frames."
 #define T_STREAMING_RUNNING_TITLE "OSSM Streaming mode active"
-#define T_STREAMING_RUNNING_TEXT  "The OSSM is now in active streaming mode. Your M5 remote does not have control anymore. You can safely shut down the M5 remote, or you can stop streaming mode."
+#define T_STREAMING_RUNNING_TEXT  "Your OSSM is now in active streaming mode. Your M5 remote does not have control anymore. You can safely shut down the M5 remote, or stop streaming mode."
 #define T_STREAMING_FAIL_TITLE    "Streaming failed"
 #define T_STREAMING_FAIL_TEXT     "The OSSM could not enter streaming mode."
 

@@ -27,13 +27,13 @@
 // ---------------------------------------------------------------------------
 
 const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
-    // name                primary      secondary
-    { "Deep Purple",       0x83277B,    0xD591D5 },  // 0 — default (original OSSM)
-    { "Midnight Navy",     0x1E3A6E,    0x7A9FCC },  // 1 — deep navy + periwinkle
-    { "Forest Army",       0x3D5C3D,    0x8BA88B },  // 2 — army green dark + light, gray text
-    { "Steel Blue",        0x2C5F7A,    0x6AABCC },  // 3 — steel + sky blue
-    { "Amber Sunset",      0xB8860B,    0xFFD700 },  // 4 — dark amber + golden sunset
-    { "Rainbow",           0x83277B,    0xD591D5 },  // 5 — rainbow sliders (uses primary as base)
+    // name              primary   secondary  text_primary  text_secondary
+    { "Deep Purple",   0x83277B, 0xD591D5,  0xFFFFFF,     0x000000 },  // 0 — default (original OSSM)
+    { "Midnight Navy", 0x1E3A6E, 0x7A9FCC,  0xFFFFFF,     0x000000 },  // 1 — deep navy + periwinkle
+    { "Army Green",    0x3D5C3D, 0x8BA88B,  0xFFFFFF,     0x000000 },  // 2 — army green dark + light
+    { "Steel Blue",    0x2C5F7A, 0x6AABCC,  0xFFFFFF,     0x000000 },  // 3 — steel + sky blue
+    { "Amber Sunset",  0xB8860B, 0xFFD700,  0xFFFFFF,     0x000000 },  // 4 — dark amber + golden sunset
+    { "Rainbow",       0x83277B, 0xD591D5,  0xFFFFFF,     0x000000 },  // 5 — rainbow sliders (uses primary as base)
 };
 
 int g_active_color_scheme = 0;
@@ -256,6 +256,20 @@ extern "C" uint32_t getActiveSecondaryColor() {
     return COLOR_SCHEMES[g_active_color_scheme].secondary;
 }
 
+extern "C" uint32_t getActiveTextPrimaryColor() {
+    if (g_active_color_scheme < 0 || g_active_color_scheme >= COLOR_SCHEME_COUNT) {
+        return COLOR_SCHEMES[0].text_primary;
+    }
+    return COLOR_SCHEMES[g_active_color_scheme].text_primary;
+}
+
+extern "C" uint32_t getActiveTextSecondaryColor() {
+    if (g_active_color_scheme < 0 || g_active_color_scheme >= COLOR_SCHEME_COUNT) {
+        return COLOR_SCHEMES[0].text_secondary;
+    }
+    return COLOR_SCHEMES[g_active_color_scheme].text_secondary;
+}
+
 // ---------------------------------------------------------------------------
 // Public API (extern "C" for ui.c compatibility)
 // ---------------------------------------------------------------------------
@@ -299,7 +313,7 @@ extern "C" void colorSchemeSelectIndex(int index) {
 // Per-loop input handler (called from screen.cpp handleCurrentScreen)
 // ---------------------------------------------------------------------------
 
-void handleColorsScreen() {
+void handleColorsScreen(const ButtonEvents &events) {
     // Encoder 4: scroll focus through scheme list
     if (encoder4.getCount() > encoder4_enc + 2) {
         if (ui_g_colors) lv_group_focus_next(ui_g_colors);
@@ -310,14 +324,14 @@ void handleColorsScreen() {
     }
 
     // Left button: back to Addons
-    if (clickLeft_short_waspressed) {
+    if (events.leftShort) {
         _ui_screen_change(ui_Addons, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-        clickLeft_short_waspressed = false;
+        clearButtonFlags();
         return;
     }
 
     // MX / Right button: apply focused scheme
-    if (mxclick_short_waspressed || clickRight_short_waspressed) {
+    if (events.mxShort || events.rightShort) {
         lv_obj_t *focused = (ui_g_colors != nullptr)
             ? lv_group_get_focused(ui_g_colors) : nullptr;
         if (focused) {
@@ -328,8 +342,7 @@ void handleColorsScreen() {
                 }
             }
         }
-        mxclick_short_waspressed   = false;
-        clickRight_short_waspressed = false;
+        clearButtonFlags();
     }
 }
 

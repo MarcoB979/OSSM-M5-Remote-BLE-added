@@ -37,6 +37,8 @@ static int  activeEncId = 0;
 static unsigned long rampMs = 0;
 
 static uint32_t ble_home_go_strokeengine_ms = 0;
+// Per-loop one-shot snapshot consumed by all screen handlers in this tick.
+static ButtonEvents g_button_events = {};
 
 static const char* battery_symbol_for_level(int level)
 {
@@ -288,14 +290,7 @@ void screenmachine(lv_event_t * e)
     }
     if (previousScreen != ST_UI_MENU) {
       // Clear carry-over button flags so entering the menu does not trigger an immediate action.
-      mxclick_short_waspressed = false;
-      mxclick_long_waspressed = false;
-      mxclick_double_waspressed = false;
-      clickRight_short_waspressed = false;
-      clickRight_long_waspressed = false;
-      clickRight_double_waspressed = false;
-      clickLeft_short_waspressed = false;
-      clickLeft_double_waspressed = false;
+      clearButtonFlags();
     }
     encoder4_enc = encoder4.getCount();
     if (ui_g_menu != nullptr && ui_MenuButtonTL != nullptr) {
@@ -381,7 +376,7 @@ static int getRampedDetentDelta(int encoderId, int detents)
 // Per-screen handler functions
 // ---------------------------------------------------------------------------
 
-static void handleStartScreen()
+static void handleStartScreen(const ButtonEvents &events)
 {
   if (OssmBleIsMode()) {
     static uint32_t lastBleHomingPollMs = 0;
@@ -396,17 +391,20 @@ static void handleStartScreen()
     touch_disabled = true;
   }
 
-  if (clickLeft_short_waspressed == true) {
+  if (events.leftShort) {
     lv_obj_send_event(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
-  } else if (mxclick_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.mxShort) {
     LogDebug("mx: ST_UI_START -> sending StartButtonM click");
     lv_obj_send_event(ui_StartButtonM, LV_EVENT_CLICKED, NULL);
-  } else if (clickRight_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.rightShort) {
     lv_obj_send_event(ui_StartButtonR, LV_EVENT_CLICKED, NULL);
+    clearButtonFlags();
   }
 }
 
-static void handleHomeScreen()
+static void handleHomeScreen(const ButtonEvents &events)
 {
   static int lastHomeTransportMode = -1;
   int currentTransportMode = OssmBleIsMode() ? 1 : 0;
@@ -446,7 +444,7 @@ static void handleHomeScreen()
       changed = true;
       speed += getRampedDetentDelta(1, speedDetents);
       encoder1.setCount(speedCount % 2);
-      markEncoderActivityForMxFilter();
+      screensaver_check_activity();
     }
     if (speed < 0) { changed = true; speed = 0; }
     const float speedMax = OssmBleIsMode() ? 100.0f : speedlimit;
@@ -480,7 +478,7 @@ static void handleHomeScreen()
         if (stroke >= depth) stroke = depth;
       }
       encoder2.setCount(depthCount % 2);
-      markEncoderActivityForMxFilter();
+      screensaver_check_activity();
     }
     if (depth < 0) { changed = true; depth = 0; }
     const float depthMax = OssmBleIsMode() ? 100.0f : maxdepthinmm;
@@ -520,7 +518,7 @@ static void handleHomeScreen()
         stroke -= getRampedDetentDelta(3, strokeDetents);
       }
       encoder3.setCount(strokeCount % 2);
-      markEncoderActivityForMxFilter();
+      screensaver_check_activity();
     }
     if (stroke < 0) { changed = true; stroke = 0; }
     const float strokeMax = OssmBleIsMode() ? 100.0f : maxdepthinmm;
@@ -567,7 +565,7 @@ static void handleHomeScreen()
       changed = true;
       sensation += 2.0f * getRampedDetentDelta(4, sensationDetents);
       encoder4.setCount(sensationCount % 2);
-      markEncoderActivityForMxFilter();
+      screensaver_check_activity();
     }
     if (sensation < -100) { changed = true; sensation = -100; }
     if (sensation >  100) { changed = true; sensation =  100; }
@@ -578,29 +576,31 @@ static void handleHomeScreen()
   }
 
   // Button dispatch
-  if (clickLeft_short_waspressed == true) {
+  if (events.leftShort) {
     lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
-    clickLeft_short_waspressed = false;
-  } else if (clickLeft_double_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.leftDouble) {
     triggerAddonForSlot(ADDON_SLOT_LEFT);
-    clickLeft_double_waspressed = false;
-  } else if (mxclick_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.mxShort) {
     LogDebug("mx: ST_UI_HOME -> direct HomeButtonM action");
     homebuttonm_action(true);
-    mxclick_short_waspressed = false;
-  } else if (clickRight_short_waspressed == true) {
-    lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
-    clickRight_short_waspressed = false;
-  } else if (clickRight_long_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.rightShort) {
+    // Navigate directly here for physical right-button short press.
+    // This avoids relying on synthetic LV_EVENT_CLICKED propagation.
+    _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    clearButtonFlags();
+  } else if (events.rightLong) {
     _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    clickRight_long_waspressed = false;
-  } else if (clickRight_double_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.rightDouble) {
     triggerAddonForSlot(ADDON_SLOT_RIGHT);
-    clickRight_double_waspressed = false;
+    clearButtonFlags();
   }
 }
 
-static void handlePatternScreen()
+static void handlePatternScreen(const ButtonEvents &events)
 {
   if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
     touch_disabled = true;
@@ -618,17 +618,20 @@ static void handlePatternScreen()
     encoder4_enc = encoder4.getCount();
   }
 
-  if (clickLeft_short_waspressed == true) {
+  if (events.leftShort) {
     lv_obj_send_event(ui_PatternButtonL, LV_EVENT_CLICKED, NULL);
-  } else if (mxclick_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.mxShort) {
     LogDebug("mx: ST_UI_PATTERN -> sending PatternButtonM click");
     lv_obj_send_event(ui_PatternButtonM, LV_EVENT_CLICKED, NULL);
-  } else if (clickRight_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.rightShort) {
     lv_obj_send_event(ui_PatternButtonR, LV_EVENT_CLICKED, NULL);
+    clearButtonFlags();
   }
 }
 
-static void handleTorqueScreen()
+static void handleTorqueScreen(const ButtonEvents &events)
 {
   if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
     touch_disabled = true;
@@ -680,33 +683,39 @@ static void handleTorqueScreen()
   dtostrf(torqe_r, 6, 0, torqe_r_v);
   lv_label_set_text(ui_introqevalue, torqe_r_v);
 
-  if (clickLeft_short_waspressed == true) {
+  if (events.leftShort) {
     lv_obj_send_event(ui_TorqeButtonL, LV_EVENT_CLICKED, NULL);
-  } else if (mxclick_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.mxShort) {
     LogDebug("mx: ST_UI_Torqe -> sending TorqeButtonM click");
     lv_obj_send_event(ui_TorqeButtonM, LV_EVENT_CLICKED, NULL);
-  } else if (clickRight_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.rightShort) {
     lv_obj_send_event(ui_TorqeButtonR, LV_EVENT_CLICKED, NULL);
+    clearButtonFlags();
   }
 }
 
-static void handleEjectSettingsScreen()
+static void handleEjectSettingsScreen(const ButtonEvents &events)
 {
   if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
     touch_disabled = true;
   }
 
-  if (clickLeft_short_waspressed == true) {
+  if (events.leftShort) {
     lv_obj_send_event(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
-  } else if (mxclick_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.mxShort) {
     LogDebug("mx: ST_UI_EJECTSETTINGS -> sending EJECTButtonM click");
     lv_obj_send_event(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
-  } else if (clickRight_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.rightShort) {
     lv_obj_send_event(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
+    clearButtonFlags();
   }
 }
 
-static void handleSettingsScreen()
+static void handleSettingsScreen(const ButtonEvents &events)
 {
   touch_disabled = false;
 
@@ -740,11 +749,9 @@ static void handleSettingsScreen()
     encoder4_enc = encoder4.getCount();
   }
 
-  if (mxclick_long_waspressed || mxclick_double_waspressed) {
-    mxclick_short_waspressed  = false;
-    mxclick_long_waspressed   = false;
-    mxclick_double_waspressed = false;
-  } else if (clickRight_short_waspressed == true) {
+  if (events.mxLong || events.mxDouble) {
+    clearButtonFlags();
+  } else if (events.rightShort) {
     lv_obj_t *focused = lv_group_get_focused(ui_g_settings);
     if (focused) {
       if (focused == ui_vibrate || focused == ui_lefty ||
@@ -760,22 +767,18 @@ static void handleSettingsScreen()
         lv_obj_send_event(focused, LV_EVENT_CLICKED, NULL);
       }
     }
-    clickRight_short_waspressed  = false;
-    clickRight_long_waspressed   = false;
-    clickRight_double_waspressed = false;
-  } else if (mxclick_short_waspressed) {
+    clearButtonFlags();
+  } else if (events.mxShort) {
     LogDebug("mx: ST_UI_SETTINGS -> go to menu");
     lv_obj_send_event(ui_SettingsButtonM, LV_EVENT_CLICKED, NULL);
-    mxclick_short_waspressed  = false;
-    mxclick_long_waspressed   = false;
-    mxclick_double_waspressed = false;
-  } else if (clickLeft_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.leftShort) {
     lv_obj_send_event(ui_SettingsButtonL, LV_EVENT_CLICKED, NULL);
-    clickLeft_short_waspressed = false;
+    clearButtonFlags();
   }
 }
 
-static void handleMenuScreen()
+static void handleMenuScreen(const ButtonEvents &events)
 {
   if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
     touch_disabled = true;
@@ -789,26 +792,26 @@ static void handleMenuScreen()
     encoder4_enc = encoder4.getCount();
   }
 
-  if (clickLeft_short_waspressed == true) {
+  if (events.leftShort) {
     lv_obj_send_event(ui_MenuButtonL, LV_EVENT_CLICKED, NULL);
-    clickLeft_short_waspressed = false;
+    clearButtonFlags();
   }
 
-  if (mxclick_short_waspressed == true) {
+  if (events.mxShort) {
     lv_obj_send_event(ui_MenuButtonM, LV_EVENT_CLICKED, NULL);
-    mxclick_short_waspressed = false;
+    clearButtonFlags();
   }
 
-  if (clickRight_short_waspressed == true) {
+  if (events.rightShort) {
     lv_obj_t *focused = (ui_g_menu != nullptr) ? lv_group_get_focused(ui_g_menu) : nullptr;
     if (focused != nullptr) {
       lv_obj_send_event(focused, LV_EVENT_CLICKED, NULL);
     }
-    clickRight_short_waspressed = false;
+    clearButtonFlags();
   }
 }
 
-static void handleAddonsScreen()
+static void handleAddonsScreen(const ButtonEvents &events)
 {
   if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
     touch_disabled = true;
@@ -822,16 +825,16 @@ static void handleAddonsScreen()
     encoder4_enc = encoder4.getCount();
   }
 
-  if (clickLeft_short_waspressed == true) {
+  if (events.leftShort) {
     _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    clickLeft_short_waspressed = false;
-  } else if (clickRight_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.rightShort) {
     lv_obj_send_event(lv_group_get_focused(ui_g_addons), LV_EVENT_CLICKED, NULL);
-    clickRight_short_waspressed = false;
+    clearButtonFlags();
   }
 }
 
-static void handleStreamingScreen()
+static void handleStreamingScreen(const ButtonEvents &events)
 {
   if (g_streaming_entry_flow_pending) {
     handleStreamingEntryFlow();
@@ -878,7 +881,7 @@ static void handleStreamingScreen()
       changed = true;
       speed += getRampedDetentDelta(1, det);
       encoder1.setCount(enc % 2);
-      markEncoderActivityForMxFilter();
+      screensaver_check_activity();
     }
     if (speed < 0)      { changed = true; speed = 0; }
     if (speed > 100.0f) { changed = true; speed = 100.0f; }
@@ -905,7 +908,7 @@ static void handleStreamingScreen()
       changed = true;
       depth += getRampedDetentDelta(2, det);
       encoder2.setCount(enc % 2);
-      markEncoderActivityForMxFilter();
+      screensaver_check_activity();
     }
     if (depth < 0)      { changed = true; depth = 0; }
     if (depth > 100.0f) { changed = true; depth = 100.0f; }
@@ -932,7 +935,7 @@ static void handleStreamingScreen()
       changed = true;
       stroke += getRampedDetentDelta(3, det);
       encoder3.setCount(enc % 2);
-      markEncoderActivityForMxFilter();
+      screensaver_check_activity();
     }
     if (stroke < 0)      { changed = true; stroke = 0; }
     if (stroke > 100.0f) { changed = true; stroke = 100.0f; }
@@ -950,13 +953,13 @@ static void handleStreamingScreen()
   }
   lv_label_set_text(ui_streamingstrokevalue, stroke_v);
 
-  if (mxclick_short_waspressed == true) {
+  if (events.mxShort) {
     LogDebug("mx: ST_UI_STREAMING -> direct StreamingButtonM action");
     streamingbuttonm_action(true);
-    mxclick_short_waspressed = false;
-  } else if (clickRight_short_waspressed == true) {
+    clearButtonFlags();
+  } else if (events.rightShort) {
     lv_obj_send_event(ui_StreamingButtonR, LV_EVENT_CLICKED, NULL);
-    clickRight_short_waspressed = false;
+    clearButtonFlags();
   }
 }
 
@@ -966,23 +969,23 @@ static void handleStreamingScreen()
 
 void handleCurrentScreen(){
   update_battery_icons_all_screens(M5.Power.getBatteryLevel());
+  pollButtonEvents(g_button_events);
 
   switch (st_screens) {
-    case ST_UI_START:         handleStartScreen();         break;
-    case ST_UI_HOME:          handleHomeScreen();          break;
-    case ST_UI_PATTERN:       handlePatternScreen();       break;
-    case ST_UI_Torqe:         handleTorqueScreen();        break;
-    case ST_UI_EJECTSETTINGS: handleEjectSettingsScreen(); break;
-    case ST_UI_SETTINGS:      handleSettingsScreen();      break;
-    case ST_UI_MENU:          handleMenuScreen();          break;
-    case ST_UI_ADDONS:        handleAddonsScreen();        break;
-    case ST_UI_COLORS:        handleColorsScreen();        break;
-    case ST_UI_STREAMING:     handleStreamingScreen();     break;
+    case ST_UI_START:         handleStartScreen(g_button_events);         break;
+    case ST_UI_HOME:          handleHomeScreen(g_button_events);          break;
+    case ST_UI_PATTERN:       handlePatternScreen(g_button_events);       break;
+    case ST_UI_Torqe:         handleTorqueScreen(g_button_events);        break;
+    case ST_UI_EJECTSETTINGS: handleEjectSettingsScreen(g_button_events); break;
+    case ST_UI_SETTINGS:      handleSettingsScreen(g_button_events);      break;
+    case ST_UI_MENU:          handleMenuScreen(g_button_events);          break;
+    case ST_UI_ADDONS:        handleAddonsScreen(g_button_events);        break;
+    case ST_UI_COLORS:        handleColorsScreen(g_button_events);        break;
+    case ST_UI_STREAMING:     handleStreamingScreen(g_button_events);     break;
     default: break;
   }
 
-  // Clear all deferred button press flags.
-  clearButtonFlags();
+  // Individual handlers consume and clear button flags immediately.
 }
 
 // ---------------------------------------------------------------------------

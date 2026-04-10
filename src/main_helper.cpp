@@ -186,11 +186,11 @@ int showNotification(const char *title,
   int result = NOTIFICATION_RESULT_NONE;
   g_notification_touch_result = NOTIFICATION_RESULT_NONE;
 
-  // Get active color scheme colors (defined in colors.cpp)
-  extern uint32_t getActivePrimaryColor(void);
-  extern uint32_t getActiveSecondaryColor(void);
+  // Get active color scheme colors
   uint32_t schemePrimary = getActivePrimaryColor();
   uint32_t schemeSecondary = getActiveSecondaryColor();
+  uint32_t schemeTextPrimary = getActiveTextPrimaryColor();
+  uint32_t schemeTextSecondary = getActiveTextSecondaryColor();
   // Derive darker color for overlay (approximately 60% of primary's brightness reduced)
   uint8_t pr = (schemePrimary >> 16) & 0xFF;
   uint8_t pg = (schemePrimary >> 8) & 0xFF;
@@ -204,13 +204,7 @@ int showNotification(const char *title,
   }
 
   // Drain stale button states before opening the modal.
-  mxclick_short_waspressed = false;
-  mxclick_long_waspressed = false;
-  mxclick_double_waspressed = false;
-  clickLeft_short_waspressed = false;
-  clickRight_short_waspressed = false;
-  clickRight_long_waspressed = false;
-  clickRight_double_waspressed = false;
+  clearButtonFlags();
 
   lv_obj_t *overlay = lv_obj_create(lv_layer_top());
   lv_obj_remove_style_all(overlay);
@@ -246,7 +240,7 @@ int showNotification(const char *title,
 
   lv_obj_t *titleLabel = lv_label_create(titleBar);
   lv_label_set_text(titleLabel, (title != nullptr && title[0] != '\0') ? title : "Notification");
-  lv_obj_set_style_text_color(titleLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_text_color(titleLabel, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_text_font(titleLabel, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_center(titleLabel);
 
@@ -254,7 +248,7 @@ int showNotification(const char *title,
   lv_obj_set_width(bodyLabel, lv_pct(90));
   lv_label_set_long_mode(bodyLabel, LV_LABEL_LONG_WRAP);
   lv_label_set_text(bodyLabel, (text != nullptr) ? text : "");
-  lv_obj_set_style_text_color(bodyLabel, lv_color_hex(0x2E0A2B), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_text_color(bodyLabel, lv_color_hex(schemeTextSecondary), LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_text_font(bodyLabel, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_align(bodyLabel, LV_ALIGN_TOP_MID, 0, 48);
 
@@ -275,7 +269,7 @@ int showNotification(const char *title,
 
       lv_obj_t *leftLbl = lv_label_create(leftBtn);
       lv_label_set_text(leftLbl, (leftButtonText != nullptr && leftButtonText[0] != '\0') ? leftButtonText : "Left");
-      lv_obj_set_style_text_color(leftLbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_text_color(leftLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(leftLbl);
       lv_obj_add_event_cb(leftBtn, notification_left_button_cb, LV_EVENT_CLICKED, nullptr);
     }
@@ -289,18 +283,18 @@ int showNotification(const char *title,
 
       lv_obj_t *rightLbl = lv_label_create(rightBtn);
       lv_label_set_text(rightLbl, (rightButtonText != nullptr && rightButtonText[0] != '\0') ? rightButtonText : "Right");
-      lv_obj_set_style_text_color(rightLbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_text_color(rightLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(rightLbl);
       lv_obj_add_event_cb(rightBtn, notification_right_button_cb, LV_EVENT_CLICKED, nullptr);
     }
   }
 
   static uint32_t notif_last_state_log_ms = 0;
+  ButtonEvents modalButtons = {};
 
   while (true) {
     M5.update();
     lv_task_handler();
-    updateMxReleaseStability();
     Button1.tick();
     Button2.tick();
     Button3.tick();
@@ -318,42 +312,34 @@ int showNotification(const char *title,
       break;
     }
 
+    pollButtonEvents(modalButtons);
+
     if (hasButtons) {
       if (g_notification_touch_result != NOTIFICATION_RESULT_NONE) {
         result = g_notification_touch_result;
         break;
       }
-      if (showLeftButton && clickLeft_short_waspressed) {
+      if (showLeftButton && modalButtons.leftShort) {
         result = NOTIFICATION_RESULT_LEFT;
+        clearButtonFlags();
         break;
       }
-      if (showRightButton && clickRight_short_waspressed) {
+      if (showRightButton && modalButtons.rightShort) {
         result = NOTIFICATION_RESULT_RIGHT;
+        clearButtonFlags();
         break;
       }
     }
 
     // Consume all activity so the current screen never receives latent button events.
-    mxclick_short_waspressed = false;
-    mxclick_long_waspressed = false;
-    mxclick_double_waspressed = false;
-    clickLeft_short_waspressed = false;
-    clickRight_short_waspressed = false;
-    clickRight_long_waspressed = false;
-    clickRight_double_waspressed = false;
+    clearButtonFlags();
 
     vTaskDelay(pdMS_TO_TICKS(5));
   }
 
   lv_obj_del(overlay);
 
-  mxclick_short_waspressed = false;
-  mxclick_long_waspressed = false;
-  mxclick_double_waspressed = false;
-  clickLeft_short_waspressed = false;
-  clickRight_short_waspressed = false;
-  clickRight_long_waspressed = false;
-  clickRight_double_waspressed = false;
+  clearButtonFlags();
 
   if (shouldBlockTouch) {
     touch_disabled = prevTouchDisabled;
@@ -378,6 +364,38 @@ bool canEnterDeepSleep()
   }
 }
 
+static bool areWakeButtonsReleased()
+{
+  // Core2 mapping in this project: all three hardware buttons are active-high.
+  // Released state is LOW.
+  return (digitalRead(Button1.pin()) == LOW) &&
+         (digitalRead(Button2.pin()) == LOW) &&
+         (digitalRead(Button3.pin()) == LOW);
+}
+
+static bool waitWakeButtonsReleasedStable(uint32_t stableMs, uint32_t timeoutMs)
+{
+  const uint32_t startMs = millis();
+  uint32_t releasedSinceMs = 0;
+
+  while ((millis() - startMs) < timeoutMs) {
+    const bool released = areWakeButtonsReleased();
+    if (released) {
+      if (releasedSinceMs == 0) {
+        releasedSinceMs = millis();
+      }
+      if ((millis() - releasedSinceMs) >= stableMs) {
+        return true;
+      }
+    } else {
+      releasedSinceMs = 0;
+    }
+    delay(5);
+  }
+
+  return false;
+}
+
 void enterDeepSleep()
 {
   gpio_num_t mxPin   = static_cast<gpio_num_t>(Button1.pin());
@@ -388,6 +406,17 @@ void enterDeepSleep()
   LogDebug("Entering deep sleep (wake on MX/left/right)");
   M5.Display.setBrightness(0);
   M5.Power.setVibration(0);
+
+  // Guard against instant wake / fake sleep when any wake button is still held.
+  // If buttons do not settle to released state quickly, skip this sleep attempt.
+  if (!waitWakeButtonsReleasedStable(120, 1200)) {
+    LogDebugFormatted("Deep sleep canceled: wake button(s) still active (mx=%d left=%d right=%d)",
+                      digitalRead(Button1.pin()),
+                      digitalRead(Button2.pin()),
+                      digitalRead(Button3.pin()));
+    screensaver_check_activity();
+    return;
+  }
 
   esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_HIGH);
   delay(50);
