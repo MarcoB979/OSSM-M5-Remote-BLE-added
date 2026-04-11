@@ -7,6 +7,7 @@
 #include "main.h"
 #include "screen.h"
 #include "colors.h"
+#include "Eject.h"
 #include "Preferences.h"      //EEPROM replacement function
 #include <esp_sleep.h>
 
@@ -26,7 +27,6 @@ void setup(){
   m5prf.begin("m5-ctnr", false); 
   // Loads these settings at boot
   LogDebug("Loading settings...");
-  eject_status = m5prf.getBool("ejectAddon", false); //boolean here is used if key does not exist yet
   dark_mode = m5prf.getBool("Darkmode", true);       // ^ (basically first boot defaults, saving settings surives a re-flash!)
   vibrate_mode = m5prf.getBool("Vibrate", true);
   touch_home= m5prf.getBool("Lefty", false);       // = touchcreen. There apears to be no actual lefthanded mode anywhere
@@ -59,19 +59,19 @@ void setup(){
   Button1.attachClick(mxclick);
   Button1.attachDoubleClick(mxdouble);
   Button1.attachLongPressStart(mxlong);
-  Button1.setDebounceMs(50);
-  Button1.setClickMs(260);
+  Button1.setDebounceMs(55);
+  Button1.setClickMs(300);
   Button1.setLongPressIntervalMs(380);
   Button2.attachClick(clickLeft);
-  Button2.attachDoubleClick(clickLeftDouble);
-  Button2.setDebounceMs(50);
-  Button2.setClickMs(260);
+  Button2.attachLongPressStart(clickLeftLong);
+  Button2.setDebounceMs(35);
+  Button2.setClickMs(180);
+  Button2.setLongPressIntervalMs(380);
   Button3.attachClick(clickRight);
-  Button3.setDebounceMs(50);
-  Button3.setClickMs(260);
+  Button3.setDebounceMs(35);
+  Button3.setClickMs(180);
   Button3.attachLongPressStart(clickRightLong);
   Button3.setLongPressIntervalMs(380);
-  Button3.attachDoubleClick(clickRightDouble);
   
   // Initialize `disp_buf` display buffer with the buffer(s).
   // lv_draw_buf_init(&draw_buf, LV_HOR_RES_MAX, LV_VER_RES_MAX);
@@ -106,7 +106,8 @@ void setup(){
   }
   register_event_debug_callbacks();
   refreshHomeAndStreamingStartStopUi();
-
+LogDebug("Works till step 2");
+  
   // --- Restore stroke invert state from NVS and apply to UI (after ui_init) ---
   if (strokeinvert_mode) {
     lv_obj_add_state(ui_strokeinvert, LV_STATE_CHECKED);
@@ -119,9 +120,18 @@ void setup(){
                       LV_EVENT_SCREEN_LOADED, nullptr);
 
   lv_obj_clear_state(ui_HomeButtonL, LV_STATE_DISABLED);
-  if(eject_status == true){
-    lv_obj_add_state(ui_ejectaddon, LV_STATE_CHECKED);
-    lv_obj_clear_state(ui_EJECTSettingButton, LV_STATE_DISABLED);
+LogDebug("Works till step 3");
+  
+  // Addon pairing state is derived from persisted AddonSlot bindings.
+  addonsInitFromStorage();
+  // ui_ejectaddon is a legacy widget that no longer exists in the active UI screens.
+  // eject_status is now managed by addonsInitFromStorage via the AddonSlot NVS keys.
+  if (ui_ejectaddon != nullptr) {
+    if(eject_status == true){
+      lv_obj_add_state(ui_ejectaddon, LV_STATE_CHECKED);
+    } else {
+      lv_obj_clear_state(ui_ejectaddon, LV_STATE_CHECKED);
+    }
   }
   if(dark_mode == true){
     lv_obj_add_state(ui_darkmode, LV_STATE_CHECKED);

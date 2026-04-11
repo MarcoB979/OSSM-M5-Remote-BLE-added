@@ -87,6 +87,8 @@ static const AddonDefinition ADDON_DEFINITIONS[] = {
 #define SCREENSAVER_TIMEOUT_MS_DEFAULT (2 * 60 * 1000)
 #define SCREENSAVER_DIM_BRIGHTNESS_DEFAULT 15
 #define DEEP_SLEEP_TIMEOUT_MS_DEFAULT (10UL * 60UL * 1000UL)
+// Set to 0 to disable automatic idle deep-sleep. Manual sleep from Menu remains available.
+#define AUTO_IDLE_DEEP_SLEEP_ENABLED 0
 
 // Minimum time to keep Start screen visible before auto-switching to Home.
 #define START_SCREEN_MIN_DISPLAY_MS 3000UL

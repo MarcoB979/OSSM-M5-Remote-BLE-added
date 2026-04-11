@@ -34,11 +34,13 @@ bool screensaver_active = false;
 uint32_t ossm_state_monitor_hold_until_ms = 0;
 
 bool dynamicStroke = false;
+bool g_ble_menu_requires_stroke_reentry = false;
 
 bool Ossm_paired = false;
 bool waiting_for_limits = false; // true after pairing until OSSM reports max depth/speed
 
 int OSSM_State = state_FALSE;
+int g_homing_direction = 0;
 
 static uint32_t g_start_screen_loaded_ms = 0;
 
@@ -93,25 +95,35 @@ void monitorOssmState(bool forceBlePoll)
       if (OssmBleGetCurrentState(&bleState, true)) {
         switch (bleState.mode) {
           case OssmBleMachineMode::HomingForward:
+            g_homing_direction = 1;
+            nextState = state_HOMING;
+            break;
           case OssmBleMachineMode::HomingBackward:
+            g_homing_direction = -1;
             nextState = state_HOMING;
             break;
           case OssmBleMachineMode::Menu:
+            g_homing_direction = 0;
             nextState = state_MENU;
             break;
           case OssmBleMachineMode::Streaming:
+            g_homing_direction = 0;
             nextState = state_STREAMING;
             break;
           case OssmBleMachineMode::SimplePenetration:
+            g_homing_direction = 0;
             nextState = state_SIMPLE_PENETRATION;
             break;
           case OssmBleMachineMode::StrokeEngineActive:
+            g_homing_direction = 0;
             nextState = (bleState.speed > 0) ? state_ON : state_PAUSE;
             break;
           case OssmBleMachineMode::StrokeEngineIdle:
+            g_homing_direction = 0;
             nextState = (bleState.speed > 0) ? state_ON : state_PAUSE;
             break;
           default:
+            g_homing_direction = 0;
             break;
         }
       }
@@ -271,7 +283,7 @@ int showNotification(const char *title,
       lv_label_set_text(leftLbl, (leftButtonText != nullptr && leftButtonText[0] != '\0') ? leftButtonText : "Left");
       lv_obj_set_style_text_color(leftLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(leftLbl);
-      lv_obj_add_event_cb(leftBtn, notification_left_button_cb, LV_EVENT_CLICKED, nullptr);
+      lv_obj_add_event_cb(leftBtn, notification_left_button_cb, LV_EVENT_SHORT_CLICKED, nullptr);
     }
 
     if (showRightButton) {
@@ -285,7 +297,7 @@ int showNotification(const char *title,
       lv_label_set_text(rightLbl, (rightButtonText != nullptr && rightButtonText[0] != '\0') ? rightButtonText : "Right");
       lv_obj_set_style_text_color(rightLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(rightLbl);
-      lv_obj_add_event_cb(rightBtn, notification_right_button_cb, LV_EVENT_CLICKED, nullptr);
+      lv_obj_add_event_cb(rightBtn, notification_right_button_cb, LV_EVENT_SHORT_CLICKED, nullptr);
     }
   }
 
@@ -438,6 +450,7 @@ bool SendCommand(int Command, float Value, int Target)
     LogDebug("Local OSSM_State set to true (sent ON)");
   }
   if (Target == OSSM_ID && OssmBleIsMode()) {
+    LogDebugFormatted("TX BLE cmd=%d val=%.2f target=%d\n", Command, Value, Target);
     String response;
     bool ok = OssmBleSendAppCommand(
       Command, Value,
@@ -445,6 +458,7 @@ bool SendCommand(int Command, float Value, int Target)
       isRunningUiState(OSSM_State),
       maxdepthinmm, speedlimit,
       &response);
+    LogDebugFormatted("TX BLE result=%s cmd=%d target=%d\n", ok ? "OK" : "FAIL", Command, Target);
     if (response.length() > 0) {
       LogDebug("BLE response:");
       LogDebug(response);
@@ -453,7 +467,10 @@ bool SendCommand(int Command, float Value, int Target)
   }
 
   if (Ossm_paired == true) {
-    return EspNowSendControlCommand(Command, Value, Target);
+    LogDebugFormatted("TX ESP cmd=%d val=%.2f target=%d (paired=%d)\n", Command, Value, Target, Ossm_paired ? 1 : 0);
+    bool ok = EspNowSendControlCommand(Command, Value, Target);
+    LogDebugFormatted("TX ESP result=%s cmd=%d target=%d\n", ok ? "OK" : "FAIL", Command, Target);
+    return ok;
   }
 
   return false;
@@ -465,75 +482,144 @@ bool SendCommand(int Command, float Value, int Target)
 // ---------------------------------------------------------------------------
 extern "C" void connectbutton(lv_event_t *e)
 {
-  static constexpr uint32_t ESP_NOW_FIRST_WINDOW_MS = 2000UL;   // ESP_NOW is fast, give it short window
-  static constexpr uint32_t BLEAND_ESPNOW_ATTEMPTS  = 8;        // Parallel attempts
-  static constexpr uint32_t LONG_WAIT_WINDOW_MS     = 60000UL;
+  static constexpr uint32_t ESP_NOW_FIRST_WINDOW_MS_AUTO = 800UL;
+  static constexpr uint32_t ESP_NOW_FIRST_WINDOW_MS_MANUAL = 2000UL;
+  static constexpr uint32_t BLEAND_ESPNOW_ATTEMPTS_AUTO  = 2;
+  static constexpr uint32_t BLEAND_ESPNOW_ATTEMPTS_MANUAL  = 8;
+  static constexpr uint32_t LONG_WAIT_WINDOW_MS_AUTO     = 0UL;
+  static constexpr uint32_t LONG_WAIT_WINDOW_MS_MANUAL   = 60000UL;
   static constexpr uint32_t HEARTBEAT_INTERVAL_MS   = 500UL;
 
-  lv_label_set_text(ui_Welcome, T_CONNECTING);
+  const bool manualAttempt = (e != nullptr);
+  const uint32_t espNowFirstWindowMs = manualAttempt ? ESP_NOW_FIRST_WINDOW_MS_MANUAL : ESP_NOW_FIRST_WINDOW_MS_AUTO;
+  const uint32_t bleAndEspNowAttempts = manualAttempt ? BLEAND_ESPNOW_ATTEMPTS_MANUAL : BLEAND_ESPNOW_ATTEMPTS_AUTO;
+  const uint32_t longWaitWindowMs = manualAttempt ? LONG_WAIT_WINDOW_MS_MANUAL : LONG_WAIT_WINDOW_MS_AUTO;
 
-  if (!Ossm_paired) {
-    OssmBleSetMode(false);
-
-    // Phase 1: Try ESP_NOW first (it connects much faster than BLE)
-    lv_label_set_text(ui_Welcome, "Searching...");
-    EspNowWaitForPairingOrTimeout(ESP_NOW_FIRST_WINDOW_MS, HEARTBEAT_INTERVAL_MS);
-    
-    if (!Ossm_paired) {
-      // Phase 2: ESP_NOW didn't connect, now try BLE + ESP_NOW in parallel
-      for (uint32_t attempt = 0; attempt < BLEAND_ESPNOW_ATTEMPTS && !Ossm_paired; ++attempt) {
-        // Send ESP_NOW pairing heartbeat
-        EspNowSendPairingHeartbeat();
-
-        // Try BLE connection
-        bool bleConnected = OssmBleTryConnect();
-        if (bleConnected) {
-          lv_label_set_text(ui_Welcome, T_BLECONNECTED);
-          OssmBleSetMode(true);
-          Ossm_paired = true;
-          syncBleConnectUi(true);
-          break;
-        }
-
-        // Brief wait to allow ESP_NOW callback to set Ossm_paired if it receives pairing message
-        if (!Ossm_paired) {
-          vTaskDelay(pdMS_TO_TICKS(200));
-        }
-      }
+  // Only treat OSSM as connected when transport is actually up.
+  const bool ossmConnected = (OssmBleConnected() || ossm_espnow_connected);
+  if (ossmConnected) {
+    if (OssmBleIsMode()) {
+      syncBleConnectUi(true);
     } else {
-      // ESP_NOW connected in Phase 1
       lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
-    }
-
-    // Phase 3: If still not paired, wait longer
-    if (!Ossm_paired) {
-      lv_label_set_text(ui_Welcome, T_LONG_WAIT);
-      EspNowWaitForPairingOrTimeout(LONG_WAIT_WINDOW_MS, HEARTBEAT_INTERVAL_MS);
-      if (!Ossm_paired) {
-        lv_label_set_text(ui_Welcome, T_FAILED);
-      }
     }
     return;
   }
 
-  if (OssmBleIsMode()) {
-    syncBleConnectUi(true);
+  lv_label_set_text(ui_Welcome, T_CONNECTING);
+
+  // Reset stale state so addon traffic can never block OSSM connection attempts.
+  OssmBleSetMode(false);
+  Ossm_paired = false;
+  ossm_espnow_connected = false;
+  waiting_for_limits = false;
+
+  // Phase 1: Try ESP_NOW first (it connects much faster than BLE)
+  lv_label_set_text(ui_Welcome, "Searching...");
+  EspNowWaitForPairingOrTimeout(espNowFirstWindowMs, HEARTBEAT_INTERVAL_MS);
+
+  if (!ossm_espnow_connected) {
+    // Phase 2: ESP_NOW didn't connect, now try BLE + ESP_NOW in parallel
+    for (uint32_t attempt = 0; attempt < bleAndEspNowAttempts && !ossm_espnow_connected; ++attempt) {
+      // Send ESP_NOW pairing heartbeat
+      EspNowSendPairingHeartbeat();
+
+      // Try BLE connection
+      bool bleConnected = OssmBleTryConnect();
+      if (bleConnected) {
+        lv_label_set_text(ui_Welcome, T_BLECONNECTED);
+        OssmBleSetMode(true);
+        Ossm_paired = true;
+        syncBleConnectUi(true);
+        return;
+      }
+
+      // Brief wait to allow ESP_NOW callback to set OSSM connected state.
+      if (!ossm_espnow_connected) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+      }
+    }
+  }
+
+  if (ossm_espnow_connected) {
+    lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
+    return;
+  }
+
+  // Phase 3: If still not connected, wait longer (manual attempts only)
+  if (longWaitWindowMs > 0) {
+    lv_label_set_text(ui_Welcome, T_LONG_WAIT);
+    EspNowWaitForPairingOrTimeout(longWaitWindowMs, HEARTBEAT_INTERVAL_MS);
+    if (ossm_espnow_connected) {
+      lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
+    } else {
+      lv_label_set_text(ui_Welcome, T_FAILED);
+    }
+  } else {
+    lv_label_set_text(ui_Welcome, T_CONNECT);
   }
 }
 
 extern "C" void requestMenuEntryAction(void)
 {
-  if (OssmBleIsMode() && OssmBleConnected()) {
-    OssmBleGoToMenu();
+  if (!(OssmBleIsMode() && OssmBleConnected())) {
+    g_ble_menu_requires_stroke_reentry = false;
+    return;
   }
+
+  // If we just came from Home (stroke engine), keep current mode so Home->Menu->Home
+  // does not force an unnecessary re-home sequence.
+  if (st_screens == ST_UI_HOME) {
+    g_ble_menu_requires_stroke_reentry = false;
+    return;
+  }
+
+  OssmBleGoToMenu();
+  g_ble_menu_requires_stroke_reentry = true;
+}
+
+extern "C" void menuPrepareNonHomeAction(void)
+{
+  if (!(OssmBleIsMode() && OssmBleConnected())) {
+    return;
+  }
+
+  // Any non-home path from Menu should arm a full Menu/Homing path before
+  // returning to Home again.
+  OssmBleGoToMenu();
+  g_ble_menu_requires_stroke_reentry = true;
 }
 
 extern "C" void menuSleepAction(void)
 {
-  enterDeepSleep();
+  const int result = showNotification(
+    "Enter Deep-Sleep",
+    "Are you sure you want to enter deep-sleep mode? This will stop all connections.",
+    0,
+    true,
+    "Yes",
+    true,
+    "No",
+    false);
+
+  if (result == NOTIFICATION_RESULT_LEFT) {
+    enterDeepSleep();
+  }
 }
 
 extern "C" void menuRestartAction(void)
 {
-  esp_restart();
+  const int result = showNotification(
+    "Restart",
+    "Are you sure you want to perform a restart?",
+    0,
+    true,
+    "Yes",
+    true,
+    "No",
+    false);
+
+  if (result == NOTIFICATION_RESULT_LEFT) {
+    esp_restart();
+  }
 }

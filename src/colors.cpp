@@ -45,10 +45,59 @@ int g_active_color_scheme = 0;
 lv_obj_t   *ui_Colors   = nullptr;
 lv_group_t *ui_g_colors = nullptr;
 
-static lv_obj_t *s_schemeBtn[COLOR_SCHEME_COUNT]   = {};
-static lv_obj_t *s_schemeLbl[COLOR_SCHEME_COUNT]   = {};
+static constexpr int VISIBLE_SCHEME_COUNT = 5;
+static lv_obj_t *s_schemeBtn[VISIBLE_SCHEME_COUNT] = {};
+static lv_obj_t *s_schemeLbl[VISIBLE_SCHEME_COUNT] = {};
+static int s_visibleToScheme[VISIBLE_SCHEME_COUNT] = {0, 1, 2, 3, 4};
+static int s_focus_scheme_index = 0;
 static lv_obj_t *s_backBtn                         = nullptr;
 static lv_obj_t *s_colorsLogo                      = nullptr;
+
+static int wrapSchemeIndex(int idx) {
+    while (idx < 0) idx += COLOR_SCHEME_COUNT;
+    while (idx >= COLOR_SCHEME_COUNT) idx -= COLOR_SCHEME_COUNT;
+    return idx;
+}
+
+static int schemeForVisibleSlot(int slot) {
+    const int start = s_focus_scheme_index - (VISIBLE_SCHEME_COUNT / 2);
+    return wrapSchemeIndex(start + slot);
+}
+
+static void updateVisibleSchemeButtons() {
+    for (int slot = 0; slot < VISIBLE_SCHEME_COUNT; ++slot) {
+        if (!s_schemeBtn[slot] || !s_schemeLbl[slot]) continue;
+        const int scheme = schemeForVisibleSlot(slot);
+        s_visibleToScheme[slot] = scheme;
+
+        lv_obj_set_style_bg_color(
+            s_schemeBtn[slot], lv_color_hex(COLOR_SCHEMES[scheme].primary),
+            LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(
+            s_schemeBtn[slot], lv_color_hex(COLOR_SCHEMES[scheme].secondary),
+            LV_PART_MAIN | LV_STATE_FOCUSED);
+
+        char buf[48];
+        if (scheme == g_active_color_scheme) {
+            snprintf(buf, sizeof(buf), "%s  " LV_SYMBOL_OK, COLOR_SCHEMES[scheme].name);
+            lv_obj_set_style_border_color(s_schemeBtn[slot],
+                lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_border_width(s_schemeBtn[slot],
+                2, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_border_opa(s_schemeBtn[slot],
+                255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        } else {
+            snprintf(buf, sizeof(buf), "%s", COLOR_SCHEMES[scheme].name);
+            lv_obj_set_style_border_width(s_schemeBtn[slot],
+                0, LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+        lv_label_set_text(s_schemeLbl[slot], buf);
+    }
+
+    if (ui_g_colors && s_schemeBtn[VISIBLE_SCHEME_COUNT / 2]) {
+        lv_group_focus_obj(s_schemeBtn[VISIBLE_SCHEME_COUNT / 2]);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Internal restyle helpers
@@ -119,7 +168,7 @@ void applyColorScheme(int index) {
         // Streaming screen
         ui_StreamingButtonL, ui_StreamingButtonM, ui_StreamingButtonR,
         // Addons screen — nav buttons + items
-        ui_AddonsButtonL, ui_AddonsButtonR,
+        ui_AddonsButtonL, ui_AddonsButtonM, ui_AddonsButtonR,
         ui_AddonsItem0, ui_AddonsItem1, ui_AddonsItem2,
         // Colors screen — back button
         s_backBtn,
@@ -205,14 +254,8 @@ void applyColorScheme(int index) {
         rs_outline(logo, P);
     }
 
-    // --- 8. Colors screen scheme buttons: each keeps its own scheme color ---
-    for (int i = 0; i < COLOR_SCHEME_COUNT; i++) {
-        if (!s_schemeBtn[i]) continue;
-        lv_obj_set_style_bg_color(s_schemeBtn[i],
-            lv_color_hex(COLOR_SCHEMES[i].primary), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(s_schemeBtn[i],
-            lv_color_hex(COLOR_SCHEMES[i].secondary), LV_PART_MAIN | LV_STATE_FOCUSED);
-    }
+    // --- 8. Colors screen visible scheme buttons ---
+    updateVisibleSchemeButtons();
 
     // --- 9. Refresh Colors screen selection indicators ---
     colorSchemeScreenLoaded();
@@ -275,31 +318,7 @@ extern "C" uint32_t getActiveTextSecondaryColor() {
 // ---------------------------------------------------------------------------
 
 extern "C" void colorSchemeScreenLoaded() {
-    for (int i = 0; i < COLOR_SCHEME_COUNT; i++) {
-        if (!s_schemeLbl[i]) continue;
-        char buf[48];
-        if (i == g_active_color_scheme) {
-            snprintf(buf, sizeof(buf), "%s  " LV_SYMBOL_OK, COLOR_SCHEMES[i].name);
-        } else {
-            snprintf(buf, sizeof(buf), "%s", COLOR_SCHEMES[i].name);
-        }
-        lv_label_set_text(s_schemeLbl[i], buf);
-
-        // Active scheme: white border highlight; others: no border
-        if (s_schemeBtn[i]) {
-            if (i == g_active_color_scheme) {
-                lv_obj_set_style_border_color(s_schemeBtn[i],
-                    lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_border_width(s_schemeBtn[i],
-                    2, LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_border_opa(s_schemeBtn[i],
-                    255, LV_PART_MAIN | LV_STATE_DEFAULT);
-            } else {
-                lv_obj_set_style_border_width(s_schemeBtn[i],
-                    0, LV_PART_MAIN | LV_STATE_DEFAULT);
-            }
-        }
-    }
+    updateVisibleSchemeButtons();
 }
 
 extern "C" void colorSchemeSelectIndex(int index) {
@@ -314,12 +333,14 @@ extern "C" void colorSchemeSelectIndex(int index) {
 // ---------------------------------------------------------------------------
 
 void handleColorsScreen(const ButtonEvents &events) {
-    // Encoder 4: scroll focus through scheme list
+    // Encoder 4: carousel through scheme list (always showing 5 visible)
     if (encoder4.getCount() > encoder4_enc + 2) {
-        if (ui_g_colors) lv_group_focus_next(ui_g_colors);
+        s_focus_scheme_index = wrapSchemeIndex(s_focus_scheme_index + 1);
+        updateVisibleSchemeButtons();
         encoder4_enc = encoder4.getCount();
     } else if (encoder4.getCount() < encoder4_enc - 2) {
-        if (ui_g_colors) lv_group_focus_prev(ui_g_colors);
+        s_focus_scheme_index = wrapSchemeIndex(s_focus_scheme_index - 1);
+        updateVisibleSchemeButtons();
         encoder4_enc = encoder4.getCount();
     }
 
@@ -330,18 +351,9 @@ void handleColorsScreen(const ButtonEvents &events) {
         return;
     }
 
-    // MX / Right button: apply focused scheme
+    // MX / Right button: apply currently focused carousel scheme
     if (events.mxShort || events.rightShort) {
-        lv_obj_t *focused = (ui_g_colors != nullptr)
-            ? lv_group_get_focused(ui_g_colors) : nullptr;
-        if (focused) {
-            for (int i = 0; i < COLOR_SCHEME_COUNT; i++) {
-                if (focused == s_schemeBtn[i]) {
-                    colorSchemeSelectIndex(i);
-                    break;
-                }
-            }
-        }
+        colorSchemeSelectIndex(s_focus_scheme_index);
         clearButtonFlags();
     }
 }
@@ -351,19 +363,26 @@ void handleColorsScreen(const ButtonEvents &events) {
 // ---------------------------------------------------------------------------
 
 static void ev_schemeBtn(lv_event_t *e) {
-    if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+    if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED) return;
     lv_obj_t *target = reinterpret_cast<lv_obj_t *>(lv_event_get_target(e));
-    for (int i = 0; i < COLOR_SCHEME_COUNT; i++) {
-        if (target == s_schemeBtn[i]) {
-            colorSchemeSelectIndex(i);
+    for (int slot = 0; slot < VISIBLE_SCHEME_COUNT; slot++) {
+        if (target == s_schemeBtn[slot]) {
+            s_focus_scheme_index = s_visibleToScheme[slot];
+            colorSchemeSelectIndex(s_focus_scheme_index);
             return;
         }
     }
 }
 
 static void ev_backBtn(lv_event_t *e) {
-    if (lv_event_get_code(e) == LV_EVENT_CLICKED) {
+    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
         _ui_screen_change(ui_Addons, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    }
+}
+
+static void ev_selectBtn(lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
+        colorSchemeSelectIndex(s_focus_scheme_index);
     }
 }
 
@@ -397,21 +416,20 @@ extern "C" void colors_ui_screen_init() {
     lv_obj_set_style_outline_width(s_colorsLogo, 2,   LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_outline_pad  (s_colorsLogo, 5,   LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // ── Scheme selection buttons ─────────────────────────────────────────────
-    // Layout: 6 buttons of 300×24 px, with 4 px gap → total 164 px.
-    // Centered in the content area between header (-93) and nav strip (+85).
-    // Content center ≈ y=-4; first button center at y=-66, pitch=28.
-    //   Button centers: -66, -38, -10, 18, 46, 74
-    // Last button bottom: 74+12 = 86 < 85 nav strip top — fits with 1px margin.
+    // ── Scheme selection buttons (carousel view, max 5 visible) ───────────
     const int btnW   = 300;
     const int btnH   = 24;
     const int pitch  = 28;   // btnH (24) + gap (4)
-    const int startY = -66;  // y of first button's center from screen center
+    const int startY = -52;  // y of first button's center from screen center
 
     ui_g_colors = lv_group_create();
 
-    for (int i = 0; i < COLOR_SCHEME_COUNT; i++) {
-        const int yPos = startY + i * pitch;
+    s_focus_scheme_index = g_active_color_scheme;
+
+    for (int slot = 0; slot < VISIBLE_SCHEME_COUNT; slot++) {
+        const int yPos = startY + slot * pitch;
+        const int scheme = schemeForVisibleSlot(slot);
+        s_visibleToScheme[slot] = scheme;
 
         lv_obj_t *btn = lv_btn_create(ui_Colors);
         lv_obj_set_width (btn, btnW);
@@ -424,25 +442,25 @@ extern "C" void colors_ui_screen_init() {
 
         // This scheme's own primary as button background — visually distinctive
         lv_obj_set_style_bg_color(btn,
-            lv_color_hex(COLOR_SCHEMES[i].primary), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_color_hex(COLOR_SCHEMES[scheme].primary), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(btn, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
         // Secondary color when encoder-focused
         lv_obj_set_style_bg_color(btn,
-            lv_color_hex(COLOR_SCHEMES[i].secondary), LV_PART_MAIN | LV_STATE_FOCUSED);
+            lv_color_hex(COLOR_SCHEMES[scheme].secondary), LV_PART_MAIN | LV_STATE_FOCUSED);
 
-        lv_obj_add_event_cb(btn, ev_schemeBtn, LV_EVENT_CLICKED, NULL);
+        lv_obj_add_event_cb(btn, ev_schemeBtn, LV_EVENT_SHORT_CLICKED, NULL);
 
         // Label: scheme name, left-aligned in button
         lv_obj_t *lbl = lv_label_create(btn);
         lv_obj_set_align(lbl, LV_ALIGN_LEFT_MID);
         lv_obj_set_x(lbl, 8);
-        lv_label_set_text(lbl, COLOR_SCHEMES[i].name);
+        lv_label_set_text(lbl, COLOR_SCHEMES[scheme].name);
         lv_obj_set_style_text_color(lbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font (lbl, &lv_font_montserrat_14,  LV_PART_MAIN | LV_STATE_DEFAULT);
 
-        s_schemeBtn[i] = btn;
-        s_schemeLbl[i] = lbl;
+        s_schemeBtn[slot] = btn;
+        s_schemeLbl[slot] = lbl;
 
         lv_group_add_obj(ui_g_colors, btn);
     }
@@ -458,7 +476,7 @@ extern "C" void colors_ui_screen_init() {
     lv_obj_set_style_bg_color(s_backBtn,
         lv_color_hex(COLOR_SCHEMES[0].primary), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(s_backBtn, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_event_cb(s_backBtn, ev_backBtn, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(s_backBtn, ev_backBtn, LV_EVENT_SHORT_CLICKED, NULL);
 
     lv_obj_t *backLbl = lv_label_create(s_backBtn);
     lv_obj_center(backLbl);
@@ -478,8 +496,8 @@ extern "C" void colors_ui_screen_init() {
         lv_color_hex(COLOR_SCHEMES[0].primary), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(selectBtn, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // Same event callback as MX/right button — applies the focused scheme
-    lv_obj_add_event_cb(selectBtn, ev_schemeBtn, LV_EVENT_CLICKED, NULL);
+    // Apply currently focused carousel scheme
+    lv_obj_add_event_cb(selectBtn, ev_selectBtn, LV_EVENT_SHORT_CLICKED, NULL);
     
     // Add to group so encoder can navigate to it and select via button
     lv_group_add_obj(ui_g_colors, selectBtn);
@@ -489,4 +507,7 @@ extern "C" void colors_ui_screen_init() {
     lv_label_set_text(selectLbl, T_SELECT);
     lv_obj_set_style_text_color(selectLbl,
         lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    updateVisibleSchemeButtons();
 }
+

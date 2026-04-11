@@ -8,6 +8,8 @@
 #include "screen.h"
 #include "colors.h"
 #include "OssmBLE.h"
+#include "Eject.h"
+#include "FistIT.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
 #include "language.h"
@@ -36,12 +38,12 @@ static int  maxRamp     = 6;
 static int  activeEncId = 0;
 static unsigned long rampMs = 0;
 
-static uint32_t ble_home_go_strokeengine_ms = 0;
 // Per-loop one-shot snapshot consumed by all screen handlers in this tick.
 static ButtonEvents g_button_events = {};
 
-static const char* battery_symbol_for_level(int level)
+static const char* battery_symbol_for_level(int level, bool isCharging)
 {
+  if (isCharging) return LV_SYMBOL_CHARGE;
   if (level < 10) return LV_SYMBOL_BATTERY_EMPTY;
   if (level < 25) return LV_SYMBOL_BATTERY_1;
   if (level < 50) return LV_SYMBOL_BATTERY_2;
@@ -50,22 +52,24 @@ static const char* battery_symbol_for_level(int level)
   return LV_SYMBOL_BATTERY_3;
 }
 
-void update_battery_icons_all_screens(int level)
+void update_battery_icons_all_screens(int level, bool isCharging)
 {
   static bool batteryUiInitialized = false;
+  lv_obj_t *fistBattTitle = FistITGetBatteryTitleLabel();
+  lv_obj_t *fistBattValue = FistITGetBatteryValueLabel();
 
   lv_obj_t *batteryTitleLabels[] = {
-    ui_Batt, ui_Batt1, ui_Batt2, ui_Batt3, ui_Batt4, ui_Batt5, ui_Batt6, ui_Batt7, ui_Batt8
+    ui_Batt, ui_Batt1, ui_Batt2, ui_Batt3, ui_Batt4, ui_Batt5, ui_Batt6, ui_Batt7, ui_Batt8, fistBattTitle
   };
 
   lv_obj_t *batteryValueLabels[] = {
     ui_BattValue, ui_BattValue1, ui_BattValue2, ui_BattValue3, ui_BattValue4,
-    ui_BattValue5, ui_BattValue6, ui_BattValue7, ui_BattValue8
+    ui_BattValue5, ui_BattValue6, ui_BattValue7, ui_BattValue8, fistBattValue
   };
 
   lv_obj_t *batteryBars[] = {
     ui_Battery, ui_Battery1, ui_Battery2, ui_Battery3, ui_Battery4,
-    ui_Battery5, ui_Battery6, ui_Battery7, ui_Battery8
+    ui_Battery5, ui_Battery6, ui_Battery7, ui_Battery8, nullptr
   };
 
   if (!batteryUiInitialized) {
@@ -92,7 +96,7 @@ void update_battery_icons_all_screens(int level)
     batteryUiInitialized = true;
   }
 
-  const char *symbol = battery_symbol_for_level(level);
+  const char *symbol = battery_symbol_for_level(level, isCharging);
   char percentText[8];
   snprintf(percentText, sizeof(percentText), "%d%%", level);
 
@@ -108,6 +112,75 @@ void update_battery_icons_all_screens(int level)
   }
 }
 
+static bool detectChargingNow()
+{
+  auto chargingState = M5.Power.isCharging();
+  if (chargingState == m5::Power_Class::is_charging) {
+    return true;
+  }
+  if (chargingState == m5::Power_Class::is_discharging) {
+    return false;
+  }
+
+  // Fallback for unsupported/unknown PMIC charging state.
+  return M5.Power.getBatteryCurrent() > 15;
+}
+
+static bool getStableChargingState()
+{
+  static bool initialized = false;
+  static bool rawState = false;
+  static bool stableState = false;
+  static uint32_t rawSinceMs = 0;
+
+  const bool nowRaw = detectChargingNow();
+  const uint32_t nowMs = millis();
+
+  if (!initialized) {
+    initialized = true;
+    rawState = nowRaw;
+    stableState = nowRaw;
+    rawSinceMs = nowMs;
+    return stableState;
+  }
+
+  if (nowRaw != rawState) {
+    rawState = nowRaw;
+    rawSinceMs = nowMs;
+  }
+
+  if (stableState != rawState && (nowMs - rawSinceMs) >= 800U) {
+    stableState = rawState;
+  }
+
+  return stableState;
+}
+
+static void maybeShowChargingWarning(bool isCharging)
+{
+  static bool shownForCurrentChargeSession = false;
+
+  if (!isCharging) {
+    shownForCurrentChargeSession = false;
+    return;
+  }
+
+  if (shownForCurrentChargeSession) {
+    return;
+  }
+
+  shownForCurrentChargeSession = true;
+  showNotification(
+      T_CHARGING_WARNING_TITLE,
+      T_CHARGING_WARNING_TEXT,
+      8000,
+      false,
+      nullptr,
+      false,
+      nullptr,
+      false);
+}
+
 void screen_power_tick()
 {
   if (encoder1.getCount() + encoder2.getCount() + encoder3.getCount() + encoder4.getCount() != 0) {
@@ -120,56 +193,228 @@ void screen_power_tick()
     screensaver_active = true;
   }
 
+#if AUTO_IDLE_DEEP_SLEEP_ENABLED
   if (millis() - last_activity_ms > deep_sleep_timeout_ms) {
     if (canEnterDeepSleep()) {
       enterDeepSleep();
     }
   }
+#endif
+}
+
+static lv_obj_t* createStatusIconBase(lv_obj_t* parent, int width, int height)
+{
+  if (parent == nullptr) {
+    return nullptr;
+  }
+
+  lv_obj_t* icon = lv_canvas_create(parent);
+  lv_obj_remove_style_all(icon);
+  lv_obj_set_size(icon, width, height);
+  lv_obj_clear_flag(icon, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_style_bg_opa(icon, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_opa(icon, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+  return icon;
+}
+
+static void renderStatusMaskIfNeeded(
+    lv_obj_t* canvas,
+    uint8_t* buffer,
+    bool& isReady,
+    const char* const* maskRows,
+    int width,
+    int height)
+{
+  if (canvas == nullptr || buffer == nullptr || maskRows == nullptr) {
+    return;
+  }
+
+  lv_canvas_set_buffer(canvas, buffer, width, height, LV_COLOR_FORMAT_ARGB8888);
+  if (isReady) {
+    return;
+  }
+
+  lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_TRANSP);
+  for (int y = 0; y < height; ++y) {
+    const char* row = maskRows[y];
+    if (row == nullptr) {
+      continue;
+    }
+    for (int x = 0; x < width; ++x) {
+      if (row[x] == '#') {
+        lv_canvas_set_px(canvas, x, y, lv_color_hex(0xFFFFFF), LV_OPA_COVER);
+      }
+    }
+  }
+  isReady = true;
+}
+
+static lv_obj_t* createStatusEjectIcon(lv_obj_t* parent)
+{
+  static uint8_t iconBuffer[LV_CANVAS_BUF_SIZE(32, 32, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+  static bool iconReady = false;
+  const int iconW = addonsGetEjectIconWidth();
+  const int iconH = addonsGetEjectIconHeight();
+  const char* const* iconMask = addonsGetEjectIconMask();
+
+  lv_obj_t* icon = createStatusIconBase(parent, iconW, iconH);
+  if (icon == nullptr) {
+    return nullptr;
+  }
+
+  renderStatusMaskIfNeeded(icon, iconBuffer, iconReady, iconMask, iconW, iconH);
+  return icon;
+}
+
+static lv_obj_t* createStatusFistIcon(lv_obj_t* parent)
+{
+  static uint8_t iconBuffer[LV_CANVAS_BUF_SIZE(32, 32, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+  static bool iconReady = false;
+  const int iconW = addonsGetFistIconWidth();
+  const int iconH = addonsGetFistIconHeight();
+  const char* const* iconMask = addonsGetFistIconMask();
+
+  lv_obj_t* icon = createStatusIconBase(parent, iconW, iconH);
+  if (icon == nullptr) {
+    return nullptr;
+  }
+
+  renderStatusMaskIfNeeded(icon, iconBuffer, iconReady, iconMask, iconW, iconH);
+  return icon;
 }
 
 
 void updateHomeTopLeftStateLabel()
 {
-  if (ui_connect == nullptr) {
-    return;
-  }
+  static lv_obj_t *statusLabels[12] = { nullptr };
+  static lv_obj_t *statusEjectIcons[12] = { nullptr };
+  static lv_obj_t *statusFistIcons[12] = { nullptr };
+  lv_obj_t *statusScreens[12] = {
+    ui_Start,
+    ui_Home,
+    ui_Pattern,
+    ui_Torqe,
+    ui_EJECTSettings,
+    ui_Settings,
+    ui_Menu,
+    ui_Streaming,
+    ui_Addons,
+    ui_Colors,
+    FistITGetScreen(),
+    nullptr,
+  };
 
-  char labelText[32];
-  if (OssmBleIsMode()) {
-    if (OssmBleConnected()) {
-      switch (OSSM_State) {
-        case state_OFF: snprintf(labelText, sizeof(labelText), "OFF"); break;
-        case state_ON: snprintf(labelText, sizeof(labelText), "ON"); break;
-        case state_PAUSE: snprintf(labelText, sizeof(labelText), "PAUSE"); break;
-        case state_STOP: snprintf(labelText, sizeof(labelText), "STOP"); break;
-        case state_MENU: snprintf(labelText, sizeof(labelText), "MENU"); break;
-        case state_HOMING: snprintf(labelText, sizeof(labelText), "HOMING"); break;
-        case state_STREAMING: snprintf(labelText, sizeof(labelText), "STREAM"); break;
-        case state_SIMPLE_PENETRATION: snprintf(labelText, sizeof(labelText), "SIMPLE"); break;
-        case state_STROKE_ENGINE: snprintf(labelText, sizeof(labelText), "STROKE"); break;
-        case state_ERROR: snprintf(labelText, sizeof(labelText), "ERROR"); break;
-        default: snprintf(labelText, sizeof(labelText), "UNKNOWN"); break;
-      }
+  // Ensure every screen has a top-left status label.
+  for (size_t i = 0; i < 12; ++i) {
+    if (statusLabels[i] != nullptr) {
+      continue;
+    }
+    if (statusScreens[i] == nullptr) {
+      continue;
+    }
+
+    if (statusScreens[i] == ui_Home && ui_connect != nullptr) {
+      statusLabels[i] = ui_connect;
     } else {
-      snprintf(labelText, sizeof(labelText), "%s", T_CONNECTING);
+      statusLabels[i] = lv_label_create(statusScreens[i]);
     }
-  } else {
-    switch (OSSM_State) {
-      case state_OFF: snprintf(labelText, sizeof(labelText), "OFF"); break;
-      case state_ON: snprintf(labelText, sizeof(labelText), "ON"); break;
-      case state_PAUSE: snprintf(labelText, sizeof(labelText), "PAUSE"); break;
-      case state_STOP: snprintf(labelText, sizeof(labelText), "STOP"); break;
-      case state_MENU: snprintf(labelText, sizeof(labelText), "MENU"); break;
-      case state_HOMING: snprintf(labelText, sizeof(labelText), "HOMING"); break;
-      case state_STREAMING: snprintf(labelText, sizeof(labelText), "STREAM"); break;
-      case state_SIMPLE_PENETRATION: snprintf(labelText, sizeof(labelText), "SIMPLE"); break;
-      case state_STROKE_ENGINE: snprintf(labelText, sizeof(labelText), "STROKE"); break;
-      case state_ERROR: snprintf(labelText, sizeof(labelText), "ERROR"); break;
-      default: snprintf(labelText, sizeof(labelText), "UNKNOWN"); break;
+
+    lv_obj_set_width(statusLabels[i], LV_SIZE_CONTENT);
+    lv_obj_set_height(statusLabels[i], LV_SIZE_CONTENT);
+    lv_obj_set_align(statusLabels[i], LV_ALIGN_LEFT_MID);
+    lv_obj_set_x(statusLabels[i], 10);
+    lv_obj_set_y(statusLabels[i], -102);
+    lv_obj_set_style_text_color(statusLabels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(statusLabels[i], &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_clear_flag(statusLabels[i], LV_OBJ_FLAG_HIDDEN);
+
+    if (statusEjectIcons[i] == nullptr) {
+      statusEjectIcons[i] = createStatusEjectIcon(statusScreens[i]);
+    }
+    if (statusFistIcons[i] == nullptr) {
+      statusFistIcons[i] = createStatusFistIcon(statusScreens[i]);
     }
   }
 
-  lv_label_set_text(ui_connect, labelText);
+  char labelText[48];
+  size_t pos = 0;
+  labelText[0] = '\0';
+
+  auto appendToken = [&](const char *token) {
+    if (token == nullptr || token[0] == '\0' || pos >= sizeof(labelText) - 1) {
+      return;
+    }
+    if (pos > 0 && pos < sizeof(labelText) - 1) {
+      labelText[pos++] = ' ';
+      labelText[pos] = '\0';
+    }
+    int written = snprintf(labelText + pos, sizeof(labelText) - pos, "%s", token);
+    if (written > 0) {
+      pos += (size_t)written;
+      if (pos >= sizeof(labelText)) {
+        pos = sizeof(labelText) - 1;
+      }
+    }
+  };
+
+  if (OssmBleConnected()) {
+    appendToken(LV_SYMBOL_BLUETOOTH);
+  }
+  if (ossm_espnow_connected) {
+    appendToken(LV_SYMBOL_WIFI);
+  }
+  if (OSSM_State == state_HOMING) {
+    if (g_homing_direction > 0) {
+      appendToken(LV_SYMBOL_UP);
+    } else if (g_homing_direction < 0) {
+      appendToken(LV_SYMBOL_DOWN);
+    }
+  }
+
+  if (labelText[0] == '\0') {
+    snprintf(labelText, sizeof(labelText), " ");
+  }
+
+  const bool ejectPaired = EjectIsPaired();
+  const bool fistPaired = FistITIsPaired();
+
+  for (size_t i = 0; i < 12; ++i) {
+    lv_obj_t *label = statusLabels[i];
+    if (label == nullptr) {
+      continue;
+    }
+
+    lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_label_set_text(label, labelText);
+    lv_obj_update_layout(label);
+
+    int iconX = 10 + lv_obj_get_width(label) + 4;
+
+    if (statusEjectIcons[i] != nullptr) {
+      lv_obj_set_align(statusEjectIcons[i], LV_ALIGN_LEFT_MID);
+      lv_obj_set_x(statusEjectIcons[i], iconX);
+      lv_obj_set_y(statusEjectIcons[i], -102);
+      if (ejectPaired) {
+        lv_obj_clear_flag(statusEjectIcons[i], LV_OBJ_FLAG_HIDDEN);
+        iconX += lv_obj_get_width(statusEjectIcons[i]) + 2;
+      } else {
+        lv_obj_add_flag(statusEjectIcons[i], LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+
+    if (statusFistIcons[i] != nullptr) {
+      lv_obj_set_align(statusFistIcons[i], LV_ALIGN_LEFT_MID);
+      lv_obj_set_x(statusFistIcons[i], iconX);
+      lv_obj_set_y(statusFistIcons[i], -102);
+      if (fistPaired) {
+        lv_obj_clear_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+  }
 }
 
 void my_display_flush(lv_display_t *disp, const lv_area_t *area, uint8_t *px_map)
@@ -250,10 +495,11 @@ void screenmachine(lv_event_t * e)
       lv_slider_set_range(ui_homedepthslider, 0, 100);
       lv_slider_set_range(ui_homestrokeslider, 0, 100);
 
-      uint32_t nowMs = millis();
-      if ((nowMs - ble_home_go_strokeengine_ms) > 1200U) {
+      // Only re-enter stroke engine from Menu when Menu flow explicitly armed it
+      // (e.g. after selecting non-home actions that should force homing later).
+      if (previousScreen == ST_UI_MENU && g_ble_menu_requires_stroke_reentry) {
         OssmBleGoToStrokeEngine();
-        ble_home_go_strokeengine_ms = nowMs;
+        g_ble_menu_requires_stroke_reentry = false;
       }
     } else {
       lv_slider_set_range(ui_homespeedslider, 0, speedlimit);
@@ -262,6 +508,7 @@ void screenmachine(lv_event_t * e)
     }
 
     refreshHomeAndStreamingStartStopUi();
+    refreshHomeAddonButtonLabels();
 
   } else if (lv_scr_act() == ui_Pattern) {
     st_screens = ST_UI_PATTERN;
@@ -324,6 +571,8 @@ void screenmachine(lv_event_t * e)
     if (ui_g_colors != nullptr) {
       lv_group_focus_next(ui_g_colors);
     }
+  } else if (lv_scr_act() == FistITGetScreen()) {
+    st_screens = ST_UI_FISTIT;
   }
 
   monitorOssmState(true);
@@ -336,8 +585,46 @@ void screenmachine(lv_event_t * e)
 void syncBleConnectUi(bool forceRefresh)
 {
   (void)forceRefresh;
-  if (OssmBleConnected() && isStartScreenMinTimeElapsed()) {
-    lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+  static bool startupMenuRequested = false;
+  static uint32_t startupMenuRequestedMs = 0;
+
+  if (!OssmBleConnected()) {
+    startupMenuRequested = false;
+    startupMenuRequestedMs = 0;
+    return;
+  }
+
+  if (!isStartScreenMinTimeElapsed()) {
+    return;
+  }
+
+  if (!startupMenuRequested) {
+    lv_label_set_text(ui_Welcome, T_HOMING);
+    OssmBleGoToMenu();
+    startupMenuRequested = true;
+    startupMenuRequestedMs = millis();
+    return;
+  }
+
+  OssmBleMachineState bleState;
+  if (OssmBleGetCurrentState(&bleState, true)) {
+    if (bleState.mode == OssmBleMachineMode::HomingForward ||
+        bleState.mode == OssmBleMachineMode::HomingBackward) {
+      lv_label_set_text(ui_Welcome, T_HOMING);
+      return;
+    }
+
+    if (bleState.mode == OssmBleMachineMode::Menu ||
+        bleState.mode == OssmBleMachineMode::StrokeEngineIdle ||
+        bleState.mode == OssmBleMachineMode::StrokeEngineActive) {
+      lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+      return;
+    }
+  }
+
+  // Fallback to avoid getting stuck if state polling is temporarily unavailable.
+  if ((millis() - startupMenuRequestedMs) > 5000UL) {
+    lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
   }
 }
 
@@ -378,6 +665,15 @@ static int getRampedDetentDelta(int encoderId, int detents)
 
 static void handleStartScreen(const ButtonEvents &events)
 {
+  static uint32_t nextAutoConnectAttemptMs = 0;
+
+  // Keep trying auto-connect while Start is visible.
+  const bool ossmConnected = (OssmBleConnected() || ossm_espnow_connected);
+  if (!ossmConnected && millis() >= nextAutoConnectAttemptMs) {
+    connectbutton(nullptr);
+    nextAutoConnectAttemptMs = millis() + 4000UL;
+  }
+
   if (OssmBleIsMode()) {
     static uint32_t lastBleHomingPollMs = 0;
     uint32_t nowPollMs = millis();
@@ -392,14 +688,14 @@ static void handleStartScreen(const ButtonEvents &events)
   }
 
   if (events.leftShort) {
-    lv_obj_send_event(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_StartButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   } else if (events.mxShort) {
     LogDebug("mx: ST_UI_START -> sending StartButtonM click");
-    lv_obj_send_event(ui_StartButtonM, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_StartButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   } else if (events.rightShort) {
-    lv_obj_send_event(ui_StartButtonR, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_StartButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   }
 }
@@ -577,25 +873,25 @@ static void handleHomeScreen(const ButtonEvents &events)
 
   // Button dispatch
   if (events.leftShort) {
-    lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
+    homebuttonLevent(nullptr);
     clearButtonFlags();
-  } else if (events.leftDouble) {
-    triggerAddonForSlot(ADDON_SLOT_LEFT);
+  } else if (events.leftLong) {
+    bool launched = triggerAddonForSlot(ADDON_SLOT_LEFT);
+    LogDebugFormatted("HOME leftLong -> triggerAddonForSlot(LEFT) result=%s\n", launched ? "OK" : "NONE");
     clearButtonFlags();
   } else if (events.mxShort) {
     LogDebug("mx: ST_UI_HOME -> direct HomeButtonM action");
     homebuttonm_action(true);
     clearButtonFlags();
+  } else if (events.mxLong) {
+    homebuttonMlongEvent(nullptr);
+    clearButtonFlags();
   } else if (events.rightShort) {
-    // Navigate directly here for physical right-button short press.
-    // This avoids relying on synthetic LV_EVENT_CLICKED propagation.
     _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
   } else if (events.rightLong) {
-    _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    clearButtonFlags();
-  } else if (events.rightDouble) {
-    triggerAddonForSlot(ADDON_SLOT_RIGHT);
+    bool launched = triggerAddonForSlot(ADDON_SLOT_RIGHT);
+    LogDebugFormatted("HOME rightLong -> triggerAddonForSlot(RIGHT) result=%s\n", launched ? "OK" : "NONE");
     clearButtonFlags();
   }
 }
@@ -619,14 +915,14 @@ static void handlePatternScreen(const ButtonEvents &events)
   }
 
   if (events.leftShort) {
-    lv_obj_send_event(ui_PatternButtonL, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_PatternButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   } else if (events.mxShort) {
     LogDebug("mx: ST_UI_PATTERN -> sending PatternButtonM click");
-    lv_obj_send_event(ui_PatternButtonM, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_PatternButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   } else if (events.rightShort) {
-    lv_obj_send_event(ui_PatternButtonR, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_PatternButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   }
 }
@@ -684,35 +980,26 @@ static void handleTorqueScreen(const ButtonEvents &events)
   lv_label_set_text(ui_introqevalue, torqe_r_v);
 
   if (events.leftShort) {
-    lv_obj_send_event(ui_TorqeButtonL, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_TorqeButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   } else if (events.mxShort) {
     LogDebug("mx: ST_UI_Torqe -> sending TorqeButtonM click");
-    lv_obj_send_event(ui_TorqeButtonM, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_TorqeButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   } else if (events.rightShort) {
-    lv_obj_send_event(ui_TorqeButtonR, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_TorqeButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   }
 }
 
 static void handleEjectSettingsScreen(const ButtonEvents &events)
 {
-  if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-    touch_disabled = true;
-  }
+  EjectHandleScreen(events);
+}
 
-  if (events.leftShort) {
-    lv_obj_send_event(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
-    clearButtonFlags();
-  } else if (events.mxShort) {
-    LogDebug("mx: ST_UI_EJECTSETTINGS -> sending EJECTButtonM click");
-    lv_obj_send_event(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
-    clearButtonFlags();
-  } else if (events.rightShort) {
-    lv_obj_send_event(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
-    clearButtonFlags();
-  }
+static void handleFistITScreen(const ButtonEvents &events)
+{
+  FistITHandleScreen(events);
 }
 
 static void handleSettingsScreen(const ButtonEvents &events)
@@ -741,10 +1028,14 @@ static void handleSettingsScreen(const ButtonEvents &events)
 
   if (encoder4.getCount() > encoder4_enc + 2) {
     LogDebug("next setting");
-    lv_group_focus_next(ui_g_settings);
+    if (ui_g_settings != nullptr) {
+      lv_group_focus_next(ui_g_settings);
+    }
     encoder4_enc = encoder4.getCount();
   } else if (encoder4.getCount() < encoder4_enc - 2) {
-    lv_group_focus_prev(ui_g_settings);
+    if (ui_g_settings != nullptr) {
+      lv_group_focus_prev(ui_g_settings);
+    }
     LogDebug("previous setting");
     encoder4_enc = encoder4.getCount();
   }
@@ -764,16 +1055,16 @@ static void handleSettingsScreen(const ButtonEvents &events)
         }
         lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
       } else {
-        lv_obj_send_event(focused, LV_EVENT_CLICKED, NULL);
+        lv_obj_send_event(focused, LV_EVENT_SHORT_CLICKED, NULL);
       }
     }
     clearButtonFlags();
   } else if (events.mxShort) {
     LogDebug("mx: ST_UI_SETTINGS -> go to menu");
-    lv_obj_send_event(ui_SettingsButtonM, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_SettingsButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   } else if (events.leftShort) {
-    lv_obj_send_event(ui_SettingsButtonL, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_SettingsButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   }
 }
@@ -793,19 +1084,19 @@ static void handleMenuScreen(const ButtonEvents &events)
   }
 
   if (events.leftShort) {
-    lv_obj_send_event(ui_MenuButtonL, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_MenuButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   }
 
   if (events.mxShort) {
-    lv_obj_send_event(ui_MenuButtonM, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_MenuButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   }
 
   if (events.rightShort) {
     lv_obj_t *focused = (ui_g_menu != nullptr) ? lv_group_get_focused(ui_g_menu) : nullptr;
     if (focused != nullptr) {
-      lv_obj_send_event(focused, LV_EVENT_CLICKED, NULL);
+      lv_obj_send_event(focused, LV_EVENT_SHORT_CLICKED, NULL);
     }
     clearButtonFlags();
   }
@@ -828,8 +1119,29 @@ static void handleAddonsScreen(const ButtonEvents &events)
   if (events.leftShort) {
     _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
+  } else if (events.mxShort) {
+    // Middle button: trigger the focused addon (launch if assigned, cycle if not)
+    lv_obj_t * focused = lv_group_get_focused(ui_g_addons);
+    if (focused != NULL) {
+      int addonIndex = -1;
+      if (focused == ui_AddonsItem0) {
+        addonIndex = 0;
+      } else if (focused == ui_AddonsItem1) {
+        addonIndex = 1;
+      } else if (focused == ui_AddonsItem2) {
+        addonIndex = 2;
+      }
+      
+      if (addonIndex >= 0) {
+        triggerAddonByIndex(addonIndex);
+      }
+    }
+    clearButtonFlags();
   } else if (events.rightShort) {
-    lv_obj_send_event(lv_group_get_focused(ui_g_addons), LV_EVENT_CLICKED, NULL);
+    lv_obj_t *focused = (ui_g_addons != nullptr) ? lv_group_get_focused(ui_g_addons) : nullptr;
+    if (focused != nullptr) {
+      lv_obj_send_event(focused, LV_EVENT_SHORT_CLICKED, NULL);
+    }
     clearButtonFlags();
   }
 }
@@ -958,7 +1270,7 @@ static void handleStreamingScreen(const ButtonEvents &events)
     streamingbuttonm_action(true);
     clearButtonFlags();
   } else if (events.rightShort) {
-    lv_obj_send_event(ui_StreamingButtonR, LV_EVENT_CLICKED, NULL);
+    lv_obj_send_event(ui_StreamingButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     clearButtonFlags();
   }
 }
@@ -967,8 +1279,66 @@ static void handleStreamingScreen(const ButtonEvents &events)
 // Main dispatcher — called from loop()
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Battery level smoothing
+//   - Samples raw level every 30 s
+//   - Applies an EMA (α=0.1) to filter noise
+//   - Holds the displayed value for 60 s after charger disconnect to absorb
+//     the transient voltage sag that the PMIC otherwise reports as a real drop
+// ---------------------------------------------------------------------------
+static int getSmoothedBatteryLevel(bool isCharging)
+{
+  static uint32_t lastSampleMs    = 0;
+  static bool     wasCharging     = false;
+  static uint32_t disconnectedMs  = 0;
+  static float    emaLevel        = -1.0f;   // -1 = uninitialised
+  static int      displayedLevel  = -1;
+
+  const uint32_t now = millis();
+
+  // Detect charger removal and start the settling hold timer.
+  if (wasCharging && !isCharging) {
+    disconnectedMs = now;
+  }
+  wasCharging = isCharging;
+
+  const bool inSettlingWindow = (!isCharging && (now - disconnectedMs) < 60000UL);
+
+  // Initialise on very first call.
+  if (emaLevel < 0.0f) {
+    emaLevel       = (float)M5.Power.getBatteryLevel();
+    displayedLevel = (int)(emaLevel + 0.5f);
+    lastSampleMs   = now;
+    // Mark settling window as just started if charger not connected at boot.
+    if (!isCharging) {
+      disconnectedMs = now;
+    }
+  }
+
+  // While in the post-disconnect settling window, show last known good level.
+  if (inSettlingWindow) {
+    return displayedLevel;
+  }
+
+  // Sample every 30 seconds.
+  if (now - lastSampleMs >= 30000UL || lastSampleMs == 0) {
+    lastSampleMs = now;
+    const float raw = (float)M5.Power.getBatteryLevel();
+    // EMA: weight new sample at 10 %, carry 90 % from history.
+    emaLevel = 0.1f * raw + 0.9f * emaLevel;
+    displayedLevel = (int)(emaLevel + 0.5f);
+    // Clamp to valid range.
+    if (displayedLevel < 0)   displayedLevel = 0;
+    if (displayedLevel > 100) displayedLevel = 100;
+  }
+
+  return displayedLevel;
+}
+
 void handleCurrentScreen(){
-  update_battery_icons_all_screens(M5.Power.getBatteryLevel());
+  const bool isCharging = getStableChargingState();
+  update_battery_icons_all_screens(getSmoothedBatteryLevel(isCharging), isCharging);
+  maybeShowChargingWarning(isCharging);
   pollButtonEvents(g_button_events);
 
   switch (st_screens) {
@@ -982,6 +1352,7 @@ void handleCurrentScreen(){
     case ST_UI_ADDONS:        handleAddonsScreen(g_button_events);        break;
     case ST_UI_COLORS:        handleColorsScreen(g_button_events);        break;
     case ST_UI_STREAMING:     handleStreamingScreen(g_button_events);     break;
+    case ST_UI_FISTIT:        handleFistITScreen(g_button_events);        break;
     default: break;
   }
 
@@ -1034,14 +1405,16 @@ void event_cb(lv_event_t *e)
     buttonName = "right";
   }
 
-  switch (code) {
-    case LV_EVENT_PRESSED:             eventName = "LV_EVENT_PRESSED";             break;
-    case LV_EVENT_RELEASED:            eventName = "LV_EVENT_RELEASED";            break;
-    case LV_EVENT_SHORT_CLICKED:       eventName = "LV_EVENT_SHORT_CLICKED";       break;
-    case LV_EVENT_CLICKED:             eventName = "LV_EVENT_CLICKED";             break;
-    case LV_EVENT_LONG_PRESSED:        eventName = "LV_EVENT_LONG_PRESSED";        break;
-    case LV_EVENT_LONG_PRESSED_REPEAT: eventName = "LV_EVENT_LONG_PRESSED_REPEAT"; break;
-    default: break;
+  if (code == LV_EVENT_PRESSED) {
+    eventName = "LV_EVENT_PRESSED";
+  } else if (code == LV_EVENT_RELEASED) {
+    eventName = "LV_EVENT_RELEASED";
+  } else if (code == LV_EVENT_SHORT_CLICKED) {
+    eventName = "LV_EVENT_SHORT_CLICKED";
+  } else if (code == LV_EVENT_LONG_PRESSED) {
+    eventName = "LV_EVENT_LONG_PRESSED";
+  } else if (code == LV_EVENT_LONG_PRESSED_REPEAT) {
+    eventName = "LV_EVENT_LONG_PRESSED_REPEAT";
   }
 
   if (eventName != nullptr) {

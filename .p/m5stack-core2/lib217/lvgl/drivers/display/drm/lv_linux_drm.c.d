@@ -1,0 +1,30 @@
+.p/m5stack-core2/lib217/lvgl/drivers/display/drm/lv_linux_drm.c.o: \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/lv_linux_drm.c \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/lv_linux_drm.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/lv_display.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/../lv_conf_kconfig.h \
+ C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/dio_qspi/include/sdkconfig.h \
+ C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_common/include/esp_attr.h \
+ src/lv_conf.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_timer.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/../tick/lv_tick.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/../tick/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/../tick/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_ll.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_event.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_array.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_color.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_assert.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_log.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/../stdlib/lv_mem.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/../stdlib/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/../stdlib/lv_string.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/../stdlib/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_math.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_palette.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_color.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_color_op.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/drivers/display/drm/../../../display/../misc/lv_area.h

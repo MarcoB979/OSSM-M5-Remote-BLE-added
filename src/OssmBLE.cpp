@@ -702,7 +702,6 @@ bool OssmBleExecutePulloutStop(float currentSpeed, float maxDepthMm, float maxSp
 
   bool ok = true;
   OssmBleStoreUnpauseSpeed(currentSpeed);
-  ok = OssmBleGoToSimplePenetration() && ok;
   ok = OssmBleSendCommand(OssmBleCommand::SetDepth, 0.0f, 0.0f, maxDepthMm, maxSpeedValue, nullptr) && ok;
   ok = OssmBleSendCommand(OssmBleCommand::SetStroke, 0.0f, 0.0f, maxDepthMm, maxSpeedValue, nullptr) && ok;
 
@@ -809,8 +808,7 @@ bool OssmBleReadState(String* stateText, bool logState)
   *stateText = String(raw.c_str());
   bool looksLikeCommandAck = stateText->startsWith("ok:") || stateText->startsWith("fail:");
   if (logState) {
-    Serial.print(looksLikeCommandAck ? "BLE rx (state-ack): " : "BLE rx (state): ");
-    Serial.println(stateText->c_str());
+    // Intentionally quiet to keep serial monitor focused on ESP-NOW logs.
   }
   if (looksLikeCommandAck) {
     return false;

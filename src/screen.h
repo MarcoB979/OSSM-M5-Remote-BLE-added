@@ -19,5 +19,5 @@ extern long torqe_r_enc;
 extern long encoder3_enc;
 extern long encoder4_enc;
 
-void update_battery_icons_all_screens(int level);
+void update_battery_icons_all_screens(int level, bool isCharging);
 void screen_power_tick();

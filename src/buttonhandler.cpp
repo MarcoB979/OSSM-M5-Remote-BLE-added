@@ -2,12 +2,16 @@
 #include <M5Unified.h>
 #include <Preferences.h>
 
+#include "config.h"
 #include "main.h"
 #include "OssmBLE.h"
+#include "Eject.h"
 #include "language.h"
 #include "ui/ui.h"
 
 static constexpr int OSSM_TARGET_ID = 1;
+static constexpr int HOME_LEFT_ADDON_SLOT = 1;
+static constexpr int HOME_RIGHT_ADDON_SLOT = 2;
 
 #ifdef ARDUINO_M5STACK_CORES3
 OneButton Button1(10, false); // MX Button
@@ -33,6 +37,7 @@ bool mxclick_long_waspressed   = false;
 bool mxclick_double_waspressed = false;
 
 bool clickLeft_short_waspressed   = false;
+bool clickLeft_long_waspressed    = false;
 bool clickLeft_double_waspressed  = false;
 bool clickRight_short_waspressed  = false;
 bool clickRight_long_waspressed   = false;
@@ -317,7 +322,9 @@ void savesettings(lv_event_t * e)
     pref.putBool("Lefty", false);
   }
 
-  LogDebug("Saving StrokeInvert setting...");
+    // ejectAddon NVS key removed — addon slot assignments are persisted by addons.cpp
+
+    LogDebug("Saving StrokeInvert setting...");
   if (lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED) == 1) {
     pref.putBool("StrokeInvert", true);
     strokeinvert_mode = true;
@@ -363,6 +370,12 @@ void homebuttonLevent(lv_event_t * e)
   (void)e;
   lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
 
+  // Home short-left now only navigates to Menu.
+  lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+}
+
+static void homePulloutToMenuAction()
+{
   depth  = 0;
   stroke = 0;
   if (ui_homedepthslider  != nullptr) lv_slider_set_value(ui_homedepthslider,  0, LV_ANIM_OFF);
@@ -382,6 +395,24 @@ void homebuttonLevent(lv_event_t * e)
   OSSM_State = state_FALSE;
   refreshHomeAndStreamingStartStopUi();
   lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+}
+
+void homebuttonMlongEvent(lv_event_t * e)
+{
+  (void)e;
+  homePulloutToMenuAction();
+}
+
+void homebuttonLlongEvent(lv_event_t * e)
+{
+  (void)e;
+  triggerAddonForSlot(HOME_LEFT_ADDON_SLOT);
+}
+
+void homebuttonRlongEvent(lv_event_t * e)
+{
+  (void)e;
+  triggerAddonForSlot(HOME_RIGHT_ADDON_SLOT);
 }
 
 void savepattern(lv_event_t * e)
@@ -409,8 +440,17 @@ static bool consumeButtonFlag(bool &flag)
 
 void mxclick()
 {
+  static uint32_t lastMxClickMs = 0;
+  const uint32_t nowMs = millis();
+  if ((nowMs - lastMxClickMs) < 350U) {
+    LogDebug("mxclick ignored by cooldown");
+    return;
+  }
+  lastMxClickMs = nowMs;
+
   vibrate();
   mxclick_short_waspressed = true;
+  LogDebug("mxclick_short_waspressed set to true");
   screensaver_check_activity();
 }
 
@@ -435,10 +475,18 @@ void clickLeft()
   screensaver_check_activity();
 }
 
+void clickLeftLong()
+{
+  vibrate();
+  clickLeft_long_waspressed = true;
+  screensaver_check_activity();
+}
+
 void clickLeftDouble()
 {
   vibrate();
   clickLeft_double_waspressed = true;
+  LogDebug("clickLeft_double_waspressed set to true");
   screensaver_check_activity();
 }
 
@@ -461,6 +509,7 @@ void clickRightDouble()
 {
   vibrate();
   clickRight_double_waspressed = true;
+  LogDebug("clickRight_double_waspressed set to true");
   screensaver_check_activity();
 }
 
@@ -470,6 +519,7 @@ void pollButtonEvents(ButtonEvents &events)
   events.mxLong      = consumeButtonFlag(mxclick_long_waspressed);
   events.mxDouble    = consumeButtonFlag(mxclick_double_waspressed);
   events.leftShort   = consumeButtonFlag(clickLeft_short_waspressed);
+  events.leftLong    = consumeButtonFlag(clickLeft_long_waspressed);
   events.leftDouble  = consumeButtonFlag(clickLeft_double_waspressed);
   events.rightShort  = consumeButtonFlag(clickRight_short_waspressed);
   events.rightLong   = consumeButtonFlag(clickRight_long_waspressed);
@@ -486,6 +536,7 @@ void clearButtonFlags()
   mxclick_long_waspressed      = false;
   mxclick_double_waspressed    = false;
   clickLeft_short_waspressed   = false;
+  clickLeft_long_waspressed    = false;
   clickLeft_double_waspressed  = false;
   clickRight_short_waspressed  = false;
   clickRight_long_waspressed   = false;

@@ -1,0 +1,30 @@
+.p/m5stack-core2/lib217/lvgl/misc/cache/class/lv_cache_lru_rb.c.o: \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/lv_cache_lru_rb.c \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/lv_cache_lru_rb.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../lv_cache_private.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../lv_conf_kconfig.h \
+ C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/dio_qspi/include/sdkconfig.h \
+ C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_common/include/esp_attr.h \
+ src/lv_conf.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../osal/lv_os_private.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../osal/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../osal/lv_os.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../osal/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../osal/lv_os_none.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../lv_cache_entry.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../stdlib/lv_sprintf.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../stdlib/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../stdlib/lv_string.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../stdlib/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../lv_ll.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../lv_rb_private.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../lv_rb.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../lv_assert.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../lv_log.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../stdlib/lv_mem.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../../stdlib/lv_string.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../lv_rb.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/misc/cache/class/../../lv_iter.h

@@ -1,0 +1,32 @@
+.p/m5stack-core2/lib217/lvgl/font/font_manager/lv_font_manager.c.o: \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/lv_font_manager.c \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/lv_font_manager.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/lv_font.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../lv_conf_kconfig.h \
+ C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/dio_qspi/include/sdkconfig.h \
+ C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/esp_common/include/esp_attr.h \
+ src/lv_conf.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../misc/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/lv_symbol_def.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/lv_draw_buf.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_area.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_math.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_color.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_assert.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_log.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/../stdlib/lv_mem.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/../stdlib/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/../stdlib/lv_string.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/../stdlib/../misc/lv_types.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_palette.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_color.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../misc/lv_color_op.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../stdlib/lv_string.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/lv_image_dsc.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../draw/../lv_conf_internal.h \
+ .pio/libdeps/m5stack-core2/lvgl/src/font/font_manager/../../font/../misc/lv_area.h

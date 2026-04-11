@@ -10,6 +10,8 @@
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
 #include "colors.h"
+#include "Eject.h"
+#include "FistIT.h"
 
 
 uint8_t CUM_Address[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -20,6 +22,190 @@ uint8_t CUM_Address[6] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 
 static int  g_addon_slots[ADDON_DEFINITIONS_COUNT] = {ADDON_SLOT_NONE};
 static bool g_addons_loaded_from_nvs = false;
+static lv_obj_t* g_addon_icon_eject = nullptr;
+static lv_obj_t* g_addon_icon_fistit = nullptr;
+
+static constexpr int EJECT_ICON_W = 20;
+static constexpr int EJECT_ICON_H = 21;
+static constexpr int FIST_ICON_W = 18;
+static constexpr int FIST_ICON_H = 23;
+static uint8_t g_icon_eject_buf[LV_CANVAS_BUF_SIZE(EJECT_ICON_W, EJECT_ICON_H, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+static uint8_t g_icon_fist_buf[LV_CANVAS_BUF_SIZE(FIST_ICON_W, FIST_ICON_H, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+static bool g_icon_eject_ready = false;
+static bool g_icon_fist_ready = false;
+
+static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
+  "....................",
+  "...#.....###.....#..",
+  "..#.#..#...#....#.#.",
+  ".#..#..#....#..#..#.",
+  "..#.#...##.#...#.#..",
+  "....#......#....#...",
+  "....................",
+  ".........###........",
+  ".......#..#..#......",
+  "......#.......#.....",
+  "......#.......#.....",
+  ".......##...##......",
+  ".......#.....#......",
+  ".......#.....#......",
+  ".......#.....#......",
+  ".......#.....#......",
+  ".......#.....#......",
+  ".......#.....#......",
+  ".......#######......",
+  "........#####.......",
+  "....................",
+};
+
+static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
+  ".........#####....",
+  ".....#.##.#.#.#...",
+  "...##.#..#.#.#.#..",
+  "..#..#.#.#.#.#.#..",
+  "..#..#.#.#.#.#.#..",
+  "..#............#..",
+  "..#............#..",
+  "..#............#..",
+  "...#####.......#..",
+  "..#.....#......#..",
+  ".#.......#....#...",
+  ".#........#...#...",
+  ".#.........#..#...",
+  ".#..........#.#...",
+  ".#..........#.#...",
+  ".#..........#.#...",
+  ".#..........#.#...",
+  ".#..........#.#...",
+  "..#.........##....",
+  "...#........#.....",
+  "....#.......#.....",
+  ".....#######......",
+  "..................",
+};
+
+int addonsGetEjectIconWidth()
+{
+  return EJECT_ICON_W;
+}
+
+int addonsGetEjectIconHeight()
+{
+  return EJECT_ICON_H;
+}
+
+const char* const* addonsGetEjectIconMask()
+{
+  return EJECT_ICON_MASK;
+}
+
+int addonsGetFistIconWidth()
+{
+  return FIST_ICON_W;
+}
+
+int addonsGetFistIconHeight()
+{
+  return FIST_ICON_H;
+}
+
+const char* const* addonsGetFistIconMask()
+{
+  return FIST_ICON_MASK;
+}
+
+static lv_obj_t* createIconBase(lv_obj_t* parent, int width, int height)
+{
+  if (parent == nullptr) {
+    return nullptr;
+  }
+
+  lv_obj_t* icon = lv_canvas_create(parent);
+  lv_obj_remove_style_all(icon);
+  lv_obj_set_size(icon, width, height);
+  lv_obj_set_align(icon, LV_ALIGN_LEFT_MID);
+  lv_obj_set_x(icon, 8);
+  lv_obj_set_y(icon, 0);
+  lv_obj_clear_flag(icon, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(icon, LV_OBJ_FLAG_ADV_HITTEST);
+  return icon;
+}
+
+static void renderIconMaskIfNeeded(
+    lv_obj_t* canvas,
+    uint8_t* buffer,
+    bool& isReady,
+    const char* const* maskRows,
+    int width,
+    int height)
+{
+  if (canvas == nullptr || buffer == nullptr || maskRows == nullptr) {
+    return;
+  }
+
+  lv_canvas_set_buffer(canvas, buffer, width, height, LV_COLOR_FORMAT_ARGB8888);
+  if (isReady) {
+    return;
+  }
+
+  lv_canvas_fill_bg(canvas, lv_color_black(), LV_OPA_TRANSP);
+  for (int y = 0; y < height; ++y) {
+    const char* row = maskRows[y];
+    if (row == nullptr) {
+      continue;
+    }
+    for (int x = 0; x < width; ++x) {
+      if (row[x] == '#') {
+        lv_canvas_set_px(canvas, x, y, lv_color_hex(0xFFFFFF), LV_OPA_COVER);
+      }
+    }
+  }
+  isReady = true;
+}
+
+static lv_obj_t* createEjectIcon(lv_obj_t* parent)
+{
+  lv_obj_t* icon = createIconBase(parent, EJECT_ICON_W, EJECT_ICON_H);
+  if (icon == nullptr) {
+    return nullptr;
+  }
+
+  renderIconMaskIfNeeded(icon, g_icon_eject_buf, g_icon_eject_ready, EJECT_ICON_MASK, EJECT_ICON_W, EJECT_ICON_H);
+  return icon;
+}
+
+static lv_obj_t* createFistIcon(lv_obj_t* parent)
+{
+  lv_obj_t* icon = createIconBase(parent, FIST_ICON_W, FIST_ICON_H);
+  if (icon == nullptr) {
+    return nullptr;
+  }
+
+  renderIconMaskIfNeeded(icon, g_icon_fist_buf, g_icon_fist_ready, FIST_ICON_MASK, FIST_ICON_W, FIST_ICON_H);
+  return icon;
+}
+
+static void ensureAddonRowIcons(void)
+{
+  if (ui_AddonsItem0 != nullptr && g_addon_icon_eject == nullptr) {
+    g_addon_icon_eject = createEjectIcon(ui_AddonsItem0);
+  }
+  if (ui_AddonsItem1 != nullptr && g_addon_icon_fistit == nullptr) {
+    g_addon_icon_fistit = createFistIcon(ui_AddonsItem1);
+  }
+
+  if (ui_AddonsItem0Text != nullptr) {
+    lv_obj_set_align(ui_AddonsItem0Text, LV_ALIGN_LEFT_MID);
+    lv_obj_set_x(ui_AddonsItem0Text, EJECT_ICON_W + 14);
+    lv_obj_set_y(ui_AddonsItem0Text, 0);
+  }
+  if (ui_AddonsItem1Text != nullptr) {
+    lv_obj_set_align(ui_AddonsItem1Text, LV_ALIGN_LEFT_MID);
+    lv_obj_set_x(ui_AddonsItem1Text, FIST_ICON_W + 14);
+    lv_obj_set_y(ui_AddonsItem1Text, 0);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -32,6 +218,26 @@ static const char* addonSlotLabel(int slot)
     case ADDON_SLOT_RIGHT: return T_ADDONS_SLOT_RIGHT;
     default:               return T_ADDONS_SLOT_OFF;
   }
+}
+
+static bool isAddonAssigned(const char *addonId)
+{
+  if (addonId == nullptr) {
+    return false;
+  }
+
+  for (size_t i = 0; i < ADDON_DEFINITIONS_COUNT; ++i) {
+    if (strcmp(ADDON_DEFINITIONS[i].id, addonId) == 0) {
+      return g_addon_slots[i] != ADDON_SLOT_NONE;
+    }
+  }
+  return false;
+}
+
+static void syncAddonActivationFromBindings()
+{
+  EjectSetAddonEnabled(isAddonAssigned("eject_cumpump"));
+  FistITSetAddonEnabled(isAddonAssigned("fist_it"));
 }
 
 static void loadAddonBindingsIfNeeded()
@@ -73,6 +279,7 @@ static void loadAddonBindingsIfNeeded()
   }
 
   g_addons_loaded_from_nvs = true;
+  syncAddonActivationFromBindings();
 }
 
 static void saveAddonBindings()
@@ -87,8 +294,33 @@ static void saveAddonBindings()
   pref.end();
 }
 
+static int findAddonIndexForSlot(int slot)
+{
+  for (size_t i = 0; i < ADDON_DEFINITIONS_COUNT; ++i) {
+    if (g_addon_slots[i] == slot) {
+      return (int)i;
+    }
+  }
+  return -1;
+}
+
+extern "C" void refreshHomeAddonButtonLabels(void)
+{
+  loadAddonBindingsIfNeeded();
+
+  if (ui_HomeButtonLText != nullptr) {
+    lv_label_set_text(ui_HomeButtonLText, T_MENU);
+  }
+
+  if (ui_HomeButtonRText != nullptr) {
+    lv_label_set_text(ui_HomeButtonRText, T_SCREEN_PATTERN);
+  }
+}
+
 static void refreshAddonsUi()
 {
+  ensureAddonRowIcons();
+
   if (ui_AddonsItem0Text != nullptr && ADDON_DEFINITIONS_COUNT > 0) {
     char line[96];
     snprintf(line, sizeof(line), "%s  [%s]",
@@ -141,6 +373,7 @@ static void cycleAddonSelection(size_t addonIndex)
 
   g_addon_slots[addonIndex] = next;
   saveAddonBindings();
+  syncAddonActivationFromBindings();
 }
 
 // ---------------------------------------------------------------------------
@@ -168,7 +401,8 @@ bool triggerAddonForSlot(int slot)
   }
 
   if (strcmp(ADDON_DEFINITIONS[addonIndex].id, "fist_it") == 0) {
-    _ui_screen_change(ui_Addons, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    FistITPrepareScreen();
+    _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     return true;
   }
 
@@ -180,10 +414,38 @@ bool triggerAddonForSlot(int slot)
   return false;
 }
 
+// Trigger addon by its index in the ADDON_DEFINITIONS array
+// If assigned to LEFT or RIGHT slot, launch it directly
+// Otherwise, cycle its assignment like the right button does
+void triggerAddonByIndex(int index)
+{
+  loadAddonBindingsIfNeeded();
+  if (index < 0 || (size_t)index >= ADDON_DEFINITIONS_COUNT) {
+    return;
+  }
+  
+  int slot = g_addon_slots[index];
+  if (slot == ADDON_SLOT_LEFT || slot == ADDON_SLOT_RIGHT) {
+    // Addon is assigned to a slot, launch it
+    triggerAddonForSlot(slot);
+  } else {
+    // Addon not assigned, cycle its selection (like right button does)
+    cycleAddonSelection(index);
+    refreshHomeAddonButtonLabels();
+  }
+}
+
 extern "C" void addonsScreenLoaded(void)
 {
   loadAddonBindingsIfNeeded();
   refreshAddonsUi();
+  refreshHomeAddonButtonLabels();
+}
+
+extern "C" void addonsInitFromStorage(void)
+{
+  loadAddonBindingsIfNeeded();
+  refreshHomeAddonButtonLabels();
 }
 
 extern "C" void addonsSelectIndex(int index)
@@ -199,4 +461,5 @@ extern "C" void addonsSelectIndex(int index)
   }
   cycleAddonSelection((size_t)index);
   refreshAddonsUi();
+  refreshHomeAddonButtonLabels();
 }

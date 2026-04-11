@@ -8,6 +8,8 @@
 #include "main.h"
 #include "config.h"
 #include "OssmBLE.h"
+#include "Eject.h"
+#include "FistIT.h"
 #include "language.h"
 #include "ui/ui.h"
 
@@ -123,7 +125,42 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len)
     incomingcontrol.esp_speed,
     incomingcontrol.esp_depth);
 
-  if (incomingcontrol.esp_target == M5_ID && Ossm_paired == false) {
+  if (EjectHandleIncomingEspNowFrame(mac,
+                                     incomingcontrol.esp_target,
+                                     incomingcontrol.esp_sender,
+                                     incomingcontrol.esp_command,
+                                     incomingcontrol.esp_value,
+                                     incomingcontrol.esp_heartbeat)) {
+    return;
+  }
+
+  if (FistITHandleIncomingEspNowFrame(mac,
+                                      incomingcontrol.esp_target,
+                                      incomingcontrol.esp_sender,
+                                      incomingcontrol.esp_command,
+                                      incomingcontrol.esp_value,
+                                      incomingcontrol.esp_heartbeat)) {
+    return;
+  }
+
+  if (incomingcontrol.esp_target == M5_ID && Ossm_paired == false && isOssmMessage(mac)) {
+    // Guard against false pairing: legacy addon firmware can omit esp_sender,
+    // which makes sender appear as 0 (same as legacy OSSM). For sender==0,
+    // only accept frames that carry valid OSSM limits payload.
+    const bool explicitOssmSender = (incomingcontrol.esp_sender == OSSM_ID);
+    const bool legacyUnspecifiedSender = (incomingcontrol.esp_sender == 0);
+    const bool hasValidOssmLimits = (incomingcontrol.esp_speed > 0.0f && incomingcontrol.esp_depth > 0.0f);
+    if (!(explicitOssmSender || (legacyUnspecifiedSender && hasValidOssmLimits))) {
+      LogDebugPrioFormatted(
+        "ESP-NOW: Ignore pre-pair frame (sender=%d target=%d speed=%.1f depth=%.1f cmd=%d)\n",
+        incomingcontrol.esp_sender,
+        incomingcontrol.esp_target,
+        incomingcontrol.esp_speed,
+        incomingcontrol.esp_depth,
+        incomingcontrol.esp_command);
+      return;
+    }
+
     esp_err_t result = esp_now_del_peer(peerInfo.peer_addr);
 
     if (result == ESP_OK) {
@@ -269,6 +306,7 @@ void EspNowWaitForPairingOrTimeout(uint32_t timeoutMs, uint32_t heartbeatInterva
 bool EspNowSendControlCommand(int command, float value, int target)
 {
   if (!Ossm_paired) {
+    LogDebugFormatted("TX ESP blocked: not paired cmd=%d val=%.2f target=%d\n", command, value, target);
     return false;
   }
 
@@ -278,14 +316,21 @@ bool EspNowSendControlCommand(int command, float value, int target)
   outgoingcontrol.esp_target = target;
   outgoingcontrol.esp_sender = M5_ID;  // Identify M5 as sender
 
+  LogDebugFormatted("TX ESP send cmd=%d val=%.2f target=%d sender=%d to=%02X:%02X:%02X:%02X:%02X:%02X\n",
+                    command, value, target, outgoingcontrol.esp_sender,
+                    OSSM_Address[0], OSSM_Address[1], OSSM_Address[2], OSSM_Address[3], OSSM_Address[4], OSSM_Address[5]);
   esp_err_t result = esp_now_send(OSSM_Address, (uint8_t*)&outgoingcontrol, sizeof(outgoingcontrol));
   if (result == ESP_OK) {
+    LogDebug("TX ESP send result=OK");
     return true;
   }
 
+  LogDebugFormatted("TX ESP send result=FAIL err=%d (retrying once)\n", (int)result);
+
   vTaskDelay(pdMS_TO_TICKS(20));
-  esp_now_send(OSSM_Address, (uint8_t*)&outgoingcontrol, sizeof(outgoingcontrol));
-  return false;
+  esp_err_t retry = esp_now_send(OSSM_Address, (uint8_t*)&outgoingcontrol, sizeof(outgoingcontrol));
+  LogDebugFormatted("TX ESP retry result=%s err=%d\n", (retry == ESP_OK) ? "OK" : "FAIL", (int)retry);
+  return (retry == ESP_OK);
 }
 
 // Process pending UI updates from ESP-NOW pairing/data in a thread-safe way

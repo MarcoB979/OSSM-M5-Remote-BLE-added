@@ -200,6 +200,8 @@ extern lv_obj_t * ui_AddonsItem2;
 extern lv_obj_t * ui_AddonsItem2Text;
 extern lv_obj_t * ui_AddonsButtonL;
 extern lv_obj_t * ui_AddonsButtonLText;
+extern lv_obj_t * ui_AddonsButtonM;
+extern lv_obj_t * ui_AddonsButtonMText;
 extern lv_obj_t * ui_AddonsButtonR;
 extern lv_obj_t * ui_AddonsButtonRText;
 
