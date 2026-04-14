@@ -552,7 +552,6 @@ void register_event_debug_callbacks()
     ui_StartButtonL,   ui_StartButtonM,   ui_StartButtonR,
     ui_HomeButtonL,    ui_HomeButtonM,    ui_HomeButtonR,
     ui_PatternButtonL, ui_PatternButtonM, ui_PatternButtonR,
-    ui_TorqeButtonL,   ui_TorqeButtonM,   ui_TorqeButtonR,
     ui_EJECTButtonL,   ui_EJECTButtonM,   ui_EJECTButtonR,
     ui_SettingsButtonL,ui_SettingsButtonM,ui_SettingsButtonR,
   };

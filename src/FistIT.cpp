@@ -10,6 +10,7 @@
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
 #include "colors.h"
+#include "styles.h"
 
 namespace {
 
@@ -93,31 +94,15 @@ static bool ensurePeer(const uint8_t *addr)
   return (esp_now_add_peer(&peerInfo) == ESP_OK);
 }
 
-static void styleButton(lv_obj_t *button)
+// Apply shared styles to a slider using the provided slot index (0..3)
+static void styleSlider(lv_obj_t *slider, int slot)
 {
-  if (button == nullptr) {
-    return;
-  }
-
-  lv_obj_set_style_bg_color(button, lv_color_hex(getActivePrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(button, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-}
-
-static void styleSlider(lv_obj_t *slider)
-{
-  if (slider == nullptr) {
-    return;
-  }
-
-  lv_obj_set_style_bg_color(slider, lv_color_hex(getActiveSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(slider, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-  lv_obj_set_style_bg_color(slider, lv_color_hex(getActivePrimaryColor()), LV_PART_INDICATOR | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(slider, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_grad_color(slider, lv_color_hex(getActivePrimaryColor()), LV_PART_INDICATOR | LV_STATE_DEFAULT);
-
-  lv_obj_set_style_bg_color(slider, lv_color_hex(getActivePrimaryColor()), LV_PART_KNOB | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(slider, 255, LV_PART_KNOB | LV_STATE_DEFAULT);
+  if (slider == nullptr) return;
+  if (slot < 0) slot = 0;
+  if (slot > 3) slot = 3;
+  lv_obj_add_style(slider, &style_slider_track[slot], LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(slider, &style_slider_indicator[slot], LV_PART_INDICATOR | LV_STATE_DEFAULT);
+  lv_obj_add_style(slider, &style_slider_indicator[slot], LV_PART_KNOB | LV_STATE_DEFAULT);
 }
 
 static void createSliderRow(lv_obj_t **rowLabel,
@@ -126,7 +111,8 @@ static void createSliderRow(lv_obj_t **rowLabel,
                             const char *labelText,
                             int y,
                             int minValue,
-                            int maxValue)
+                            int maxValue,
+                            int slot)
 {
   *rowLabel = lv_label_create(s_screen);
   lv_obj_set_width(*rowLabel, lv_pct(95));
@@ -136,7 +122,7 @@ static void createSliderRow(lv_obj_t **rowLabel,
   lv_obj_set_align(*rowLabel, LV_ALIGN_CENTER);
   lv_label_set_text(*rowLabel, labelText);
   lv_obj_set_style_text_font(*rowLabel, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(*rowLabel, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(*rowLabel, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
   *rowSlider = lv_slider_create(*rowLabel);
   lv_slider_set_range(*rowSlider, minValue, maxValue);
@@ -146,7 +132,7 @@ static void createSliderRow(lv_obj_t **rowLabel,
   lv_obj_set_x(*rowSlider, -15);
   lv_obj_set_y(*rowSlider, 0);
   lv_obj_set_align(*rowSlider, LV_ALIGN_RIGHT_MID);
-  styleSlider(*rowSlider);
+  styleSlider(*rowSlider, slot);
 
   *rowValue = lv_label_create(*rowLabel);
   lv_obj_set_width(*rowValue, LV_SIZE_CONTENT);
@@ -155,7 +141,7 @@ static void createSliderRow(lv_obj_t **rowLabel,
   lv_obj_set_y(*rowValue, 0);
   lv_obj_set_align(*rowValue, LV_ALIGN_LEFT_MID);
   lv_label_set_text(*rowValue, "0");
-  lv_obj_set_style_text_color(*rowValue, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(*rowValue, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_text_font(*rowValue, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
 }
 
@@ -192,10 +178,10 @@ static void createScreenIfNeeded()
   lv_obj_set_align(s_batt_value, LV_ALIGN_RIGHT_MID);
   lv_label_set_text(s_batt_value, T_BLANK);
 
-  createSliderRow(&s_speed_label, &s_speed_slider, &s_speed_value, T_SPEED, -60, 0, 100);
-  createSliderRow(&s_rotation_label, &s_rotation_slider, &s_rotation_value, T_ROTATION, -25, 0, 360);
-  createSliderRow(&s_pause_label, &s_pause_slider, &s_pause_value, T_PAUSE, 10, 0, 100);
-  createSliderRow(&s_accel_label, &s_accel_slider, &s_accel_value, T_ACCEL, 45, 0, 100);
+  createSliderRow(&s_speed_label, &s_speed_slider, &s_speed_value, T_SPEED, -60, 0, 100, 0);
+  createSliderRow(&s_rotation_label, &s_rotation_slider, &s_rotation_value, T_ROTATION, -25, 0, 360, 1);
+  createSliderRow(&s_pause_label, &s_pause_slider, &s_pause_value, T_PAUSE, 10, 0, 100, 2);
+  createSliderRow(&s_accel_label, &s_accel_slider, &s_accel_value, T_ACCEL, 45, 0, 100, 3);
 
   s_button_left = lv_btn_create(s_screen);
   lv_obj_set_width(s_button_left, 100);
@@ -203,7 +189,8 @@ static void createScreenIfNeeded()
   lv_obj_set_y(s_button_left, 100);
   lv_obj_set_x(s_button_left, lv_pct(-33));
   lv_obj_set_align(s_button_left, LV_ALIGN_CENTER);
-  styleButton(s_button_left);
+  lv_obj_add_style(s_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
   s_button_left_text = lv_label_create(s_button_left);
   lv_obj_set_align(s_button_left_text, LV_ALIGN_CENTER);
   lv_label_set_text(s_button_left_text, T_START);
@@ -214,7 +201,8 @@ static void createScreenIfNeeded()
   lv_obj_set_y(s_button_mid, 100);
   lv_obj_set_x(s_button_mid, lv_pct(0));
   lv_obj_set_align(s_button_mid, LV_ALIGN_CENTER);
-  styleButton(s_button_mid);
+  lv_obj_add_style(s_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
   s_button_mid_text = lv_label_create(s_button_mid);
   lv_obj_set_align(s_button_mid_text, LV_ALIGN_CENTER);
   lv_label_set_text(s_button_mid_text, T_HOME);
@@ -225,7 +213,8 @@ static void createScreenIfNeeded()
   lv_obj_set_y(s_button_right, 100);
   lv_obj_set_x(s_button_right, lv_pct(33));
   lv_obj_set_align(s_button_right, LV_ALIGN_CENTER);
-  styleButton(s_button_right);
+  lv_obj_add_style(s_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
   s_button_right_text = lv_label_create(s_button_right);
   lv_obj_set_align(s_button_right_text, LV_ALIGN_CENTER);
   lv_label_set_text(s_button_right_text, T_MENU);
@@ -237,31 +226,23 @@ static void refreshTheme()
     return;
   }
 
-  lv_obj_set_style_bg_color(s_screen, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(s_screen, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_screen, &style_background, LV_PART_MAIN | LV_STATE_DEFAULT);
 
   if (s_title != nullptr) {
-    lv_obj_set_style_text_color(s_title, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_outline_color(s_title, lv_color_hex(getActivePrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_outline_opa(s_title, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_outline_width(s_title, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_outline_pad(s_title, 5, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(s_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(s_title, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
   }
 
   lv_obj_t *valueLabels[] = {s_speed_value, s_rotation_value, s_pause_value, s_accel_value};
   for (lv_obj_t *lbl : valueLabels) {
     if (!lbl) continue;
-    lv_obj_set_style_text_color(lbl, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(lbl, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
   }
-
-  styleSlider(s_speed_slider);
-  styleSlider(s_rotation_slider);
-  styleSlider(s_pause_slider);
-  styleSlider(s_accel_slider);
-  styleButton(s_button_left);
-  styleButton(s_button_mid);
-  styleButton(s_button_right);
+  styleSlider(s_speed_slider, 0);
+  styleSlider(s_rotation_slider, 1);
+  styleSlider(s_pause_slider, 2);
+  styleSlider(s_accel_slider, 3);
 }
 
 static void refreshValueLabels()

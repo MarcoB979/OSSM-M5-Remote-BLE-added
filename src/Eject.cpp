@@ -9,6 +9,7 @@
 #include "colors.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
+#include "styles.h"
 
 namespace {
 
@@ -83,21 +84,16 @@ static bool ensurePeer(const uint8_t *addr)
   return (esp_now_add_peer(&peerInfo) == ESP_OK);
 }
 
-static void styleSliderRow(lv_obj_t *slider)
+static void styleSliderRow(lv_obj_t *slider, int slot)
 {
   if (slider == nullptr) {
     return;
   }
-
-  lv_obj_set_style_bg_color(slider, lv_color_hex(getActiveSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(slider, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-  lv_obj_set_style_bg_color(slider, lv_color_hex(getActivePrimaryColor()), LV_PART_INDICATOR | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(slider, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_grad_color(slider, lv_color_hex(getActivePrimaryColor()), LV_PART_INDICATOR | LV_STATE_DEFAULT);
-
-  lv_obj_set_style_bg_color(slider, lv_color_hex(getActivePrimaryColor()), LV_PART_KNOB | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(slider, 255, LV_PART_KNOB | LV_STATE_DEFAULT);
+  if (slot < 0) slot = 0;
+  if (slot > 3) slot = 3;
+  lv_obj_add_style(slider, &style_slider_track[slot], LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(slider, &style_slider_indicator[slot], LV_PART_INDICATOR | LV_STATE_DEFAULT);
+  lv_obj_add_style(slider, &style_slider_indicator[slot], LV_PART_KNOB | LV_STATE_DEFAULT);
 }
 
 static void createSliderRow(lv_obj_t *parent,
@@ -107,7 +103,8 @@ static void createSliderRow(lv_obj_t *parent,
                             const char *labelText,
                             int y,
                             int minValue,
-                            int maxValue)
+                            int maxValue,
+                            int slot)
 {
   *rowLabel = lv_label_create(parent);
   lv_obj_set_width(*rowLabel, lv_pct(95));
@@ -117,6 +114,7 @@ static void createSliderRow(lv_obj_t *parent,
   lv_obj_set_align(*rowLabel, LV_ALIGN_CENTER);
   lv_label_set_text(*rowLabel, labelText);
   lv_obj_set_style_text_font(*rowLabel, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(*rowLabel, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
   *rowSlider = lv_slider_create(*rowLabel);
   lv_slider_set_range(*rowSlider, minValue, maxValue);
@@ -126,7 +124,7 @@ static void createSliderRow(lv_obj_t *parent,
   lv_obj_set_x(*rowSlider, -15);
   lv_obj_set_y(*rowSlider, 0);
   lv_obj_set_align(*rowSlider, LV_ALIGN_RIGHT_MID);
-  styleSliderRow(*rowSlider);
+  styleSliderRow(*rowSlider, slot);
 
   *rowValue = lv_label_create(*rowLabel);
   lv_obj_set_width(*rowValue, LV_SIZE_CONTENT);
@@ -135,6 +133,7 @@ static void createSliderRow(lv_obj_t *parent,
   lv_obj_set_y(*rowValue, 0);
   lv_obj_set_align(*rowValue, LV_ALIGN_LEFT_MID);
   lv_label_set_text(*rowValue, "0");
+  lv_obj_add_style(*rowValue, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 }
 
 static void refreshValueLabels()
@@ -256,10 +255,10 @@ static void ensureUiInitialized()
     lv_label_set_text(ui_EJECTButtonLText, T_CUM);
   }
 
-  createSliderRow(ui_EJECTSettings, &s_speed_label, &s_speed_slider, &s_speed_value, T_CUM_SPEED, -60, 0, 100);
-  createSliderRow(ui_EJECTSettings, &s_time_label, &s_time_slider, &s_time_value, T_CUM_TIME, -25, 0, 61);
-  createSliderRow(ui_EJECTSettings, &s_size_label, &s_size_slider, &s_size_value, T_CUM_Volume, 10, 0, 100);
-  createSliderRow(ui_EJECTSettings, &s_accel_label, &s_accel_slider, &s_accel_value, T_CUM_Accel, 45, 0, 100);
+  createSliderRow(ui_EJECTSettings, &s_speed_label, &s_speed_slider, &s_speed_value, T_CUM_SPEED, -60, 0, 100, 0);
+  createSliderRow(ui_EJECTSettings, &s_time_label, &s_time_slider, &s_time_value, T_CUM_TIME, -25, 0, 61, 1);
+  createSliderRow(ui_EJECTSettings, &s_size_label, &s_size_slider, &s_size_value, T_CUM_Volume, 10, 0, 100, 2);
+  createSliderRow(ui_EJECTSettings, &s_accel_label, &s_accel_slider, &s_accel_value, T_CUM_Accel, 45, 0, 100, 3);
 
   if (ui_EJECTButtonL != nullptr) {
     lv_obj_add_event_cb(ui_EJECTButtonL, onEjectLeftButtonClicked, LV_EVENT_SHORT_CLICKED, nullptr);

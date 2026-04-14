@@ -448,4 +448,4 @@
  .pio/libdeps/m5stack-core2/lvgl/src/lv_api_map_v9_2.h \
  .pio/libdeps/m5stack-core2/lvgl/src/lv_api_map_v9_3.h \
  .pio/libdeps/m5stack-core2/lvgl/src/lv_api_map_v9_4.h \
- src/ui/ui_helpers.h src/main.h src/language.h
+ src/ui/ui_helpers.h src/main.h src/language.h src/colors.h src/styles.h

@@ -7,10 +7,20 @@
 // ---------------------------------------------------------------------------
 typedef struct {
     const char* name;       // Display name shown on the selector screen
-    uint32_t    primary;    // Main accent: buttons, slider knob/indicator, header outline
-    uint32_t    secondary;  // Light accent: slider track bg, focused-state bg
-    uint32_t    text_primary;   // Text used on dark/accent backgrounds (usually white)
-    uint32_t    text_secondary; // Text used on light backgrounds (usually black)
+    uint32_t    title_bar;        // Header / title bar color
+    uint32_t    button_l;         // Left button / general button accent
+    uint32_t    button_m;         // Middle button accent
+    uint32_t    button_r;         // Right button accent
+    uint32_t    slider1;          // Slider slot 1 color
+    uint32_t    slider2;          // Slider slot 2 color
+    uint32_t    slider3;          // Slider slot 3 color
+    uint32_t    slider4;          // Slider slot 4 color
+    uint32_t    battery_main;     // Battery main fill
+    uint32_t    battery_indicator;// Battery indicator
+    uint32_t    roller;           // Roller/menu highlight
+    uint32_t    background;       // Screen background
+    uint32_t    text_primary;     // Text used on dark/accent backgrounds (usually white)
+    uint32_t    text_secondary;   // Text used on light backgrounds (usually black)
 } UiColorScheme;
 
 #define COLOR_SCHEME_COUNT 6
@@ -32,6 +42,22 @@ uint32_t getActivePrimaryColor(void);   // Get current scheme's primary color
 uint32_t getActiveSecondaryColor(void); // Get current scheme's secondary color
 uint32_t getActiveTextPrimaryColor(void);   // Get current scheme's primary text color
 uint32_t getActiveTextSecondaryColor(void); // Get current scheme's secondary text color
+uint32_t getActiveTitleBarColor(void);
+uint32_t getActiveButtonLColor(void);
+uint32_t getActiveButtonMColor(void);
+uint32_t getActiveButtonRColor(void);
+uint32_t getActiveSlider1Color(void);
+uint32_t getActiveSlider2Color(void);
+uint32_t getActiveSlider3Color(void);
+uint32_t getActiveSlider4Color(void);
+uint32_t getActiveBatteryMainColor(void);
+uint32_t getActiveBatteryIndicatorColor(void);
+uint32_t getActiveRollerColor(void);
+uint32_t getActiveBackgroundColor(void);
+
+
+
+
 
 #ifdef __cplusplus
 }

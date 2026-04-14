@@ -689,5 +689,5 @@
  src/main.h .pio/libdeps/m5stack-core2/ESP32Encoder/src/ESP32Encoder.h \
  C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/driver/include/driver/pcnt.h \
  C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/include/hal/pcnt_types.h \
- src/screen.h src/colors.h src/Eject.h \
+ src/screen.h src/colors.h src/styles.h src/Eject.h \
  C:/Users/User/.platformio/packages/framework-arduinoespressif32/libraries/Preferences/src/Preferences.h

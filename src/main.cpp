@@ -7,6 +7,7 @@
 #include "main.h"
 #include "screen.h"
 #include "colors.h"
+#include "styles.h"
 #include "Eject.h"
 #include "Preferences.h"      //EEPROM replacement function
 #include <esp_sleep.h>
@@ -96,7 +97,11 @@ void setup(){
   lv_indev_set_read_cb(indev, my_touchpad_read);
 
   LogDebug("Works till step 1");
-  ui_init();  
+  // Initialize shared LVGL styles before building the UI screens so screens
+  // can add these styles during creation.
+  styles_init();
+
+  ui_init();
   colors_init();   // Load saved color scheme from NVS and apply to all widgets
   markStartScreenLoaded();
   

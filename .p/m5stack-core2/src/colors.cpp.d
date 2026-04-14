@@ -584,4 +584,4 @@
  .pio/libdeps/m5stack-core2/ESP32Encoder/src/ESP32Encoder.h \
  C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/driver/include/driver/pcnt.h \
  C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/include/hal/pcnt_types.h \
- src/screen.h src/ui/ui.h src/ui/ui_helpers.h
+ src/screen.h src/ui/ui.h src/ui/ui_helpers.h src/styles.h

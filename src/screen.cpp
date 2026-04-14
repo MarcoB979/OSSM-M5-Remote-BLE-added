@@ -294,7 +294,6 @@ void updateHomeTopLeftStateLabel()
     ui_Start,
     ui_Home,
     ui_Pattern,
-    ui_Torqe,
     ui_EJECTSettings,
     ui_Settings,
     ui_Menu,
@@ -433,7 +432,6 @@ static void updateScreenTitleLabels()
   if (ui_Logo != nullptr) lv_label_set_text(ui_Logo, T_SCREEN_START);
   if (ui_Logo2 != nullptr) lv_label_set_text(ui_Logo2, T_SCREEN_STROKE_ENGINE);
   if (ui_Logo1 != nullptr) lv_label_set_text(ui_Logo1, T_SCREEN_SETTINGS);
-  if (ui_Logo4 != nullptr) lv_label_set_text(ui_Logo4, T_SCREEN_TORQUE);
   if (ui_Logo5 != nullptr) lv_label_set_text(ui_Logo5, T_SCREEN_PATTERN);
   if (ui_Logo6 != nullptr) lv_label_set_text(ui_Logo6, T_SCREEN_EJECT);
   if (ui_LogoMenu != nullptr) lv_label_set_text(ui_LogoMenu, T_SCREEN_MENU);
@@ -516,16 +514,6 @@ void screenmachine(lv_event_t * e)
     encoder2.setCount(0);
     encoder3.setCount(0);
     encoder4_enc = encoder4.getCount();
-  } else if (lv_scr_act() == ui_Torqe) {
-    st_screens = ST_UI_Torqe;
-    torqe_f = lv_slider_get_value(ui_outtroqeslider);
-    torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
-    encoder1.setCount(torqe_f_enc);
-
-    torqe_r = lv_slider_get_value(ui_introqeslider);
-    torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
-    encoder4.setCount(torqe_r_enc);
-
   } else if (lv_scr_act() == ui_EJECTSettings) {
     st_screens = ST_UI_EJECTSETTINGS;
   } else if (lv_scr_act() == ui_Settings) {
@@ -927,70 +915,6 @@ static void handlePatternScreen(const ButtonEvents &events)
   }
 }
 
-static void handleTorqueScreen(const ButtonEvents &events)
-{
-  if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-    touch_disabled = true;
-  }
-
-  // Encoder 1 – Torque Out
-  if (lv_slider_is_dragged(ui_outtroqeslider) == false) {
-    if (encoder1.getCount() != torqe_f_enc) {
-      lv_slider_set_value(ui_outtroqeslider, torqe_f, LV_ANIM_OFF);
-      if (encoder1.getCount() <= 0) {
-        encoder1.setCount(0);
-      } else if (encoder1.getCount() >= Encoder_MAP) {
-        encoder1.setCount(Encoder_MAP);
-      }
-      torqe_f_enc = encoder1.getCount();
-      torqe_f     = fscale(0, Encoder_MAP, 50, 200, torqe_f_enc, 0);
-      SendCommand(TORQE_F, torqe_f, OSSM_ID);
-    }
-  } else if (lv_slider_get_value(ui_outtroqeslider) != torqe_f) {
-    torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
-    encoder1.setCount(torqe_f_enc);
-    torqe_f = lv_slider_get_value(ui_outtroqeslider);
-    SendCommand(TORQE_F, torqe_f, OSSM_ID);
-  }
-  char torqe_f_v[7];
-  dtostrf((torqe_f * -1), 6, 0, torqe_f_v);
-  lv_label_set_text(ui_outtroqevalue, torqe_f_v);
-
-  // Encoder 4 – Torque In
-  if (lv_slider_is_dragged(ui_introqeslider) == false) {
-    if (encoder4.getCount() != torqe_r_enc) {
-      lv_slider_set_value(ui_introqeslider, torqe_r, LV_ANIM_OFF);
-      if (encoder4.getCount() <= 0) {
-        encoder4.setCount(0);
-      } else if (encoder4.getCount() >= Encoder_MAP) {
-        encoder4.setCount(Encoder_MAP);
-      }
-      torqe_r_enc = encoder4.getCount();
-      torqe_r     = fscale(0, Encoder_MAP, 20, 200, torqe_r_enc, 0);
-      SendCommand(TORQE_R, torqe_r, OSSM_ID);
-    }
-  } else if (lv_slider_get_value(ui_introqeslider) != torqe_r) {
-    torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
-    encoder4.setCount(torqe_r_enc);
-    torqe_r = lv_slider_get_value(ui_introqeslider);
-    SendCommand(TORQE_R, torqe_r, OSSM_ID);
-  }
-  char torqe_r_v[7];
-  dtostrf(torqe_r, 6, 0, torqe_r_v);
-  lv_label_set_text(ui_introqevalue, torqe_r_v);
-
-  if (events.leftShort) {
-    lv_obj_send_event(ui_TorqeButtonL, LV_EVENT_SHORT_CLICKED, NULL);
-    clearButtonFlags();
-  } else if (events.mxShort) {
-    LogDebug("mx: ST_UI_Torqe -> sending TorqeButtonM click");
-    lv_obj_send_event(ui_TorqeButtonM, LV_EVENT_SHORT_CLICKED, NULL);
-    clearButtonFlags();
-  } else if (events.rightShort) {
-    lv_obj_send_event(ui_TorqeButtonR, LV_EVENT_SHORT_CLICKED, NULL);
-    clearButtonFlags();
-  }
-}
 
 static void handleEjectSettingsScreen(const ButtonEvents &events)
 {
@@ -1345,7 +1269,7 @@ void handleCurrentScreen(){
     case ST_UI_START:         handleStartScreen(g_button_events);         break;
     case ST_UI_HOME:          handleHomeScreen(g_button_events);          break;
     case ST_UI_PATTERN:       handlePatternScreen(g_button_events);       break;
-    case ST_UI_Torqe:         handleTorqueScreen(g_button_events);        break;
+    /* ST_UI_Torqe removed */
     case ST_UI_EJECTSETTINGS: handleEjectSettingsScreen(g_button_events); break;
     case ST_UI_SETTINGS:      handleSettingsScreen(g_button_events);      break;
     case ST_UI_MENU:          handleMenuScreen(g_button_events);          break;
@@ -1391,16 +1315,16 @@ void event_cb(lv_event_t *e)
   const char *eventName  = nullptr;
   const char *buttonName = "unknown";
 
-  if (target == ui_StartButtonL || target == ui_HomeButtonL || target == ui_MenuButtonL ||
-      target == ui_PatternButtonL || target == ui_TorqeButtonL || target == ui_EJECTButtonL ||
+    if (target == ui_StartButtonL || target == ui_HomeButtonL || target == ui_MenuButtonL ||
+      target == ui_PatternButtonL || target == ui_EJECTButtonL ||
       target == ui_SettingsButtonL) {
     buttonName = "left";
   } else if (target == ui_StartButtonM || target == ui_HomeButtonM || target == ui_MenuButtonM ||
-             target == ui_PatternButtonM || target == ui_TorqeButtonM || target == ui_EJECTButtonM ||
+             target == ui_PatternButtonM || target == ui_EJECTButtonM ||
              target == ui_SettingsButtonM) {
     buttonName = "mx";
   } else if (target == ui_StartButtonR || target == ui_HomeButtonR || target == ui_MenuButtonR ||
-             target == ui_PatternButtonR || target == ui_TorqeButtonR || target == ui_EJECTButtonR ||
+             target == ui_PatternButtonR || target == ui_EJECTButtonR ||
              target == ui_SettingsButtonR) {
     buttonName = "right";
   }
