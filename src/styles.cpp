@@ -1,5 +1,6 @@
 #include "styles.h"
 #include "colors.h"
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -9,6 +10,16 @@ lv_style_t style_title_bar;
 lv_style_t style_button_l;
 lv_style_t style_button_m;
 lv_style_t style_button_r;
+lv_style_t style_button_running;
+lv_style_t style_button_stopped;
+lv_style_t style_button_l_pressed;
+lv_style_t style_button_m_pressed;
+lv_style_t style_button_r_pressed;
+lv_style_t style_button_running_pressed;
+lv_style_t style_button_stopped_pressed;
+lv_style_t style_button_l_focused;
+lv_style_t style_button_m_focused;
+lv_style_t style_button_r_focused;
 lv_style_t style_slider_track[4];
 lv_style_t style_slider_indicator[4];
 lv_style_t style_battery_main;
@@ -21,6 +32,9 @@ lv_style_t style_text_secondary;
 static lv_color_t mix_with_white(uint32_t hex, uint8_t mix_amount) {
     return lv_color_mix(lv_color_hex(hex), lv_color_hex(0xFFFFFF), mix_amount);
 }
+static lv_color_t mix_with_black(uint32_t hex, uint8_t mix_amount) {
+    return lv_color_mix(lv_color_hex(hex), lv_color_hex(0x000000), mix_amount);
+}
 
 void styles_init() {
     // Initialize all styles with neutral defaults — they'll be updated by
@@ -29,6 +43,16 @@ void styles_init() {
     lv_style_init(&style_button_l);
     lv_style_init(&style_button_m);
     lv_style_init(&style_button_r);
+    lv_style_init(&style_button_running);
+    lv_style_init(&style_button_stopped);
+    lv_style_init(&style_button_l_pressed);
+    lv_style_init(&style_button_m_pressed);
+    lv_style_init(&style_button_r_pressed);
+    lv_style_init(&style_button_running_pressed);
+    lv_style_init(&style_button_stopped_pressed);
+    lv_style_init(&style_button_l_focused);
+    lv_style_init(&style_button_m_focused);
+    lv_style_init(&style_button_r_focused);
     for (int i = 0; i < 4; ++i) {
         lv_style_init(&style_slider_track[i]);
         lv_style_init(&style_slider_indicator[i]);
@@ -56,12 +80,72 @@ void styles_apply_scheme(int index) {
     // Buttons (primary background)
     lv_style_set_bg_color(&style_button_l, lv_color_hex(COLOR_SCHEMES[index].button_l));
     lv_style_set_bg_opa(&style_button_l, 255);
+    lv_style_set_text_color(&style_button_l, lv_color_white());
+    lv_style_set_text_opa(&style_button_l, 255);
 
     lv_style_set_bg_color(&style_button_m, lv_color_hex(COLOR_SCHEMES[index].button_m));
     lv_style_set_bg_opa(&style_button_m, 255);
+    lv_style_set_text_color(&style_button_m, lv_color_white());
+    lv_style_set_text_opa(&style_button_m, 255);
 
     lv_style_set_bg_color(&style_button_r, lv_color_hex(COLOR_SCHEMES[index].button_r));
     lv_style_set_bg_opa(&style_button_r, 255);
+    lv_style_set_text_color(&style_button_r, lv_color_white());
+    lv_style_set_text_opa(&style_button_r, 255);
+
+    // Running/stopped state styles (used for start/stop buttons)
+    lv_style_set_bg_color(&style_button_running, lv_color_hex(0xB3261E));
+    lv_style_set_bg_opa(&style_button_running, 255);
+    lv_style_set_text_color(&style_button_running, lv_color_white());
+    lv_style_set_text_opa(&style_button_running, 255);
+
+    lv_style_set_bg_color(&style_button_stopped, lv_color_hex(0x228B22));
+    lv_style_set_bg_opa(&style_button_stopped, 255);
+    lv_style_set_text_color(&style_button_stopped, lv_color_white());
+    lv_style_set_text_opa(&style_button_stopped, 255);
+
+    // Pressed-state styles: slightly darker variants so buttons visibly depress
+    lv_style_set_bg_color(&style_button_l_pressed, mix_with_black(COLOR_SCHEMES[index].button_l, 128));
+    lv_style_set_bg_opa(&style_button_l_pressed, 255);
+    lv_style_set_text_color(&style_button_l_pressed, lv_color_white());
+    lv_style_set_text_opa(&style_button_l_pressed, 255);
+
+    lv_style_set_bg_color(&style_button_m_pressed, mix_with_black(COLOR_SCHEMES[index].button_m, 128));
+    lv_style_set_bg_opa(&style_button_m_pressed, 255);
+    lv_style_set_text_color(&style_button_m_pressed, lv_color_white());
+    lv_style_set_text_opa(&style_button_m_pressed, 255);
+
+    lv_style_set_bg_color(&style_button_r_pressed, mix_with_black(COLOR_SCHEMES[index].button_r, 128));
+    lv_style_set_bg_opa(&style_button_r_pressed, 255);
+    lv_style_set_text_color(&style_button_r_pressed, lv_color_white());
+    lv_style_set_text_opa(&style_button_r_pressed, 255);
+
+    lv_style_set_bg_color(&style_button_running_pressed, mix_with_black(0xB3261E, 128));
+    lv_style_set_bg_opa(&style_button_running_pressed, 255);
+    lv_style_set_text_color(&style_button_running_pressed, lv_color_white());
+    lv_style_set_text_opa(&style_button_running_pressed, 255);
+
+    lv_style_set_bg_color(&style_button_stopped_pressed, mix_with_black(0x228B22, 128));
+    lv_style_set_bg_opa(&style_button_stopped_pressed, 255);
+    lv_style_set_text_color(&style_button_stopped_pressed, lv_color_white());
+    lv_style_set_text_opa(&style_button_stopped_pressed, 255);
+
+    // Focused-state styles: use the scheme's explicit focused_button value
+    uint32_t focus_col = COLOR_SCHEMES[index].focused_button;
+    lv_style_set_bg_color(&style_button_l_focused, lv_color_hex(focus_col));
+    lv_style_set_bg_opa(&style_button_l_focused, 255);
+    lv_style_set_text_color(&style_button_l_focused, lv_color_white());
+    lv_style_set_text_opa(&style_button_l_focused, 255);
+
+    lv_style_set_bg_color(&style_button_m_focused, lv_color_hex(focus_col));
+    lv_style_set_bg_opa(&style_button_m_focused, 255);
+    lv_style_set_text_color(&style_button_m_focused, lv_color_white());
+    lv_style_set_text_opa(&style_button_m_focused, 255);
+
+    lv_style_set_bg_color(&style_button_r_focused, lv_color_hex(focus_col));
+    lv_style_set_bg_opa(&style_button_r_focused, 255);
+    lv_style_set_text_color(&style_button_r_focused, lv_color_white());
+    lv_style_set_text_opa(&style_button_r_focused, 255);
 
     // Sliders: define a track (lighter) and indicator (saturated) style per-slot
     uint32_t slider_vals[4] = {
@@ -71,12 +155,24 @@ void styles_apply_scheme(int index) {
         COLOR_SCHEMES[index].slider4,
     };
     for (int i = 0; i < 4; ++i) {
-        lv_style_set_bg_color(&style_slider_track[i], mix_with_white(slider_vals[i], 64));
+        // Make the track subtly lighter but avoid washing out to white
+        // Use a very small white mix so tracks don't appear bleached.
+            lv_style_set_bg_color(&style_slider_track[i], mix_with_white(slider_vals[i], 5));
         lv_style_set_bg_opa(&style_slider_track[i], 255);
+        lv_style_set_radius(&style_slider_track[i], 4);
 
-        lv_style_set_bg_color(&style_slider_indicator[i], lv_color_hex(slider_vals[i]));
-        lv_style_set_bg_grad_color(&style_slider_indicator[i], lv_color_hex(slider_vals[i]));
+        // Indicator (fill + knob) should be a saturated, slightly darker variant
+        // Darken the indicator moderately so it stays visible but not black
+        lv_color_t ind_col = mix_with_black(slider_vals[i], 36);
+        lv_style_set_bg_color(&style_slider_indicator[i], ind_col);
+        lv_style_set_bg_grad_color(&style_slider_indicator[i], ind_col);
         lv_style_set_bg_opa(&style_slider_indicator[i], 255);
+        lv_style_set_radius(&style_slider_indicator[i], 6);
+        // Ensure the knob/indicator doesn't get a default black border by
+        // explicitly setting border color/width and opacity.
+        lv_style_set_border_color(&style_slider_indicator[i], ind_col);
+        lv_style_set_border_opa(&style_slider_indicator[i], 255);
+        lv_style_set_border_width(&style_slider_indicator[i], 0);
     }
 
     // Battery

@@ -720,6 +720,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_add_event_cb(ui_StartButtonL, ui_event_StartButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_StartButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_StartButtonL, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_StartButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_StartButtonLText
@@ -755,6 +756,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_add_event_cb(ui_StartButtonM, ui_event_StartButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_StartButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_StartButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_StartButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_StartButtonMText
@@ -790,6 +792,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_add_event_cb(ui_StartButtonR, ui_event_StartButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_StartButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_StartButtonR, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_StartButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_StartButtonRText
@@ -929,6 +932,7 @@ void ui_Home_screen_init(void)
     lv_obj_add_event_cb(ui_HomeButtonL, ui_event_HomeButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_event_cb(ui_HomeButtonL, ui_event_HomeButtonL, LV_EVENT_LONG_PRESSED, NULL);
     lv_obj_add_style(ui_HomeButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_HomeButtonL, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_HomeButtonL, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_HomeButtonLText
@@ -964,6 +968,7 @@ void ui_Home_screen_init(void)
     lv_obj_add_event_cb(ui_HomeButtonM, ui_event_HomeButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_event_cb(ui_HomeButtonM, ui_event_HomeButtonM, LV_EVENT_LONG_PRESSED, NULL);
     lv_obj_add_style(ui_HomeButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_HomeButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_HomeButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_HomeButtonMText
@@ -999,6 +1004,7 @@ void ui_Home_screen_init(void)
     lv_obj_add_event_cb(ui_HomeButtonR, ui_event_HomeButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_event_cb(ui_HomeButtonR, ui_event_HomeButtonR, LV_EVENT_LONG_PRESSED, NULL);
     lv_obj_add_style(ui_HomeButtonR, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_HomeButtonR, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_HomeButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_HomeButtonRText
@@ -1286,7 +1292,6 @@ void ui_Home_screen_init(void)
     lv_label_set_text(ui_connect, T_BLANK);
 
 }
-
 void ui_Pattern_screen_init(void)
 {
 
@@ -1332,6 +1337,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_add_event_cb(ui_PatternButtonL, ui_event_PatternButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_PatternButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_PatternButtonL, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_PatternButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_PatternButtonLText
@@ -1367,6 +1373,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_add_event_cb(ui_PatternButtonM, ui_event_PatternButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_PatternButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_PatternButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_PatternButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_PatternButtonMText
@@ -1402,6 +1409,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_add_event_cb(ui_PatternButtonR, ui_event_PatternButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_PatternButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_PatternButtonR, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_PatternButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_PatternButtonRText
@@ -1544,6 +1552,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_add_event_cb(ui_EJECTButtonL, ui_event_EJECTButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_EJECTButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_EJECTButtonL, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_EJECTButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_EJECTButtonLText
@@ -1579,6 +1588,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_add_event_cb(ui_EJECTButtonM, ui_event_EJECTButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_EJECTButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_EJECTButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_EJECTButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_EJECTButtonMText
@@ -1614,6 +1624,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_add_event_cb(ui_EJECTButtonR, ui_event_EJECTButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_EJECTButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_EJECTButtonR, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_EJECTButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     // ui_EJECTButtonRText
@@ -1678,8 +1689,6 @@ void ui_EJECTSettings_screen_init(void)
     lv_obj_add_style(ui_Battery6, &style_battery_indicator, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 
 }
-
-
 void ui_Settings_screen_init(void)
 {
 
@@ -1690,6 +1699,7 @@ void ui_Settings_screen_init(void)
     lv_obj_clear_flag(ui_Settings, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_add_event_cb(ui_Settings, ui_event_Settings, LV_EVENT_ALL, NULL);
+    lv_obj_add_style(ui_Settings, &style_background, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // ui_Logo1
 
@@ -1725,6 +1735,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_add_event_cb(ui_SettingsButtonL, ui_event_SettingsButtonL, LV_EVENT_ALL, NULL);
     lv_obj_add_style(ui_SettingsButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_SettingsButtonL, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
 
     // ui_SettingsButtonLText
 
@@ -1761,6 +1772,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_add_event_cb(ui_SettingsButtonM, ui_event_SettingsButtonM, LV_EVENT_ALL, NULL);
     lv_obj_add_style(ui_SettingsButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_SettingsButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
 
 //CHECK    lv_obj_add_event_cb(ui_darkmode, settings_checkbox_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
     // ui_SettingsButtonMText
@@ -1797,6 +1809,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_add_event_cb(ui_SettingsButtonR, ui_event_SettingsButtonR, LV_EVENT_ALL, NULL);
     lv_obj_add_style(ui_SettingsButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_SettingsButtonR, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
 
     // ui_SettingsButtonRText
 
@@ -1988,8 +2001,6 @@ void ui_Settings_screen_init(void)
     // TODO: Set encoder 2 to use ui_g_settings group here, e.g.:
     // lv_indev_set_group(encoder2_indev, ui_g_settings);
 }
-
-
 void ui_Menu_screen_init(void)
 {
     // ui_Menu
@@ -2151,6 +2162,7 @@ void ui_Menu_screen_init(void)
     lv_obj_clear_flag(ui_MenuButtonL, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(ui_MenuButtonL, ui_event_MenuButtonL_restart, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_MenuButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_MenuButtonL, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_MenuButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     ui_MenuButtonLText = lv_label_create(ui_MenuButtonL);
@@ -2169,6 +2181,7 @@ void ui_Menu_screen_init(void)
     lv_obj_clear_flag(ui_MenuButtonM, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(ui_MenuButtonM, ui_event_MenuButtonM_bottom, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_MenuButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_MenuButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_MenuButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     ui_MenuButtonMText = lv_label_create(ui_MenuButtonM);
@@ -2187,6 +2200,7 @@ void ui_Menu_screen_init(void)
     lv_obj_clear_flag(ui_MenuButtonR, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(ui_MenuButtonR, ui_event_MenuButtonR_bottom, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_MenuButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_MenuButtonR, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_MenuButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     ui_MenuButtonRText = lv_label_create(ui_MenuButtonR);
@@ -2233,6 +2247,7 @@ void ui_Streaming_screen_init(void)
     lv_obj_clear_flag(ui_StreamingButtonL, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(ui_StreamingButtonL, ui_event_StreamingButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_StreamingButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_StreamingButtonL, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_StreamingButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     ui_StreamingButtonLText = lv_label_create(ui_StreamingButtonL);
@@ -2256,6 +2271,7 @@ void ui_Streaming_screen_init(void)
     lv_obj_add_event_cb(ui_StreamingButtonM, ui_event_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_event_cb(ui_StreamingButtonM, ui_event_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_StreamingButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_StreamingButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_StreamingButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     ui_StreamingButtonMText = lv_label_create(ui_StreamingButtonM);
@@ -2278,6 +2294,7 @@ void ui_Streaming_screen_init(void)
     lv_obj_clear_flag(ui_StreamingButtonR, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(ui_StreamingButtonR, ui_event_StreamingButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_StreamingButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_StreamingButtonR, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_StreamingButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     ui_StreamingButtonRText = lv_label_create(ui_StreamingButtonR);
@@ -2441,6 +2458,7 @@ void ui_Addons_screen_init(void)
     lv_obj_set_align(ui_AddonsItem0, LV_ALIGN_CENTER);
     lv_obj_add_event_cb(ui_AddonsItem0, ui_event_AddonsItem0, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_AddonsItem0, &style_slider_track[0], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_AddonsItem0, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_AddonsItem0, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     ui_AddonsItem0Text = lv_label_create(ui_AddonsItem0);
@@ -2455,6 +2473,7 @@ void ui_Addons_screen_init(void)
     lv_obj_set_align(ui_AddonsItem1, LV_ALIGN_CENTER);
     lv_obj_add_event_cb(ui_AddonsItem1, ui_event_AddonsItem1, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_AddonsItem1, &style_slider_track[1], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_AddonsItem1, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_AddonsItem1, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     ui_AddonsItem1Text = lv_label_create(ui_AddonsItem1);
@@ -2469,6 +2488,7 @@ void ui_Addons_screen_init(void)
     lv_obj_set_align(ui_AddonsItem2, LV_ALIGN_CENTER);
     lv_obj_add_event_cb(ui_AddonsItem2, ui_event_AddonsItem2, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_AddonsItem2, &style_slider_track[2], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_AddonsItem2, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
     lv_obj_add_style(ui_AddonsItem2, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
 
     ui_AddonsItem2Text = lv_label_create(ui_AddonsItem2);
@@ -2484,6 +2504,7 @@ void ui_Addons_screen_init(void)
     lv_obj_set_align(ui_AddonsButtonL, LV_ALIGN_CENTER);
     lv_obj_add_event_cb(ui_AddonsButtonL, ui_event_AddonsButtonL, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_AddonsButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_AddonsButtonL, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
 
     ui_AddonsButtonLText = lv_label_create(ui_AddonsButtonL);
     lv_obj_center(ui_AddonsButtonLText);
@@ -2498,6 +2519,7 @@ void ui_Addons_screen_init(void)
     lv_obj_set_align(ui_AddonsButtonM, LV_ALIGN_CENTER);
     lv_obj_add_event_cb(ui_AddonsButtonM, ui_event_AddonsButtonM, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_AddonsButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_AddonsButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
 
     ui_AddonsButtonMText = lv_label_create(ui_AddonsButtonM);
     lv_obj_center(ui_AddonsButtonMText);
@@ -2512,6 +2534,7 @@ void ui_Addons_screen_init(void)
     lv_obj_set_align(ui_AddonsButtonR, LV_ALIGN_CENTER);
     lv_obj_add_event_cb(ui_AddonsButtonR, ui_event_AddonsButtonR, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_style(ui_AddonsButtonR, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_AddonsButtonR, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
 
     ui_AddonsButtonRText = lv_label_create(ui_AddonsButtonR);
     lv_obj_center(ui_AddonsButtonRText);

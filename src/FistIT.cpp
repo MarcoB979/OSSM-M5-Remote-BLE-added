@@ -103,6 +103,11 @@ static void styleSlider(lv_obj_t *slider, int slot)
   lv_obj_add_style(slider, &style_slider_track[slot], LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_add_style(slider, &style_slider_indicator[slot], LV_PART_INDICATOR | LV_STATE_DEFAULT);
   lv_obj_add_style(slider, &style_slider_indicator[slot], LV_PART_KNOB | LV_STATE_DEFAULT);
+  // Ensure the indicator and knob use the active scheme colors for this slot
+  uint32_t slotVals[4] = { getActiveSlider1Color(), getActiveSlider2Color(), getActiveSlider3Color(), getActiveSlider4Color() };
+  lv_color_t c = lv_color_hex(slotVals[slot]);
+  lv_obj_set_style_bg_color(slider, c, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(slider, c, LV_PART_KNOB | LV_STATE_DEFAULT);
 }
 
 static void createSliderRow(lv_obj_t **rowLabel,
@@ -160,7 +165,7 @@ static void createScreenIfNeeded()
   lv_obj_set_y(s_title, 12);
   lv_label_set_text(s_title, "Fist-IT");
   lv_obj_set_style_text_font(s_title, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_text_color(s_title, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
   s_batt_title = lv_label_create(s_screen);
   lv_obj_set_width(s_batt_title, 85);
@@ -190,6 +195,7 @@ static void createScreenIfNeeded()
   lv_obj_set_x(s_button_left, lv_pct(-33));
   lv_obj_set_align(s_button_left, LV_ALIGN_CENTER);
   lv_obj_add_style(s_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_button_left, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
   lv_obj_add_style(s_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
   s_button_left_text = lv_label_create(s_button_left);
   lv_obj_set_align(s_button_left_text, LV_ALIGN_CENTER);
@@ -202,6 +208,7 @@ static void createScreenIfNeeded()
   lv_obj_set_x(s_button_mid, lv_pct(0));
   lv_obj_set_align(s_button_mid, LV_ALIGN_CENTER);
   lv_obj_add_style(s_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_button_mid, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
   lv_obj_add_style(s_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
   s_button_mid_text = lv_label_create(s_button_mid);
   lv_obj_set_align(s_button_mid_text, LV_ALIGN_CENTER);
@@ -214,6 +221,7 @@ static void createScreenIfNeeded()
   lv_obj_set_x(s_button_right, lv_pct(33));
   lv_obj_set_align(s_button_right, LV_ALIGN_CENTER);
   lv_obj_add_style(s_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_button_right, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
   lv_obj_add_style(s_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
   s_button_right_text = lv_label_create(s_button_right);
   lv_obj_set_align(s_button_right_text, LV_ALIGN_CENTER);
@@ -226,11 +234,14 @@ static void refreshTheme()
     return;
   }
 
+  // Use the shared background style but force a black background for FistIT
   lv_obj_add_style(s_screen, &style_background, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(s_screen, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
 
   if (s_title != nullptr) {
     lv_obj_add_style(s_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(s_title, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(s_title, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
   }
 
   lv_obj_t *valueLabels[] = {s_speed_value, s_rotation_value, s_pause_value, s_accel_value};
@@ -238,7 +249,16 @@ static void refreshTheme()
     if (!lbl) continue;
     lv_obj_add_style(lbl, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(lbl, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
   }
+  // Ensure labels and button texts are white
+  if (s_speed_label) lv_obj_set_style_text_color(s_speed_label, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (s_rotation_label) lv_obj_set_style_text_color(s_rotation_label, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (s_pause_label) lv_obj_set_style_text_color(s_pause_label, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (s_accel_label) lv_obj_set_style_text_color(s_accel_label, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (s_button_left_text) lv_obj_set_style_text_color(s_button_left_text, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (s_button_mid_text) lv_obj_set_style_text_color(s_button_mid_text, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (s_button_right_text) lv_obj_set_style_text_color(s_button_right_text, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
   styleSlider(s_speed_slider, 0);
   styleSlider(s_rotation_slider, 1);
   styleSlider(s_pause_slider, 2);

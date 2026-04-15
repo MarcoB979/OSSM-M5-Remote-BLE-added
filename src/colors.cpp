@@ -27,6 +27,10 @@
 // Color scheme catalog
 // ---------------------------------------------------------------------------
 
+static lv_color_t mix_with_white(uint32_t hex, uint8_t mix_amount) {
+    return lv_color_mix(lv_color_hex(hex), lv_color_hex(0xFFFFFF), mix_amount);
+}
+
 const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
     // name, title_bar, button_l, button_m, button_r, slider1, slider2, slider3, slider4, battery_main, battery_indicator, roller, background, text_primary, text_secondary
     { "Deep Purple",
@@ -121,9 +125,13 @@ static void updateVisibleSchemeButtons() {
             lv_obj_clear_flag(s_schemeBtn[slot], LV_OBJ_FLAG_HIDDEN);
         }
 
+        // Set the visible scheme button background to a lighter variant
+        // of the scheme's title bar so the label is readable, and use the
+        // scheme's middle button color for the focused state indicator.
         lv_obj_set_style_bg_color(
-            s_schemeBtn[slot], lv_color_hex(COLOR_SCHEMES[scheme].title_bar),
+            s_schemeBtn[slot], mix_with_white(COLOR_SCHEMES[scheme].title_bar, 5),
             LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(s_schemeBtn[slot], 255, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_color(
             s_schemeBtn[slot], lv_color_hex(COLOR_SCHEMES[scheme].button_m),
             LV_PART_MAIN | LV_STATE_FOCUSED);
@@ -178,14 +186,17 @@ static void rs_btnPrimary(lv_obj_t *btn, uint32_t primary) {
     // runtime theme updates apply via `styles_apply_scheme()`.
     if (primary == COLOR_SCHEMES[g_active_color_scheme].button_l) {
         lv_obj_add_style(btn, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(btn, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
         return;
     }
     if (primary == COLOR_SCHEMES[g_active_color_scheme].button_m) {
         lv_obj_add_style(btn, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(btn, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
         return;
     }
     if (primary == COLOR_SCHEMES[g_active_color_scheme].button_r) {
         lv_obj_add_style(btn, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(btn, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
         return;
     }
     // Fallback to direct color set for unusual cases.
@@ -196,15 +207,18 @@ static void rs_btnPrimary(lv_obj_t *btn, uint32_t primary) {
 static void rs_btnFocused(lv_obj_t *btn, uint32_t secondary) {
     if (!btn) return;
     if (secondary == COLOR_SCHEMES[g_active_color_scheme].button_l) {
-        lv_obj_add_style(btn, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
+        lv_obj_add_style(btn, &style_button_l_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+        lv_obj_add_style(btn, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
         return;
     }
     if (secondary == COLOR_SCHEMES[g_active_color_scheme].button_m) {
-        lv_obj_add_style(btn, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
+        lv_obj_add_style(btn, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+        lv_obj_add_style(btn, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
         return;
     }
     if (secondary == COLOR_SCHEMES[g_active_color_scheme].button_r) {
-        lv_obj_add_style(btn, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
+        lv_obj_add_style(btn, &style_button_r_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+        lv_obj_add_style(btn, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
         return;
     }
     lv_obj_set_style_bg_color(btn, lv_color_hex(secondary), LV_PART_MAIN | LV_STATE_FOCUSED);
@@ -233,6 +247,16 @@ static void rs_slider(lv_obj_t *sl, uint32_t primary, uint32_t /*secondary*/) {
         lv_obj_add_style(sl, &style_slider_track[found], LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_add_style(sl, &style_slider_indicator[found], LV_PART_INDICATOR | LV_STATE_DEFAULT);
         lv_obj_add_style(sl, &style_slider_indicator[found], LV_PART_KNOB | LV_STATE_DEFAULT);
+        // Also set explicit per-object style properties to ensure the
+        // theme or other defaults don't override the intended colors.
+        // Make the track visibly lighter than the bullet color so the
+        // indicator stands out but the track still reads as the same hue.
+        lv_obj_set_style_bg_color(sl, mix_with_white(vals[found], 5), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa  (sl, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(sl, lv_color_hex(vals[found]), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa  (sl, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(sl, lv_color_hex(vals[found]), LV_PART_KNOB | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa  (sl, 255, LV_PART_KNOB | LV_STATE_DEFAULT);
         return;
     }
 
@@ -280,10 +304,19 @@ void applyColorScheme(int index) {
     rs_btnPrimary(ui_StartButtonL, COLOR_SCHEMES[index].button_l);
     rs_btnPrimary(ui_StartButtonM, COLOR_SCHEMES[index].button_m);
     rs_btnPrimary(ui_StartButtonR, COLOR_SCHEMES[index].button_r);
+    // Ensure labels on these bottom buttons use white text regardless of
+    // other style precedence (addresses UI generator defaults).
+    if (ui_StartButtonL) lv_obj_set_style_text_color(ui_StartButtonL, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_StartButtonM) lv_obj_set_style_text_color(ui_StartButtonM, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_StartButtonR) lv_obj_set_style_text_color(ui_StartButtonR, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // Home screen (L + R only, M is start/stop green and handled separately in ui.c)
     rs_btnPrimary(ui_HomeButtonL, COLOR_SCHEMES[index].button_l);
     rs_btnPrimary(ui_HomeButtonR, COLOR_SCHEMES[index].button_r);
+    // Force home bottom button labels to white to override generator defaults
+    if (ui_HomeButtonLText) lv_obj_set_style_text_color(ui_HomeButtonLText, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_HomeButtonMText) lv_obj_set_style_text_color(ui_HomeButtonMText, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_HomeButtonRText) lv_obj_set_style_text_color(ui_HomeButtonRText, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // Pattern screen
     rs_btnPrimary(ui_PatternButtonL, COLOR_SCHEMES[index].button_l);
@@ -307,6 +340,11 @@ void applyColorScheme(int index) {
     rs_btnPrimary(ui_MenuButtonL, COLOR_SCHEMES[index].button_l);
     rs_btnPrimary(ui_MenuButtonM, COLOR_SCHEMES[index].button_m);
     rs_btnPrimary(ui_MenuButtonR, COLOR_SCHEMES[index].button_r);
+    // Ensure the Menu left (Select) label is white
+    if (ui_MenuButtonLText) lv_obj_set_style_text_color(ui_MenuButtonLText, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    // Force bottom menu button labels to white as requested
+    if (ui_MenuButtonMText) lv_obj_set_style_text_color(ui_MenuButtonMText, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_MenuButtonRText) lv_obj_set_style_text_color(ui_MenuButtonRText, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // Streaming screen
     rs_btnPrimary(ui_StreamingButtonL, COLOR_SCHEMES[index].button_l);
@@ -317,20 +355,42 @@ void applyColorScheme(int index) {
     rs_btnPrimary(ui_AddonsButtonL, COLOR_SCHEMES[index].button_l);
     rs_btnPrimary(ui_AddonsButtonM, COLOR_SCHEMES[index].button_m);
     rs_btnPrimary(ui_AddonsButtonR, COLOR_SCHEMES[index].button_r);
-    rs_btnPrimary(ui_AddonsItem0, COLOR_SCHEMES[index].button_l);
-    rs_btnPrimary(ui_AddonsItem1, COLOR_SCHEMES[index].button_l);
-    rs_btnPrimary(ui_AddonsItem2, COLOR_SCHEMES[index].button_l);
+    // Map addon list items to slider semantic colors: item0->slider1, item1->slider2, item2->slider3
+    if (ui_AddonsItem0) rs_btnPrimary(ui_AddonsItem0, COLOR_SCHEMES[index].slider1);
+    if (ui_AddonsItem1) rs_btnPrimary(ui_AddonsItem1, COLOR_SCHEMES[index].slider2);
+    if (ui_AddonsItem2) rs_btnPrimary(ui_AddonsItem2, COLOR_SCHEMES[index].slider3);
+    // Force Addons screen background to black and ensure bottom labels are white
+    if (ui_Addons) {
+        lv_obj_set_style_bg_color(ui_Addons, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_Addons, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+    if (ui_AddonsButtonLText) lv_obj_set_style_text_color(ui_AddonsButtonLText, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_AddonsButtonMText) lv_obj_set_style_text_color(ui_AddonsButtonMText, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_AddonsButtonRText) lv_obj_set_style_text_color(ui_AddonsButtonRText, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    // Ensure addon item labels are white so text contrasts with colored backgrounds
+    if (ui_AddonsItem0Text) lv_obj_set_style_text_color(ui_AddonsItem0Text, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_AddonsItem1Text) lv_obj_set_style_text_color(ui_AddonsItem1Text, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_AddonsItem2Text) lv_obj_set_style_text_color(ui_AddonsItem2Text, lv_color_white(), LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // Colors screen — back button
     rs_btnPrimary(s_backBtn, COLOR_SCHEMES[index].button_l);
 
     // --- 3. Menu big tiles: primary bg + secondary on focus ---
-    lv_obj_t *menuTiles[] = {
-        ui_MenuButtonTL, ui_MenuButtonTR, ui_MenuButtonML, ui_MenuButtonBL,
-    };
-    for (lv_obj_t *btn : menuTiles) {
-        rs_btnPrimary(btn, BTN);
-        rs_btnFocused(btn, BTN_FOC);
+    // Assign corner tiles semantic slider colors (TL->slider1, TR->slider2,
+    // BL->slider3, BR->slider4) so rainbow and other schemes map correctly.
+    if (ui_MenuButtonTL) rs_btnPrimary(ui_MenuButtonTL, COLOR_SCHEMES[index].slider1);
+    if (ui_MenuButtonTR) rs_btnPrimary(ui_MenuButtonTR, COLOR_SCHEMES[index].slider2);
+    if (ui_MenuButtonBL) rs_btnPrimary(ui_MenuButtonBL, COLOR_SCHEMES[index].slider3);
+    if (ui_MenuButtonBR) rs_btnPrimary(ui_MenuButtonBR, COLOR_SCHEMES[index].slider4);
+    // Focused state may still use the shared focused color for consistency.
+    if (ui_MenuButtonTL) rs_btnFocused(ui_MenuButtonTL, BTN_FOC);
+    if (ui_MenuButtonTR) rs_btnFocused(ui_MenuButtonTR, BTN_FOC);
+    if (ui_MenuButtonBL) rs_btnFocused(ui_MenuButtonBL, BTN_FOC);
+    if (ui_MenuButtonBR) rs_btnFocused(ui_MenuButtonBR, BTN_FOC);
+    // Make the Menu screen background black regardless of the active scheme
+    if (ui_Menu) {
+        lv_obj_set_style_bg_color(ui_Menu, lv_color_hex(0x000000), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(ui_Menu, 255, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
 
     // --- 4. Addons items: focused state ---

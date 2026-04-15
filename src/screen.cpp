@@ -13,6 +13,7 @@
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
 #include "language.h"
+#include "styles.h"
 
 // Global UI/session state shared across modules.
 int g_brightness_value = 180;
@@ -324,7 +325,7 @@ void updateHomeTopLeftStateLabel()
     lv_obj_set_align(statusLabels[i], LV_ALIGN_LEFT_MID);
     lv_obj_set_x(statusLabels[i], 10);
     lv_obj_set_y(statusLabels[i], -102);
-    lv_obj_set_style_text_color(statusLabels[i], lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(statusLabels[i], &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(statusLabels[i], &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_clear_flag(statusLabels[i], LV_OBJ_FLAG_HIDDEN);
 
@@ -384,7 +385,7 @@ void updateHomeTopLeftStateLabel()
       continue;
     }
 
-    lv_obj_set_style_text_color(label, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(label, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_text(label, labelText);
     lv_obj_update_layout(label);

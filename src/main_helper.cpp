@@ -9,6 +9,7 @@
 #include "language.h"
 #include "ui/ui.h"
 #include "colors.h"
+#include "styles.h"
 
 int st_screens = ST_UI_START;
 
@@ -222,8 +223,8 @@ int showNotification(const char *title,
   lv_obj_remove_style_all(overlay);
   lv_obj_set_size(overlay, HOR_RES, VER_RES);
   lv_obj_center(overlay);
+  lv_obj_add_style(overlay, &style_background, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_bg_opa(overlay, LV_OPA_50, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_color(overlay, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
 
   lv_obj_t *panel = lv_obj_create(overlay);
@@ -236,23 +237,21 @@ int showNotification(const char *title,
     lv_obj_set_size(panel, (HOR_RES * 90) / 100, (VER_RES * 75) / 100);
     lv_obj_align(panel, LV_ALIGN_CENTER, 0, 5);
   }
+  lv_obj_add_style(panel, &style_background, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_radius(panel, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_border_width(panel, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_border_color(panel, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_color(panel, lv_color_hex(schemeSecondary), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
   lv_obj_t *titleBar = lv_obj_create(panel);
   lv_obj_remove_style_all(titleBar);
   lv_obj_set_size(titleBar, lv_pct(100), 32);
   lv_obj_align(titleBar, LV_ALIGN_TOP_MID, 0, 0);
-  lv_obj_set_style_bg_opa(titleBar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_color(titleBar, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(titleBar, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
 
   lv_obj_t *titleLabel = lv_label_create(titleBar);
   lv_label_set_text(titleLabel, (title != nullptr && title[0] != '\0') ? title : "Notification");
-  lv_obj_set_style_text_color(titleLabel, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(titleLabel, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_text_font(titleLabel, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_center(titleLabel);
 
@@ -260,7 +259,7 @@ int showNotification(const char *title,
   lv_obj_set_width(bodyLabel, lv_pct(90));
   lv_label_set_long_mode(bodyLabel, LV_LABEL_LONG_WRAP);
   lv_label_set_text(bodyLabel, (text != nullptr) ? text : "");
-  lv_obj_set_style_text_color(bodyLabel, lv_color_hex(schemeTextSecondary), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(bodyLabel, &style_text_secondary, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_text_font(bodyLabel, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_align(bodyLabel, LV_ALIGN_TOP_MID, 0, 48);
 
@@ -273,29 +272,31 @@ int showNotification(const char *title,
     lv_obj_set_flex_align(buttonRow, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
 
     if (showLeftButton) {
-      lv_obj_t *leftBtn = lv_btn_create(buttonRow);
-      lv_obj_set_size(leftBtn, 120, 36);
-      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_t *leftBtn = lv_btn_create(buttonRow);
+    lv_obj_set_size(leftBtn, 120, 36);
+    // Left action should use the semantic left button color
+    lv_obj_add_style(leftBtn, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(leftBtn, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
       lv_obj_set_style_border_width(leftBtn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
       lv_obj_t *leftLbl = lv_label_create(leftBtn);
       lv_label_set_text(leftLbl, (leftButtonText != nullptr && leftButtonText[0] != '\0') ? leftButtonText : "Left");
-      lv_obj_set_style_text_color(leftLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_add_style(leftLbl, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(leftLbl);
       lv_obj_add_event_cb(leftBtn, notification_left_button_cb, LV_EVENT_SHORT_CLICKED, nullptr);
     }
 
     if (showRightButton) {
-      lv_obj_t *rightBtn = lv_btn_create(buttonRow);
-      lv_obj_set_size(rightBtn, 120, 36);
-      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_t *rightBtn = lv_btn_create(buttonRow);
+    lv_obj_set_size(rightBtn, 120, 36);
+    // Right action should use the semantic right button color
+    lv_obj_add_style(rightBtn, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(rightBtn, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
       lv_obj_set_style_border_width(rightBtn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
       lv_obj_t *rightLbl = lv_label_create(rightBtn);
       lv_label_set_text(rightLbl, (rightButtonText != nullptr && rightButtonText[0] != '\0') ? rightButtonText : "Right");
-      lv_obj_set_style_text_color(rightLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_add_style(rightLbl, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(rightLbl);
       lv_obj_add_event_cb(rightBtn, notification_right_button_cb, LV_EVENT_SHORT_CLICKED, nullptr);
     }

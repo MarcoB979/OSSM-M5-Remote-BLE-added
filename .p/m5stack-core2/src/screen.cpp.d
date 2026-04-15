@@ -689,4 +689,4 @@
  C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/driver/include/driver/pcnt.h \
  C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/include/hal/pcnt_types.h \
  src/config.h src/screen.h src/colors.h src/OssmBLE.h src/Eject.h \
- src/FistIT.h src/ui/ui.h src/ui/ui_helpers.h src/language.h
+ src/FistIT.h src/ui/ui.h src/ui/ui_helpers.h src/language.h src/styles.h

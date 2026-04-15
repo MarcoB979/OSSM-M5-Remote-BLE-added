@@ -689,4 +689,4 @@
  .pio/libdeps/m5stack-core2/ESP32Encoder/src/ESP32Encoder.h \
  C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/driver/include/driver/pcnt.h \
  C:/Users/User/.platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/include/hal/include/hal/pcnt_types.h \
- src/OssmBLE.h src/Eject.h src/language.h src/ui/ui.h
+ src/OssmBLE.h src/Eject.h src/language.h src/ui/ui.h src/styles.h

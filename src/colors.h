@@ -11,6 +11,7 @@ typedef struct {
     uint32_t    button_l;         // Left button / general button accent
     uint32_t    button_m;         // Middle button accent
     uint32_t    button_r;         // Right button accent
+    uint32_t    focused_button;   // Focused/selected button color (semantic)
     uint32_t    slider1;          // Slider slot 1 color
     uint32_t    slider2;          // Slider slot 2 color
     uint32_t    slider3;          // Slider slot 3 color
@@ -54,6 +55,7 @@ uint32_t getActiveBatteryMainColor(void);
 uint32_t getActiveBatteryIndicatorColor(void);
 uint32_t getActiveRollerColor(void);
 uint32_t getActiveBackgroundColor(void);
+uint32_t getActiveFocusedButtonColor(void);
 
 
 
