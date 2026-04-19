@@ -1,0 +1,404 @@
+#include <Arduino.h>
+#include <esp_now.h>
+#include <cstring>
+#include <M5Unified.h>
+#include <WiFi.h>
+#include <esp_wifi.h>
+
+#include "main.h"
+#include "language.h"
+#include "colors.h"
+#include "ui/ui.h"
+#include "ui/ui_helpers.h"
+#include "colors.h"
+#include "styles.h"
+#include "esp_nowCommunication.h"
+#include "OssmBLE.h"
+#include "Eject.h"
+#include "FistIT.h" 
+
+static bool ion = false;
+static uint8_t OSSM_Address[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static uint8_t ejectAddress[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static uint8_t fistAddress[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static constexpr uint8_t BROADCAST_ADDR[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+//static constexpr int LEGACY_OSSM_ID = OSSM_ID;
+//static constexpr int LEGACY_M5_ID = M5_ID;
+static uint32_t last_pairing_heartbeat_ms = 0;
+static int peer_id = OSSM_ID;
+static int local_id = M5_ID;
+static int Target = OSSM_ID;
+int wifi_channel_t = 1;
+bool OSSM_On = false;
+
+struct OSSMMessage outgoingcontrol;
+struct OSSMMessage incomingcontrol;
+
+struct addonMessage addonOutgoingcontrol;
+struct addonMessage addonIncomingcontrol;
+
+
+esp_now_peer_info_t peerInfo;
+
+
+static bool addPeer(const uint8_t *addr){
+  // If this is the broadcast address, don't add it as a peer — broadcasts
+  // do not require a peer entry and adding FF:FF:FF:FF:FF:FF can destabilize
+  // esp_now peer management on some SDK versions.
+  const bool isBroadcast = (addr[0] == 0xFF && addr[1] == 0xFF && addr[2] == 0xFF && addr[3] == 0xFF && addr[4] == 0xFF && addr[5] == 0xFF);
+  if (isBroadcast) {
+    // Some SDK/board variants require an explicit peer entry for
+    // the broadcast address (FF:FF:FF:FF:FF:FF). Try to add it and
+    // treat EXIST as success.
+    if (esp_now_is_peer_exist(addr)) {
+      return true;
+    }
+    esp_now_peer_info_t bp = {};
+    memcpy(bp.peer_addr, addr, 6);
+    bp.channel = ESP_NOW_CHANNEL;
+    bp.encrypt = false;
+    esp_err_t r = esp_now_add_peer(&bp);
+    if (r == ESP_OK || r == ESP_ERR_ESPNOW_EXIST) {
+      return true;
+    }
+    LogDebugFormatted("addPeer: failed to add broadcast peer err=%d", (int)r);
+    return false;
+  }
+
+  if (esp_now_is_peer_exist(addr)) {
+    return true;
+  }
+
+  esp_now_peer_info_t peerInfo = {};
+  memcpy(peerInfo.peer_addr, addr, 6);
+  peerInfo.channel = ESP_NOW_CHANNEL;
+  peerInfo.encrypt = false;
+  return (esp_now_add_peer(&peerInfo) == ESP_OK);
+}
+
+void EspNowSendPairingHeartbeat(){
+  if (Ossm_paired) {
+    return;
+  }
+
+  const uint32_t nowMs = millis();
+  if ((nowMs - last_pairing_heartbeat_ms) < 1000UL) {
+    return;
+  }
+  last_pairing_heartbeat_ms = nowMs;
+
+  if (!addPeer(BROADCAST_ADDR)) {
+    return;
+  }
+  
+  // Get ESP-IDF wifi channel (esp_wifi_get_channel requires output args)
+  uint8_t esp_primary_ch = 0;
+  wifi_second_chan_t esp_second = WIFI_SECOND_CHAN_NONE;
+  esp_err_t esp_ch_res = esp_wifi_get_channel(&esp_primary_ch, &esp_second);
+  LogDebugFormatted("Wifi channel: WIFI: %d ESP_NOW: %d (res=%d)", WiFi.channel(), (esp_ch_res == ESP_OK) ? esp_primary_ch : -1, (int)esp_ch_res);
+  outgoingcontrol.esp_command = HEARTBEAT;
+  outgoingcontrol.esp_heartbeat = true;
+  outgoingcontrol.esp_target = OSSM_ID;
+  //outgoingcontrol.esp_sender = M5_ID;
+  esp_err_t result = esp_now_send(BROADCAST_ADDR, reinterpret_cast<uint8_t *>(&outgoingcontrol), sizeof(outgoingcontrol));
+  LogDebugFormatted("ESP-NOW heartbeat sent to=%02X:%02X:%02X:%02X:%02X:%02X with command %d and target %d on WIFI Channel %d %s err=%d", BROADCAST_ADDR[0], BROADCAST_ADDR[1], BROADCAST_ADDR[2], BROADCAST_ADDR[3], BROADCAST_ADDR[4], BROADCAST_ADDR[5], outgoingcontrol.esp_command, outgoingcontrol.esp_target, wifi_channel_t, (result == ESP_OK) ? "succeeded" : "FAIL", (int)result);
+}
+
+static void setPairedAddress(const uint8_t *mac)
+{
+
+  if (memcmp(OSSM_Address, mac, 6) == 0 && Ossm_paired) {
+    return;
+  }
+
+  if (esp_now_is_peer_exist(OSSM_Address)) {
+    esp_now_del_peer(OSSM_Address);
+  }
+
+  memcpy(OSSM_Address, mac, 6);
+  if (addPeer(OSSM_Address)) {
+    Ossm_paired = true;
+    LogDebugFormatted("OSSM-IT paired MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+                      OSSM_Address[0], OSSM_Address[1], OSSM_Address[2],
+                      OSSM_Address[3], OSSM_Address[4], OSSM_Address[5]);
+  }
+
+  
+}
+
+static void toggleOnOff()
+{
+  if (ion) {
+    OSSMSendCommand(OFF, 0.0f, OSSM_ID);
+    ion = false;
+  } else {
+    OSSMSendCommand(ON, 0.0f, OSSM_ID);
+    ion = true;
+  }
+}
+
+bool OSSMIsPaired()
+{
+  return Ossm_paired;
+}
+
+bool OSSMSendCommand(int command, float value, int Target){
+
+  if (!Ossm_paired) {
+    LogDebugFormatted("TX OSSM blocked: not paired cmd=%d val=%.2f\n", command, value);
+    EspNowSendPairingHeartbeat();
+    return false;
+  }
+
+  if (!addPeer(OSSM_Address)) {
+    LogDebug("TX OSSM blocked: adding Peer failed");
+    return false;
+  }
+
+  outgoingcontrol.esp_connected = true;
+  outgoingcontrol.esp_command = command;
+  outgoingcontrol.esp_value = value;
+  outgoingcontrol.esp_target = peer_id;
+  //outgoingcontrol.esp_sender = local_id;
+
+  LogDebugFormatted("TX OSSM send cmd=%d val=%.2f target=%d sender= N/A to=%02X:%02X:%02X:%02X:%02X:%02X\n",
+                    command, value, outgoingcontrol.esp_target //outgoingcontrol.esp_sender
+,
+                    OSSM_Address[0], OSSM_Address[1], OSSM_Address[2], OSSM_Address[3], OSSM_Address[4], OSSM_Address[5]);
+  Serial.printf("ESP-NOW TX: to=%02X:%02X:%02X:%02X:%02X:%02X target=%d cmd=%d hb=%d len=%u\n",
+                OSSM_Address[0], OSSM_Address[1], OSSM_Address[2], OSSM_Address[3], OSSM_Address[4], OSSM_Address[5],
+                outgoingcontrol.esp_target, outgoingcontrol.esp_command, outgoingcontrol.esp_heartbeat ? 1 : 0, (unsigned)sizeof(outgoingcontrol));
+  esp_err_t result = esp_now_send(OSSM_Address, reinterpret_cast<uint8_t *>(&outgoingcontrol), sizeof(outgoingcontrol));
+  Serial.printf("ESP-NOW TX result=%d\n", (int)result);
+  LogDebugFormatted("TX OSSM result=%s err=%d\n", (result == ESP_OK) ? "OK" : "FAIL", (int)result);
+  return (result == ESP_OK);
+}
+
+bool OSSMHandleIncomingEspNowFrame(const uint8_t *mac, int Target, int sender, int command, float value, bool heartbeat){
+  (void)value;
+  (void)heartbeat;
+
+  peer_id = sender;
+  // Do NOT update local_id: M5 always identifies as M5_ID regardless of
+  // which legacy target ID the peer used to address us.
+
+  setPairedAddress(mac);
+
+  if (command == OFF) {
+    ion = false;
+  } else if (command == ON) {
+    ion = true;
+  }
+
+  // Do not touch LVGL here: this function is called from ESP-NOW recv path
+  // (wifi task). UI is refreshed in OSSMHandleScreen() on the main loop.
+  return true;
+}
+
+void onDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
+  LogDebug("Last Packet Send Status: ");
+  LogDebug(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
+  LogDebugFormatted("Speed: %f, Depth: %f, Stroke: %f, Command: %d, Value: %f, Target: %d\n",
+  outgoingcontrol.esp_speed, outgoingcontrol.esp_depth, outgoingcontrol.esp_stroke,  outgoingcontrol.esp_command, outgoingcontrol.esp_value, outgoingcontrol.esp_target);
+}
+
+static void onDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len) {
+  memcpy(&incomingcontrol, incomingData, sizeof(incomingcontrol));
+  LogDebug("Received ESP-NOW data");
+  LogDebugFormatted(
+    "ESP-NOW rx ONDATARECEIVED: from=%02X:%02X:%02X:%02X:%02X:%02X sender= N/A len=%d target=%d cmd=%d hb=%d paired=%d bleMode=%d speed=%.1f depth=%.1f\n",
+    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+    //incomingcontrol.esp_sender,
+    len,
+    incomingcontrol.esp_target,
+    incomingcontrol.esp_command,
+    incomingcontrol.esp_heartbeat ? 1 : 0,
+    Ossm_paired ? 1 : 0,
+    OssmBleIsMode() ? 1 : 0,
+    incomingcontrol.esp_speed,
+    incomingcontrol.esp_depth);
+//  LogDebugFormatted("Speed: %f, Depth: %f, Stroke: %f, Sensation: %f, Pattern: %f, RState: %d, Connected: %d, Heartbeat: %d, Command: %d, Value: %f, Target: %d\n",
+//    incomingcontrol.esp_speed, incomingcontrol.esp_depth, incomingcontrol.esp_stroke, incomingcontrol.esp_sensation, incomingcontrol.esp_pattern, incomingcontrol.esp_rstate, incomingcontrol.esp_connected, incomingcontrol.esp_heartbeat, incomingcontrol.esp_command, incomingcontrol.esp_value, incomingcontrol.esp_target);
+
+LogDebugFormatted("EJECT ID: %d, FIST ID: %d, OSSM ID: %d\n", EJECT_ID, FIST_ID, OSSM_ID);
+  // Update known address maps based on esp_sender
+  if (addonIncomingcontrol.esp_sender == EJECT_ID) {
+    memcpy(ejectAddress, mac, 6);
+    esp_err_t result = addPeer(ejectAddress);
+  } else if (addonIncomingcontrol.esp_sender == FIST_ID) {
+    memcpy(fistAddress, mac, 6);
+    esp_err_t result = addPeer(fistAddress);
+  } else {
+    // OSSM or legacy OSSM-like message: consider pairing
+    memcpy(OSSM_Address, mac, 6);
+    Ossm_paired = true;
+    esp_err_t result = addPeer(OSSM_Address);
+  }
+  // Let addons handle frames first (they may consume the frame)
+  if (EjectHandleIncomingEspNowFrame(mac, addonIncomingcontrol.esp_target, addonIncomingcontrol.esp_sender, addonIncomingcontrol.esp_command, addonIncomingcontrol.esp_value, addonIncomingcontrol.esp_heartbeat)) {
+    return;
+  }
+  if (FistITHandleIncomingEspNowFrame(mac, addonIncomingcontrol.esp_target, addonIncomingcontrol.esp_sender, addonIncomingcontrol.esp_command, addonIncomingcontrol.esp_value, addonIncomingcontrol.esp_heartbeat)) {
+    return;
+  }
+  
+  if(incomingcontrol.esp_target == M5_ID && Ossm_paired == false){
+
+    // Remove the existing peer (0xFF:0xFF:0xFF:0xFF:0xFF:0xFF)
+    esp_err_t result = esp_now_del_peer(peerInfo.peer_addr);
+
+    if (result == ESP_OK) {
+
+      memcpy(OSSM_Address, mac, 6); //get the mac address of the sender
+      
+      // Add the new peer
+      memcpy(peerInfo.peer_addr, OSSM_Address, 6);
+      if (esp_now_add_peer(&peerInfo) == ESP_OK) {
+        LogDebugFormatted("New peer added successfully, OSSM addresss : %02X:%02X:%02X:%02X:%02X:%02X\n", OSSM_Address[0], OSSM_Address[1], OSSM_Address[2], OSSM_Address[3], OSSM_Address[4], OSSM_Address[5]);
+        Ossm_paired = true;
+        lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
+      }
+      else {
+        LogDebug("Failed to add new peer");
+      }
+    }
+    else {
+      LogDebug("Failed to remove peer");
+    }
+
+    
+    if (incomingcontrol.esp_speed > 600) {
+      speedlimit = 600;
+    } else {
+      speedlimit = incomingcontrol.esp_speed;
+    }
+    LogDebug(speedlimit);
+    maxdepthinmm = incomingcontrol.esp_depth;
+    LogDebug(maxdepthinmm);
+    pattern = incomingcontrol.esp_pattern;
+    LogDebug(pattern);
+    outgoingcontrol.esp_target = OSSM_ID;
+
+    result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+    LogDebug(result);
+
+    if (result == ESP_OK) {
+      Ossm_paired = true;
+      // If the OSSM already reported max speed and depth in this packet,
+      // go straight to Home. Otherwise remain on the welcome/start screen
+      // and wait for post-homing updates.
+      if (incomingcontrol.esp_speed > 0 && incomingcontrol.esp_depth > 0) {
+        lv_label_set_text(ui_connect, "WIFI");
+        lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
+      } else {
+        lv_label_set_text(ui_Welcome, T_HOMING);
+      }
+    }
+  }
+
+  // Update limits from post-homing OSSM packets.
+  // The OSSM sends speed=0 before homing, then sends the real max speed once homing
+  // is complete. Because Ossm_paired is already true by then, the block above is
+  // skipped – so we catch those updates here instead.
+  if (incomingcontrol.esp_target == M5_ID && Ossm_paired == true && !OssmBleIsMode()) {
+    bool gotSpeed = false;
+    bool gotDepth = false;
+    if (incomingcontrol.esp_speed > 0) {
+      // update speed limit and slider range
+      speedlimit = incomingcontrol.esp_speed;
+      lv_slider_set_range(ui_homespeedslider, 0, incomingcontrol.esp_speed);
+      gotSpeed = true;
+    }
+    if (incomingcontrol.esp_depth > 0) {
+      maxdepthinmm = incomingcontrol.esp_depth;
+      lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
+      lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
+      gotDepth = true;
+    }
+
+    // If we were waiting for limits after pairing, and now have both, load Home
+    if (gotSpeed && gotDepth) {
+      lv_label_set_text(ui_connect, "WIFI");
+      lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON,20,0,false);
+    }
+  }
+
+  switch(incomingcontrol.esp_command)
+    {
+    case OFF: 
+    {
+    OSSM_On = false;
+    }
+    break;
+    case ON:
+    {
+    OSSM_On = true;
+    }
+    break;
+    }
+}
+
+void EspNowWaitForPairingOrTimeout(uint32_t timeoutMs, uint32_t heartbeatIntervalMs)
+{
+  uint32_t waitStartMs = millis();
+  uint32_t lastHeartbeatMs = 0;
+
+  while (!Ossm_paired && (millis() - waitStartMs) < timeoutMs) {
+    if ((millis() - lastHeartbeatMs) >= heartbeatIntervalMs) {
+      EspNowSendPairingHeartbeat();
+      lastHeartbeatMs = millis();
+    }
+
+    lv_task_handler();
+    M5.update();
+    vTaskDelay(pdMS_TO_TICKS(20));
+  }
+}
+
+// Process pending UI updates from ESP-NOW pairing/data in a thread-safe way
+// Call this from the main task loop to safely update LVGL UI
+void EspNowProcessPendingUiUpdates()
+{
+
+  // Check if limits are ready and we should show home screen
+  if (Ossm_paired) {
+    if (isStartScreenMinTimeElapsed()) {
+      lv_label_set_text(ui_connect, T_ESP_NOW);
+      lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+    }
+  }
+
+}
+
+bool EspNowComms_init(int channel) {
+  wifi_channel_t = channel;
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_channel(wifi_channel_t, WIFI_SECOND_CHAN_NONE);
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("esp_now_init failed");
+    return false;
+  }
+
+  esp_now_register_recv_cb(onDataRecv);
+  esp_now_register_send_cb(onDataSent);
+
+  Serial.printf("EspNowComms: initialized on channel %d\n", wifi_channel_t);
+  // Start default heartbeat task (broadcast discovery)
+  EspNowSendPairingHeartbeat();
+  return true;
+}
+
+void EspNowInitCommunication()
+{
+  // Ensure station mode and set explicit channel to match OSSM
+  WiFi.mode(WIFI_STA);
+  esp_wifi_set_channel(ESP_NOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  LogDebugFormatted("ESP-NOW channel set to %d\n", ESP_NOW_CHANNEL);
+
+  if (!EspNowComms_init(ESP_NOW_CHANNEL)) {
+    Serial.println("Error initializing ESP-NOW");
+  } else {
+    Serial.println("esp_now_init ok");
+  }
+}

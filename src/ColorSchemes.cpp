@@ -1,0 +1,111 @@
+// ColorSchemes.cpp — concrete COLOR_SCHEMES array moved out of colors.cpp
+// This file contains the `const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT]`
+// definition so the large initializer is kept separate from the runtime code.
+
+#include "colors.h"
+
+const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
+    // name, title_bar, button_l, button_m, button_r, slider1, slider2, slider3, slider4, battery_main, battery_indicator, roller, background, text_primary, text_secondary
+    { "Deep Purple",
+        0x83277B, // title_bar (Deep Purple)
+        0x83277B, // button_l (Deep Purple)
+        0x83277B, // button_m (Deep Purple)
+        0x83277B, // button_r (Deep Purple)
+        0xD591D5, // slider1 (Lavender)
+        0xD591D5, // slider2 (Lavender)
+        0xD591D5, // slider3 (Lavender)
+        0xD591D5, // slider4 (Lavender)
+        0xD591D5, // battery_main (Lavender)
+        0x83277B, // battery_indicator (Deep Purple)
+        0xB481AC, // roller (Mauve)
+        0xE91E63, // focussed_element (Pink)
+        0x000000, // background (Black)
+        0xFFFFFF, // text_primary (White)
+        0x000000  // text_secondary (Black)
+    },
+    { "Midnight Navy",
+        0x1E3A6E, // title_bar (Midnight Navy)
+        0x1E3A6E, // button_l (Midnight Navy)
+        0x1E3A6E, // button_m (Midnight Navy)
+        0x1E3A6E, // button_r (Midnight Navy)
+        0x7A9FCC, // slider1 (Sky Blue)
+        0x7A9FCC, // slider2 (Sky Blue)
+        0x7A9FCC, // slider3 (Sky Blue)
+        0x7A9FCC, // slider4 (Sky Blue)
+        0x7A9FCC, // battery_main (Sky Blue)
+        0x1E3A6E, // battery_indicator (Midnight Navy)
+        0x5A7CA5, // roller (Slate Blue)
+        0xFF4081, // focussed_element (Fuchsia)
+        0x000000, // background (Black)
+        0xFFFFFF, // text_primary (White)
+        0x000000  // text_secondary (Black)
+    },
+    { "Army Green",
+        0x3D5C3D, // title_bar (Army Green)
+        0x3D5C3D, // button_l (Army Green)
+        0x3D5C3D, // button_m (Army Green)
+        0x3D5C3D, // button_r (Army Green)
+        0x8BA88B, // slider1 (Sage Green)
+        0x8BA88B, // slider2 (Sage Green)
+        0x8BA88B, // slider3 (Sage Green)
+        0x8BA88B, // slider4 (Sage Green)
+        0x8BA88B, // battery_main (Sage Green)
+        0x3D5C3D, // battery_indicator (Army Green)
+        0x6B8E23, // roller (Olive Drab)
+        0xFFC107, // focussed_element (Amber)
+        0x000000, // background (Black)
+        0xFFFFFF, // text_primary (White)
+        0x000000  // text_secondary (Black)
+    },
+    { "Steel Blue",
+        0x2C5F7A, // title_bar (Steel Blue)
+        0x2C5F7A, // button_l (Steel Blue)
+        0x2C5F7A, // button_m (Steel Blue)
+        0x2C5F7A, // button_r (Steel Blue)
+        0x6AABCC, // slider1 (Light Steel Blue)
+        0x6AABCC, // slider2 (Light Steel Blue)
+        0x6AABCC, // slider3 (Light Steel Blue)
+        0x6AABCC, // slider4 (Light Steel Blue)
+        0x6AABCC, // battery_main (Light Steel Blue)
+        0x2C5F7A, // battery_indicator (Steel Blue)
+        0x4682B4, // roller (Steel Blue Standard)
+        0x64B5F6, // focussed_element (Light Blue)
+        0x000000, // background (Black)
+        0xFFFFFF, // text_primary (White)
+        0x000000  // text_secondary (Black)
+    },
+    { "Amber Sunset",
+        0xB8860B, // title_bar (Dark Goldenrod)
+        0xB8860B, // button_l (Dark Goldenrod)
+        0xB8860B, // button_m (Dark Goldenrod)
+        0xB8860B, // button_r (Dark Goldenrod)
+        0xFFD700, // slider1 (Gold)
+        0xFFD700, // slider2 (Gold)
+        0xFFD700, // slider3 (Gold)
+        0xFFD700, // slider4 (Gold)
+        0xFFD700, // battery_main (Gold)
+        0xB8860B, // battery_indicator (Dark Goldenrod)
+        0xFFA500, // roller (Orange)
+        0xFF7043, // focussed_element (Coral)
+        0x000000, // background (Black)
+        0xFFFFFF, // text_primary (White)
+        0x000000  // text_secondary (Black)
+    },
+    { "Rainbow",
+        0xE53935, // title_bar (Red)
+        0x8E24AA, // button_l (Purple)
+        0x43A047, // button_m (Green)
+        0x1E88E5, // button_r (Blue)
+        0xE53935, // slider1 (Red)
+        0xFDD835, // slider2 (Yellow)
+        0x43A047, // slider3 (Green)
+        0x1E88E5, // slider4 (Blue)
+        0x8E24AA, // battery_main (Purple)
+        0xF4511E, // battery_indicator (Orange Red)
+        0x00ACC1, // roller (Cyan)
+        0xE91E63, // focussed_element (Pink)
+        0x000000, // background (Black)
+        0xFFFFFF, // text_primary (White)
+        0x000000  // text_secondary (Black)
+    }
+};
