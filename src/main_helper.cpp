@@ -8,6 +8,8 @@
 #include "OssmBLE.h"
 #include "language.h"
 #include "ui/ui.h"
+#include "colors.h"
+#include "esp_nowCommunication.h"
 
 int st_screens = ST_UI_START;
 
@@ -33,11 +35,14 @@ bool screensaver_active = false;
 uint32_t ossm_state_monitor_hold_until_ms = 0;
 
 bool dynamicStroke = false;
+bool g_ble_menu_requires_stroke_reentry = false;
 
 bool Ossm_paired = false;
 bool waiting_for_limits = false; // true after pairing until OSSM reports max depth/speed
+bool g_force_esp_only = false;
 
 int OSSM_State = state_FALSE;
+int g_homing_direction = 0;
 
 static uint32_t g_start_screen_loaded_ms = 0;
 
@@ -92,25 +97,35 @@ void monitorOssmState(bool forceBlePoll)
       if (OssmBleGetCurrentState(&bleState, true)) {
         switch (bleState.mode) {
           case OssmBleMachineMode::HomingForward:
+            g_homing_direction = 1;
+            nextState = state_HOMING;
+            break;
           case OssmBleMachineMode::HomingBackward:
+            g_homing_direction = -1;
             nextState = state_HOMING;
             break;
           case OssmBleMachineMode::Menu:
+            g_homing_direction = 0;
             nextState = state_MENU;
             break;
           case OssmBleMachineMode::Streaming:
+            g_homing_direction = 0;
             nextState = state_STREAMING;
             break;
           case OssmBleMachineMode::SimplePenetration:
+            g_homing_direction = 0;
             nextState = state_SIMPLE_PENETRATION;
             break;
           case OssmBleMachineMode::StrokeEngineActive:
+            g_homing_direction = 0;
             nextState = (bleState.speed > 0) ? state_ON : state_PAUSE;
             break;
           case OssmBleMachineMode::StrokeEngineIdle:
+            g_homing_direction = 0;
             nextState = (bleState.speed > 0) ? state_ON : state_PAUSE;
             break;
           default:
+            g_homing_direction = 0;
             break;
         }
       }
@@ -185,25 +200,32 @@ int showNotification(const char *title,
   int result = NOTIFICATION_RESULT_NONE;
   g_notification_touch_result = NOTIFICATION_RESULT_NONE;
 
+  // Get active color scheme colors
+  uint32_t schemePrimary = getActivePrimaryColor();
+  uint32_t schemeSecondary = getActiveSecondaryColor();
+  uint32_t schemeTextPrimary = getActiveTextPrimaryColor();
+  uint32_t schemeTextSecondary = getActiveTextSecondaryColor();
+  // Derive darker color for overlay (approximately 60% of primary's brightness reduced)
+  uint8_t pr = (schemePrimary >> 16) & 0xFF;
+  uint8_t pg = (schemePrimary >> 8) & 0xFF;
+  uint8_t pb = schemePrimary & 0xFF;
+  uint32_t schemeDarker = 0x000000;  // Default to black if we can't compute
+  // Dark shade: reduce each component by 50%
+  schemeDarker = (((pr >> 1) & 0xFF) << 16) | (((pg >> 1) & 0xFF) << 8) | ((pb >> 1) & 0xFF);
+
   if (shouldBlockTouch) {
     touch_disabled = true;
   }
 
   // Drain stale button states before opening the modal.
-  mxclick_short_waspressed = false;
-  mxclick_long_waspressed = false;
-  mxclick_double_waspressed = false;
-  clickLeft_short_waspressed = false;
-  clickRight_short_waspressed = false;
-  clickRight_long_waspressed = false;
-  clickRight_double_waspressed = false;
+  clearButtonFlags();
 
   lv_obj_t *overlay = lv_obj_create(lv_layer_top());
   lv_obj_remove_style_all(overlay);
   lv_obj_set_size(overlay, HOR_RES, VER_RES);
   lv_obj_center(overlay);
   lv_obj_set_style_bg_opa(overlay, LV_OPA_50, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_color(overlay, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(overlay, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
 
   lv_obj_t *panel = lv_obj_create(overlay);
@@ -218,8 +240,8 @@ int showNotification(const char *title,
   }
   lv_obj_set_style_radius(panel, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_border_width(panel, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_color(panel, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_color(panel, lv_color_hex(0xD691D0), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_color(panel, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(panel, lv_color_hex(schemeSecondary), LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -228,11 +250,11 @@ int showNotification(const char *title,
   lv_obj_set_size(titleBar, lv_pct(100), 32);
   lv_obj_align(titleBar, LV_ALIGN_TOP_MID, 0, 0);
   lv_obj_set_style_bg_opa(titleBar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_bg_color(titleBar, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_bg_color(titleBar, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_DEFAULT);
 
   lv_obj_t *titleLabel = lv_label_create(titleBar);
   lv_label_set_text(titleLabel, (title != nullptr && title[0] != '\0') ? title : "Notification");
-  lv_obj_set_style_text_color(titleLabel, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_text_color(titleLabel, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_text_font(titleLabel, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_center(titleLabel);
 
@@ -240,7 +262,7 @@ int showNotification(const char *title,
   lv_obj_set_width(bodyLabel, lv_pct(90));
   lv_label_set_long_mode(bodyLabel, LV_LABEL_LONG_WRAP);
   lv_label_set_text(bodyLabel, (text != nullptr) ? text : "");
-  lv_obj_set_style_text_color(bodyLabel, lv_color_hex(0x2E0A2B), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_text_color(bodyLabel, lv_color_hex(schemeTextSecondary), LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_text_font(bodyLabel, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_align(bodyLabel, LV_ALIGN_TOP_MID, 0, 48);
 
@@ -255,38 +277,38 @@ int showNotification(const char *title,
     if (showLeftButton) {
       lv_obj_t *leftBtn = lv_btn_create(buttonRow);
       lv_obj_set_size(leftBtn, 120, 36);
-      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_PRESSED);
+      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_bg_color(leftBtn, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_PRESSED);
       lv_obj_set_style_border_width(leftBtn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
       lv_obj_t *leftLbl = lv_label_create(leftBtn);
       lv_label_set_text(leftLbl, (leftButtonText != nullptr && leftButtonText[0] != '\0') ? leftButtonText : "Left");
-      lv_obj_set_style_text_color(leftLbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_text_color(leftLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(leftLbl);
-      lv_obj_add_event_cb(leftBtn, notification_left_button_cb, LV_EVENT_CLICKED, nullptr);
+      lv_obj_add_event_cb(leftBtn, notification_left_button_cb, LV_EVENT_SHORT_CLICKED, nullptr);
     }
 
     if (showRightButton) {
       lv_obj_t *rightBtn = lv_btn_create(buttonRow);
       lv_obj_set_size(rightBtn, 120, 36);
-      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(0x83277B), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(0x5B0353), LV_PART_MAIN | LV_STATE_PRESSED);
+      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_bg_color(rightBtn, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_PRESSED);
       lv_obj_set_style_border_width(rightBtn, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
 
       lv_obj_t *rightLbl = lv_label_create(rightBtn);
       lv_label_set_text(rightLbl, (rightButtonText != nullptr && rightButtonText[0] != '\0') ? rightButtonText : "Right");
-      lv_obj_set_style_text_color(rightLbl, lv_color_hex(0xFFFFFF), LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_set_style_text_color(rightLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_obj_center(rightLbl);
-      lv_obj_add_event_cb(rightBtn, notification_right_button_cb, LV_EVENT_CLICKED, nullptr);
+      lv_obj_add_event_cb(rightBtn, notification_right_button_cb, LV_EVENT_SHORT_CLICKED, nullptr);
     }
   }
 
   static uint32_t notif_last_state_log_ms = 0;
+  ButtonEvents modalButtons = {};
 
   while (true) {
     M5.update();
     lv_task_handler();
-    updateMxReleaseStability();
     Button1.tick();
     Button2.tick();
     Button3.tick();
@@ -304,42 +326,34 @@ int showNotification(const char *title,
       break;
     }
 
+    pollButtonEvents(modalButtons);
+
     if (hasButtons) {
       if (g_notification_touch_result != NOTIFICATION_RESULT_NONE) {
         result = g_notification_touch_result;
         break;
       }
-      if (showLeftButton && clickLeft_short_waspressed) {
+      if (showLeftButton && modalButtons.leftShort) {
         result = NOTIFICATION_RESULT_LEFT;
+        clearButtonFlags();
         break;
       }
-      if (showRightButton && clickRight_short_waspressed) {
+      if (showRightButton && modalButtons.rightShort) {
         result = NOTIFICATION_RESULT_RIGHT;
+        clearButtonFlags();
         break;
       }
     }
 
     // Consume all activity so the current screen never receives latent button events.
-    mxclick_short_waspressed = false;
-    mxclick_long_waspressed = false;
-    mxclick_double_waspressed = false;
-    clickLeft_short_waspressed = false;
-    clickRight_short_waspressed = false;
-    clickRight_long_waspressed = false;
-    clickRight_double_waspressed = false;
+    clearButtonFlags();
 
     vTaskDelay(pdMS_TO_TICKS(5));
   }
 
   lv_obj_del(overlay);
 
-  mxclick_short_waspressed = false;
-  mxclick_long_waspressed = false;
-  mxclick_double_waspressed = false;
-  clickLeft_short_waspressed = false;
-  clickRight_short_waspressed = false;
-  clickRight_long_waspressed = false;
-  clickRight_double_waspressed = false;
+  clearButtonFlags();
 
   if (shouldBlockTouch) {
     touch_disabled = prevTouchDisabled;
@@ -364,6 +378,38 @@ bool canEnterDeepSleep()
   }
 }
 
+static bool areWakeButtonsReleased()
+{
+  // Core2 mapping in this project: all three hardware buttons are active-high.
+  // Released state is LOW.
+  return (digitalRead(Button1.pin()) == LOW) &&
+         (digitalRead(Button2.pin()) == LOW) &&
+         (digitalRead(Button3.pin()) == LOW);
+}
+
+static bool waitWakeButtonsReleasedStable(uint32_t stableMs, uint32_t timeoutMs)
+{
+  const uint32_t startMs = millis();
+  uint32_t releasedSinceMs = 0;
+
+  while ((millis() - startMs) < timeoutMs) {
+    const bool released = areWakeButtonsReleased();
+    if (released) {
+      if (releasedSinceMs == 0) {
+        releasedSinceMs = millis();
+      }
+      if ((millis() - releasedSinceMs) >= stableMs) {
+        return true;
+      }
+    } else {
+      releasedSinceMs = 0;
+    }
+    delay(5);
+  }
+
+  return false;
+}
+
 void enterDeepSleep()
 {
   gpio_num_t mxPin   = static_cast<gpio_num_t>(Button1.pin());
@@ -374,6 +420,17 @@ void enterDeepSleep()
   LogDebug("Entering deep sleep (wake on MX/left/right)");
   M5.Display.setBrightness(0);
   M5.Power.setVibration(0);
+
+  // Guard against instant wake / fake sleep when any wake button is still held.
+  // If buttons do not settle to released state quickly, skip this sleep attempt.
+  if (!waitWakeButtonsReleasedStable(120, 1200)) {
+    LogDebugFormatted("Deep sleep canceled: wake button(s) still active (mx=%d left=%d right=%d)",
+                      digitalRead(Button1.pin()),
+                      digitalRead(Button2.pin()),
+                      digitalRead(Button3.pin()));
+    screensaver_check_activity();
+    return;
+  }
 
   esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_HIGH);
   delay(50);
@@ -394,7 +451,9 @@ bool SendCommand(int Command, float Value, int Target)
     refreshHomeAndStreamingStartStopUi();
     LogDebug("Local OSSM_State set to true (sent ON)");
   }
+
   if (Target == OSSM_ID && OssmBleIsMode()) {
+    LogDebugFormatted("TX BLE cmd=%d val=%.2f target=%d\n", Command, Value, Target);
     String response;
     bool ok = OssmBleSendAppCommand(
       Command, Value,
@@ -402,15 +461,23 @@ bool SendCommand(int Command, float Value, int Target)
       isRunningUiState(OSSM_State),
       maxdepthinmm, speedlimit,
       &response);
+    LogDebugFormatted("TX BLE result=%s cmd=%d target=%d\n", ok ? "OK" : "FAIL", Command, Target);
     if (response.length() > 0) {
       LogDebug("BLE response:");
       LogDebug(response);
     }
     return ok;
-  }
+  } else  if (Target == OSSM_ID && !OssmBleIsMode()) {
 
-  if (Ossm_paired == true) {
-    return EspNowSendControlCommand(Command, Value, Target);
+    if (Ossm_paired == true) {
+      LogDebugFormatted("TX ESP cmd=%d val=%.2f target=%d (paired=%d)\n", Command, Value, Target, Ossm_paired ? 1 : 0);
+      bool ok = EspNowSendControlCommand(Command, Value, Target);
+      LogDebugFormatted("TX ESP result=%s cmd=%d target=%d\n", ok ? "OK" : "FAIL", Command, Target);
+      return ok;
+    } else {
+      LogDebugFormatted("ESP-NOW command not sent because not paired (cmd=%d val=%.2f target=%d)\n", Command, Value, Target);
+      EspNowSendControlCommand(Command, Value, Target);  // Still update outgoing command for logging/monitoring even if not paired yet.
+    }
   }
 
   return false;
@@ -422,75 +489,145 @@ bool SendCommand(int Command, float Value, int Target)
 // ---------------------------------------------------------------------------
 extern "C" void connectbutton(lv_event_t *e)
 {
-  static constexpr uint32_t ESP_NOW_FIRST_WINDOW_MS = 2000UL;   // ESP_NOW is fast, give it short window
-  static constexpr uint32_t BLEAND_ESPNOW_ATTEMPTS  = 8;        // Parallel attempts
-  static constexpr uint32_t LONG_WAIT_WINDOW_MS     = 60000UL;
+  static constexpr uint32_t ESP_NOW_FIRST_WINDOW_MS_AUTO = 800UL;
+  static constexpr uint32_t ESP_NOW_FIRST_WINDOW_MS_MANUAL = 2000UL;
+  static constexpr uint32_t BLEAND_ESPNOW_ATTEMPTS_AUTO  = 2;
+  static constexpr uint32_t BLEAND_ESPNOW_ATTEMPTS_MANUAL  = 8;
+  static constexpr uint32_t LONG_WAIT_WINDOW_MS_AUTO     = 0UL;
+  static constexpr uint32_t LONG_WAIT_WINDOW_MS_MANUAL   = 60000UL;
   static constexpr uint32_t HEARTBEAT_INTERVAL_MS   = 500UL;
 
-  lv_label_set_text(ui_Welcome, T_CONNECTING);
+  const bool manualAttempt = (e != nullptr);
+  const uint32_t espNowFirstWindowMs = manualAttempt ? ESP_NOW_FIRST_WINDOW_MS_MANUAL : ESP_NOW_FIRST_WINDOW_MS_AUTO;
+  const uint32_t bleAndEspNowAttempts = manualAttempt ? BLEAND_ESPNOW_ATTEMPTS_MANUAL : BLEAND_ESPNOW_ATTEMPTS_AUTO;
+  const uint32_t longWaitWindowMs = manualAttempt ? LONG_WAIT_WINDOW_MS_MANUAL : LONG_WAIT_WINDOW_MS_AUTO;
 
-  if (!Ossm_paired) {
-    OssmBleSetMode(false);
-
-    // Phase 1: Try ESP_NOW first (it connects much faster than BLE)
-    lv_label_set_text(ui_Welcome, "Searching...");
-    EspNowWaitForPairingOrTimeout(ESP_NOW_FIRST_WINDOW_MS, HEARTBEAT_INTERVAL_MS);
-    
-    if (!Ossm_paired) {
-      // Phase 2: ESP_NOW didn't connect, now try BLE + ESP_NOW in parallel
-      for (uint32_t attempt = 0; attempt < BLEAND_ESPNOW_ATTEMPTS && !Ossm_paired; ++attempt) {
-        // Send ESP_NOW pairing heartbeat
-        EspNowSendPairingHeartbeat();
-
-        // Try BLE connection
-        bool bleConnected = OssmBleTryConnect();
-        if (bleConnected) {
-          lv_label_set_text(ui_Welcome, T_BLECONNECTED);
-          OssmBleSetMode(true);
-          Ossm_paired = true;
-          syncBleConnectUi(true);
-          break;
-        }
-
-        // Brief wait to allow ESP_NOW callback to set Ossm_paired if it receives pairing message
-        if (!Ossm_paired) {
-          vTaskDelay(pdMS_TO_TICKS(200));
-        }
-      }
+  // Only treat OSSM as connected when transport is actually up.
+  bool Ossm_paired = (OssmBleConnected() || Ossm_paired);
+  if (Ossm_paired) {
+    if (OssmBleIsMode()) {
+      syncBleConnectUi(true);
     } else {
-      // ESP_NOW connected in Phase 1
       lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
-    }
-
-    // Phase 3: If still not paired, wait longer
-    if (!Ossm_paired) {
-      lv_label_set_text(ui_Welcome, T_LONG_WAIT);
-      EspNowWaitForPairingOrTimeout(LONG_WAIT_WINDOW_MS, HEARTBEAT_INTERVAL_MS);
-      if (!Ossm_paired) {
-        lv_label_set_text(ui_Welcome, T_FAILED);
-      }
     }
     return;
   }
 
-  if (OssmBleIsMode()) {
-    syncBleConnectUi(true);
+  lv_label_set_text(ui_Welcome, T_CONNECTING);
+
+  // Reset stale state so addon traffic can never block OSSM connection attempts.
+  OssmBleSetMode(false);
+  Ossm_paired = false;
+  waiting_for_limits = false;
+
+  // Phase 1: Try ESP_NOW first (it connects much faster than BLE)
+  lv_label_set_text(ui_Welcome, "Searching...");
+  EspNowWaitForPairingOrTimeout(espNowFirstWindowMs, HEARTBEAT_INTERVAL_MS);
+
+  if (!Ossm_paired) {
+    // Phase 2: ESP_NOW didn't connect, now try BLE + ESP_NOW in parallel
+    for (uint32_t attempt = 0; attempt < bleAndEspNowAttempts && !Ossm_paired; ++attempt) {
+      // Send ESP_NOW pairing heartbeat
+      EspNowSendPairingHeartbeat();
+      // Try BLE connection (skip if user forced ESP-only)
+      bool bleConnected = false;
+      if (!g_force_esp_only) {
+        bleConnected = OssmBleTryConnect();
+      }
+      if (bleConnected) {
+        lv_label_set_text(ui_Welcome, T_BLECONNECTED);
+        OssmBleSetMode(true);
+        Ossm_paired = true;
+        syncBleConnectUi(true);
+        return;
+      }
+
+      // Brief wait to allow ESP_NOW callback to set OSSM connected state.
+      if (!Ossm_paired) {
+        vTaskDelay(pdMS_TO_TICKS(200));
+      }
+    }
+  }
+
+  if (Ossm_paired) {
+    lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
+    return;
+  }
+
+  // Phase 3: If still not connected, wait longer (manual attempts only)
+  if (longWaitWindowMs > 0) {
+    lv_label_set_text(ui_Welcome, T_LONG_WAIT);
+    EspNowWaitForPairingOrTimeout(longWaitWindowMs, HEARTBEAT_INTERVAL_MS);
+    if (Ossm_paired) {
+      lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
+    } else {
+      lv_label_set_text(ui_Welcome, T_FAILED);
+    }
+  } else {
+    lv_label_set_text(ui_Welcome, T_CONNECT);
   }
 }
 
 extern "C" void requestMenuEntryAction(void)
 {
-  if (OssmBleIsMode() && OssmBleConnected()) {
-    OssmBleGoToMenu();
+  if (!(OssmBleIsMode() && OssmBleConnected())) {
+    g_ble_menu_requires_stroke_reentry = false;
+    return;
   }
+
+  // If we just came from Home (stroke engine), keep current mode so Home->Menu->Home
+  // does not force an unnecessary re-home sequence.
+  if (st_screens == ST_UI_HOME) {
+    g_ble_menu_requires_stroke_reentry = false;
+    return;
+  }
+
+  OssmBleGoToMenu();
+  g_ble_menu_requires_stroke_reentry = true;
+}
+
+extern "C" void menuPrepareNonHomeAction(void)
+{
+  if (!(OssmBleIsMode() && OssmBleConnected())) {
+    return;
+  }
+
+  // Any non-home path from Menu should arm a full Menu/Homing path before
+  // returning to Home again.
+  OssmBleGoToMenu();
+  g_ble_menu_requires_stroke_reentry = true;
 }
 
 extern "C" void menuSleepAction(void)
 {
-  enterDeepSleep();
+  const int result = showNotification(
+    "Enter Deep-Sleep",
+    "Are you sure you want to enter deep-sleep mode? This will stop all connections.",
+    0,
+    true,
+    "Yes",
+    true,
+    "No",
+    false);
+
+  if (result == NOTIFICATION_RESULT_LEFT) {
+    enterDeepSleep();
+  }
 }
 
 extern "C" void menuRestartAction(void)
 {
-  esp_restart();
+  const int result = showNotification(
+    "Restart",
+    "Are you sure you want to perform a restart?",
+    0,
+    true,
+    "Yes",
+    true,
+    "No",
+    false);
+
+  if (result == NOTIFICATION_RESULT_LEFT) {
+    esp_restart();
+  }
 }

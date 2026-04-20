@@ -15,6 +15,11 @@ extern uint8_t CUM_Address[6];
 #define M5_ID 99 //M5_ID Default can be changed with M5 Remote in the Future will be Saved in EPROOM
 #define BATTERY_CHARGE_CURRENT 100 // Charge current, must be one of AXP192::CHGCurrent
 
+// ESP-NOW fixed channel for reliable pairing with OSSM (1..11)
+#ifndef ESP_NOW_CHANNEL
+#define ESP_NOW_CHANNEL 1
+#endif
+
 #ifdef ARDUINO_M5STACK_CORES3
 //Pin Definitons Encoders S3:
 
@@ -70,8 +75,10 @@ typedef struct AddonDefinition {
 #define ADDON_SLOT_RIGHT 2
 
 static const AddonDefinition ADDON_DEFINITIONS[] = {
-	{"eject_cumpump", "Eject Cumpump"},
-	{"fist_it", "Fist-IT"},
+	{"eject_cumpump",  "Eject Cumpump"},
+	{"fist_it",        "Fist-IT"},
+	{"color_schemes",  "Color Schemes"},
+    {"x_toys",         "X-toys Mode"},
 };
 
 #define ADDON_DEFINITIONS_COUNT (sizeof(ADDON_DEFINITIONS) / sizeof(ADDON_DEFINITIONS[0]))
@@ -86,6 +93,8 @@ static const AddonDefinition ADDON_DEFINITIONS[] = {
 #define SCREENSAVER_TIMEOUT_MS_DEFAULT (2 * 60 * 1000)
 #define SCREENSAVER_DIM_BRIGHTNESS_DEFAULT 15
 #define DEEP_SLEEP_TIMEOUT_MS_DEFAULT (10UL * 60UL * 1000UL)
+// Set to 0 to disable automatic idle deep-sleep. Manual sleep from Menu remains available.
+#define AUTO_IDLE_DEEP_SLEEP_ENABLED 0
 
 // Minimum time to keep Start screen visible before auto-switching to Home.
 #define START_SCREEN_MIN_DISPLAY_MS 3000UL

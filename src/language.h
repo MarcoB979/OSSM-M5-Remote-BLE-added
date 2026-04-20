@@ -45,6 +45,7 @@
 #define T_EJECT_SETTINGS    "EJECT Settings"
 #define T_EJECT             "EJECT"
 #define T_SELECT            "Select"
+#define T_OPEN              "Open"
 #define T_SAVE              "Save"
 #define T_LOW               "Low"
 #define T_HIGH              "High"
@@ -53,7 +54,9 @@
 #define T_TOUCHSETTING      "Touch Disabled"
 #define T_STROKEINVERT      "Stroke inverted"
 #define T_SLEEP             "Sleep"
-
+#define T_ESP_NOW           "ESP-NOW"
+#define T_CHARGING_WARNING_TITLE "Caution - Charging"
+#define T_CHARGING_WARNING_TEXT  "When charging, stability issues can occur. \n\nIt is best to not use the M5 remote to control your toys now."
 
 #define T_Patterns          "Pattern:"
 #define T_SimpleStroke      "Simple Stroke"
@@ -67,11 +70,12 @@
 #define T_StrokeNibbler     "Stroke Nibbler"
 #define T_Knot              "Knot"
 
-#define T_CUM_SPEED         "CUM Speed"
-#define T_CUM_TIME          "CUM Time"
-#define T_CUM_Volume        "CUM Volume"
-#define T_CUM_Accel         "CUM Force"
-
+#define T_CUM_SPEED         "Speed"
+#define T_CUM_TIME          "Shots"
+#define T_CUM_Volume        "Volume"
+#define T_CUM_Accel         "Force"
+#define T_ROTATION          "Rotation"
+#define T_ACCEL             "Accel"
 #define T_FUCKS_MIN         " F/m"
 
 // UI_MENU buttons
@@ -88,20 +92,21 @@
 #define T_STREAMING_ACTIVE_TITLE  "OSSM in Streaming mode"
 #define T_STREAMING_ACTIVE_TEXT   "The OSSM is now in STREAMING MODE. \nPress START to arm streaming.\nMovement begins when an external stream source sends position frames."
 #define T_STREAMING_RUNNING_TITLE "OSSM Streaming mode active"
-#define T_STREAMING_RUNNING_TEXT  "The OSSM is now in active streaming mode. Your M5 remote does not have control anymore. You can safely shut down the M5 remote, or you can stop streaming mode."
+#define T_STREAMING_RUNNING_TEXT  "Your OSSM is now in active streaming mode. Your M5 remote does not have control anymore. You can safely shut down the M5 remote, or stop streaming mode."
 #define T_STREAMING_FAIL_TITLE    "Streaming failed"
 #define T_STREAMING_FAIL_TEXT     "The OSSM could not enter streaming mode."
 
 // Screen titles
 #define T_SCREEN_START            "Start"
-#define T_SCREEN_STROKE_ENGINE    "Stroke Engine"
+#define T_SCREEN_STROKE_ENGINE    "OSSM Home"
 #define T_SCREEN_MENU             "Menu"
 #define T_SCREEN_STREAMING        "Streaming"
 #define T_SCREEN_SETTINGS         "Settings"
 #define T_SCREEN_ADDONS           "Addons"
+#define T_SCREEN_COLORS           "Color Schemes"
 #define T_SCREEN_PATTERN          "Pattern"
 #define T_SCREEN_TORQUE           "Torque"
-#define T_SCREEN_EJECT            "Eject Settings"
+#define T_SCREEN_EJECT            "Eject CUMpump"
 
 // Addons screen
 #define T_ADDONS_HINT             "Click addon to assign: Left -> Right -> Off"

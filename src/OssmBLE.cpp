@@ -1,4 +1,5 @@
 ﻿#include "OssmBLE.h"
+#include "main.h"
 
 #include <NimBLEDevice.h>
 #include <math.h>
@@ -367,6 +368,11 @@ void OssmBleInit()
 
 bool OssmBleTryConnect(void (*postInitCallback)())
 {
+  if (g_force_esp_only) {
+    Serial.println("OssmBleTryConnect: skipped because Force ESP is enabled");
+    EspNowSendPairingHeartbeat();
+    return false;
+  }
   if (OssmBleConnected()) {
     return true;
   }
@@ -382,6 +388,14 @@ bool OssmBleTryConnect(void (*postInitCallback)())
   NimBLEScan* scanner = NimBLEDevice::getScan();
   if (scanner == nullptr) {
     return false;
+  }
+
+  // If ESP-NOW hasn't established a connection, send a quick pairing
+  // heartbeat before starting a potentially blocking BLE scan so OSSM
+  // has a chance to respond and be paired via ESP-NOW.
+  if (!Ossm_paired) {
+    EspNowSendPairingHeartbeat();
+    vTaskDelay(pdMS_TO_TICKS(50));
   }
 
   scanner->setActiveScan(true);
@@ -702,7 +716,6 @@ bool OssmBleExecutePulloutStop(float currentSpeed, float maxDepthMm, float maxSp
 
   bool ok = true;
   OssmBleStoreUnpauseSpeed(currentSpeed);
-  ok = OssmBleGoToSimplePenetration() && ok;
   ok = OssmBleSendCommand(OssmBleCommand::SetDepth, 0.0f, 0.0f, maxDepthMm, maxSpeedValue, nullptr) && ok;
   ok = OssmBleSendCommand(OssmBleCommand::SetStroke, 0.0f, 0.0f, maxDepthMm, maxSpeedValue, nullptr) && ok;
 
@@ -809,8 +822,7 @@ bool OssmBleReadState(String* stateText, bool logState)
   *stateText = String(raw.c_str());
   bool looksLikeCommandAck = stateText->startsWith("ok:") || stateText->startsWith("fail:");
   if (logState) {
-    Serial.print(looksLikeCommandAck ? "BLE rx (state-ack): " : "BLE rx (state): ");
-    Serial.println(stateText->c_str());
+    // Intentionally quiet to keep serial monitor focused on ESP-NOW logs.
   }
   if (looksLikeCommandAck) {
     return false;
@@ -883,4 +895,15 @@ bool OssmBlePollLimits(float* outMaxDepthMm, float* outMaxSpeedValue)
 
   return updated;
 }
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+void OssmBleSetMode_c(int enabled)
+{
+  OssmBleSetMode(enabled != 0);
+}
+#ifdef __cplusplus
+}
+#endif
 

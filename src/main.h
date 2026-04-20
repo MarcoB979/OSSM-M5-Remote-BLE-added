@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <lvgl.h>
+#include "Eject.h"
+#include "FistIT.h"
+#include "esp_nowCommunication.h"
 
 #ifdef __cplusplus
 #include <OneButton.h>
@@ -38,6 +41,10 @@
 #define OSSM_ID 1
 #endif
 
+#ifndef M5_ID
+#define M5_ID 99
+#endif
+
 #define OFF 10
 #define ON 11
 
@@ -51,6 +58,8 @@
 #define ST_UI_MENU 21
 #define ST_UI_STREAMING 22
 #define ST_UI_ADDONS 23
+#define ST_UI_COLORS 24
+#define ST_UI_FISTIT 25
 
 #define state_OFF 0
 #define state_ON 1
@@ -83,8 +92,16 @@
 #define CUMSIZE 22
 #define CUMACCEL 23
 
+#define FIST_SPEED 30
+#define FIST_ROTATION 31
+#define FIST_PAUSE 32
+#define FIST_ACCEL 33
+
 #define CONNECT 88
 #define HEARTBEAT 99
+
+// EJECT_ID and FIST_ID: defined as runtime constants in their addon modules
+
 
 // Shared notification result values for modal overlay prompts.
 typedef enum NotificationResult {
@@ -111,6 +128,7 @@ extern bool dark_mode;
 extern bool touch_disabled;
 extern int st_screens;
 extern int OSSM_State;
+extern int g_homing_direction;
 extern float speed;
 extern float depth;
 extern float stroke;
@@ -129,9 +147,19 @@ extern long encoder4_enc;
 extern bool strokeinvert_mode;
 extern bool dynamicStroke;
 extern bool Ossm_paired;
-extern bool ossm_espnow_connected;  // True if OSSM is connected via ESP_NOW (not an addon)
+extern bool OSSM_On;
+extern bool Ossm_paired;  // True if OSSM is connected via ESP_NOW (not an addon)
 extern bool waiting_for_limits;
+extern bool g_force_esp_only;
 extern int pattern;
+#ifdef __cplusplus
+extern "C" {
+#endif
+extern const int EJECT_ID;
+extern const int FIST_ID;
+#ifdef __cplusplus
+}
+#endif
 #ifdef __cplusplus
 extern ESP32Encoder encoder1;
 extern ESP32Encoder encoder2;
@@ -143,6 +171,7 @@ extern bool mxclick_short_waspressed;
 extern bool mxclick_long_waspressed;
 extern bool mxclick_double_waspressed;
 extern bool clickLeft_short_waspressed;
+extern bool clickLeft_long_waspressed;
 extern bool clickLeft_double_waspressed;
 extern bool clickRight_short_waspressed;
 extern bool clickRight_long_waspressed;
@@ -156,6 +185,7 @@ extern OneButton Button3;
 
 extern bool g_streaming_entry_flow_pending;
 extern bool g_streaming_controls_locked;
+extern bool g_ble_menu_requires_stroke_reentry;
 
 #ifdef __cplusplus
 // Core command / state
@@ -177,13 +207,24 @@ void mxclick();
 void mxdouble();
 void mxlong();
 void clickLeft();
+void clickLeftLong();
 void clickLeftDouble();
 void clickRight();
 void clickRightLong();
 void clickRightDouble();
+struct ButtonEvents {
+    bool mxShort;
+    bool mxLong;
+    bool mxDouble;
+    bool leftShort;
+    bool leftLong;
+    bool leftDouble;
+    bool rightShort;
+    bool rightLong;
+    bool rightDouble;
+};
+void pollButtonEvents(ButtonEvents &events);
 void clearButtonFlags();
-void updateMxReleaseStability();
-void markEncoderActivityForMxFilter();
 void register_event_debug_callbacks();
 
 // Screen dispatch
@@ -195,6 +236,7 @@ bool isStartScreenMinTimeElapsed();
 
 // Addon trigger (used from screen handlers)
 bool triggerAddonForSlot(int slot);
+void triggerAddonByIndex(int index);
 
 // Button action / UI
 void streamingbuttonm_action(bool fromPhysicalMx);
@@ -205,9 +247,27 @@ void refreshHomeAndStreamingStartStopUi();
 // ESP-NOW
 void EspNowInitCommunication();
 void EspNowSendPairingHeartbeat();
-void EspNowWaitForPairingOrTimeout(uint32_t timeoutMs, uint32_t heartbeatIntervalMs);
-bool EspNowSendControlCommand(int command, float value, int target);
 void EspNowProcessPendingUiUpdates();  // Process UI updates from ESP-NOW in thread-safe way
+bool EspNowSendControlCommand(int command, float value, int target);
+
+// Eject addon (ESP-NOW)
+bool EjectIsPaired();
+bool EjectSendCommand(int command, float value);
+void EjectSetAddonEnabled(bool enabled);
+
+// Fist-IT addon (ESP-NOW)
+bool FistITIsPaired();
+bool FistITSendCommand(int command, float value);
+void FistITSetAddonEnabled(bool enabled);
+void FistITOpenScreen();
+
+// Shared addon icon definitions (single source in addons.cpp).
+int addonsGetEjectIconWidth();
+int addonsGetEjectIconHeight();
+const char* const* addonsGetEjectIconMask();
+int addonsGetFistIconWidth();
+int addonsGetFistIconHeight();
+const char* const* addonsGetFistIconMask();
 #endif
 
 #ifdef __cplusplus
@@ -218,11 +278,20 @@ void connectbutton(lv_event_t * e);
 void requestStreamingEntryFlow(void);
 void streamingReturnToMenu(void);
 void requestMenuEntryAction(void);
+void menuPrepareNonHomeAction(void);
 void menuSleepAction(void);
 void menuRestartAction(void);
+void addonsInitFromStorage(void);
 void addonsScreenLoaded(void);
 void addonsSelectIndex(int index);
+void colorSchemeScreenLoaded(void);
+void colorSchemeSelectIndex(int index);
+void colors_ui_screen_init(void);
+void refreshHomeAddonButtonLabels(void);
 void homebuttonmevent(lv_event_t * e);
+void homebuttonMlongEvent(lv_event_t * e);
+void homebuttonLlongEvent(lv_event_t * e);
+void homebuttonRlongEvent(lv_event_t * e);
 void streamingbuttonmevent(lv_event_t * e);
 void setupDepthInter(lv_event_t * e);
 void setupdepthF(lv_event_t * e);
@@ -230,6 +299,11 @@ void homebuttonLevent(lv_event_t * e);
 void savepattern(lv_event_t * e);
 void savesettings(lv_event_t * e);
 void brightness_slider_event_cb(lv_event_t * e);
+
+// C-callable wrapper for BLE mode toggle used from C UI code
+void OssmBleSetMode_c(int enabled);
+// C-callable wrapper for ESP-NOW pairing wait (UI code uses C linkage)
+void EspNowWaitForPairingOrTimeout(uint32_t timeoutMs, uint32_t heartbeatIntervalMs);
 
 #ifdef __cplusplus
 }
