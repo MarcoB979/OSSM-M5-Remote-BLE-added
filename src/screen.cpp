@@ -912,6 +912,7 @@ static void handleSettingsScreen(const ButtonEvents &events)
   if (encoder3.getCount() > encoder3_enc + 2) {
     int val = lv_slider_get_value(ui_brightness_slider);
     int mx  = lv_slider_get_max_value(ui_brightness_slider);
+    if (val < 5) val = 5;
     if (val < mx) {
       int newval = (val + 5 <= mx) ? val + 5 : mx;
       lv_slider_set_value(ui_brightness_slider, newval, LV_ANIM_OFF);
@@ -1205,7 +1206,7 @@ static int getSmoothedBatteryLevel(bool isCharging)
   }
   wasCharging = isCharging;
 
-  const bool inSettlingWindow = (!isCharging && (now - disconnectedMs) < 60000UL);
+  const bool inSettlingWindow = (!isCharging && (now - disconnectedMs) < 120000UL);
 
   // Initialise on very first call.
   if (emaLevel < 0.0f) {
@@ -1233,6 +1234,16 @@ static int getSmoothedBatteryLevel(bool isCharging)
     // Clamp to valid range.
     if (displayedLevel < 0)   displayedLevel = 0;
     if (displayedLevel > 100) displayedLevel = 100;
+
+    // If the battery is essentially full, and charger or charge current
+    // indicates it's still charging (or recently was), hold at 100% to
+    // avoid a visible transient drop immediately after unplugging.
+    const int CHG_HOLD_CURRENT_MA = 30; // treat currents >30mA as still charging
+    int measuredCurrent = M5.Power.getBatteryCurrent();
+    if (displayedLevel >= 99 && (isCharging || measuredCurrent > CHG_HOLD_CURRENT_MA)) {
+      displayedLevel = 100;
+      emaLevel = 100.0f;
+    }
   }
 
   return displayedLevel;

@@ -292,6 +292,7 @@ void brightness_slider_event_cb(lv_event_t *e)
 {
   if (lv_event_get_code(e) == LV_EVENT_VALUE_CHANGED) {
     int val = lv_slider_get_value(ui_brightness_slider);
+    if (val < 5) val = 5;
     M5.Display.setBrightness(val);
     Preferences pref;
     pref.begin("m5-ctnr", false);

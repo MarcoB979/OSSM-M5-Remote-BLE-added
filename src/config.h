@@ -13,7 +13,7 @@ extern uint8_t CUM_Address[6];
 
 #define OSSM_ID  1 //OSSM_ID Default can be changed with M5 Remote in the Future will be Saved in EPROOM
 #define M5_ID 99 //M5_ID Default can be changed with M5 Remote in the Future will be Saved in EPROOM
-#define BATTERY_CHARGE_CURRENT 100 // Charge current, must be one of AXP192::CHGCurrent
+#define BATTERY_CHARGE_CURRENT 390 // Charge current, must be one of AXP192::CHGCurrent
 
 // ESP-NOW fixed channel for reliable pairing with OSSM (1..11)
 #ifndef ESP_NOW_CHANNEL

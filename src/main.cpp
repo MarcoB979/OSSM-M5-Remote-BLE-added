@@ -14,6 +14,8 @@
 
 
 // Tasks:
+// Single-definition globals
+int buttonDebounceMs = 40;
 
 void setup(){
   Serial.begin(115200);
@@ -36,6 +38,9 @@ void setup(){
   if (brightness < 0) {
     brightness = 180; // your default
     m5prf.putInt("Brightness", brightness); // save default to NVS
+  } else if (brightness < 30) {
+    brightness = 30; // enforce minimum brightness
+    m5prf.putInt("Brightness", brightness);
   }
 
   g_brightness_value = brightness;
@@ -60,17 +65,17 @@ void setup(){
   Button1.attachClick(mxclick);
   Button1.attachDoubleClick(mxdouble);
   Button1.attachLongPressStart(mxlong);
-  Button1.setDebounceMs(55);
-  Button1.setClickMs(300);
+  Button1.setDebounceMs(buttonDebounceMs);
+  Button1.setClickMs(200);
   Button1.setLongPressIntervalMs(380);
   Button2.attachClick(clickLeft);
   Button2.attachLongPressStart(clickLeftLong);
-  Button2.setDebounceMs(35);
-  Button2.setClickMs(180);
+  Button2.setDebounceMs(buttonDebounceMs);
+  Button2.setClickMs(200);
   Button2.setLongPressIntervalMs(380);
   Button3.attachClick(clickRight);
-  Button3.setDebounceMs(35);
-  Button3.setClickMs(180);
+  Button3.setDebounceMs(buttonDebounceMs);
+  Button3.setClickMs(200);
   Button3.attachLongPressStart(clickRightLong);
   Button3.setLongPressIntervalMs(380);
   

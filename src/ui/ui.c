@@ -2026,7 +2026,7 @@ void ui_Settings_screen_init(void)
 
     
     ui_brightness_slider = lv_slider_create(ui_Settings);
-    lv_slider_set_range(ui_brightness_slider, 0, 255);
+    lv_slider_set_range(ui_brightness_slider, 5, 255);
     lv_slider_set_value(ui_brightness_slider, g_brightness_value, LV_ANIM_OFF);
     lv_obj_set_width(ui_brightness_slider, 255);
     lv_obj_set_height(ui_brightness_slider, 18);

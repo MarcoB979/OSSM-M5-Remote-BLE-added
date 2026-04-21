@@ -176,6 +176,7 @@ extern bool clickLeft_double_waspressed;
 extern bool clickRight_short_waspressed;
 extern bool clickRight_long_waspressed;
 extern bool clickRight_double_waspressed;
+extern int buttonDebounceMs;
 
 #ifdef __cplusplus
 extern OneButton Button1;
