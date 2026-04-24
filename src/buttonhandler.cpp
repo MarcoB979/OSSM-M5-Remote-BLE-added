@@ -46,6 +46,17 @@ bool clickRight_double_waspressed = false;
 static void applyHomeStartStopUi()
 {
   if (ui_HomeButtonM != nullptr && ui_HomeButtonMText != nullptr) {
+    // Only force the Start appearance when the UI is not already running
+    // and the OSSM (BLE) reports stroke==0. If the UI is running we must
+    // preserve the running/pause appearance even when stroke==0.
+    if (!isRunningUiState(OSSM_State) && OssmBleIsMode() && stroke == 0) {
+      OssmBleMachineState mstate;
+      if (OssmBleGetCurrentState(&mstate, false) && mstate.valid && mstate.stroke == 0) {
+//      lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
+//      lv_label_set_text(ui_HomeButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP);
+        return;
+      }
+    }
     if (isRunningUiState(OSSM_State)) {
       lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_label_set_text(ui_HomeButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP);
@@ -59,6 +70,17 @@ static void applyHomeStartStopUi()
 static void applyStreamingStartStopUi()
 {
   if (ui_StreamingButtonM != nullptr && ui_StreamingButtonMText != nullptr) {
+    // Mirror home button behaviour but only when UI is not running: if OSSM
+    // reports stroke==0, show Start to avoid transient pause UI during the
+    // stroke->0 workaround. Preserve running/pause appearance when running.
+    if (!isRunningUiState(OSSM_State) && OssmBleIsMode()) {
+      OssmBleMachineState mstate;
+      if (OssmBleGetCurrentState(&mstate, false) && mstate.valid && mstate.stroke == 0) {
+        lv_obj_set_style_bg_color(ui_StreamingButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_label_set_text(ui_StreamingButtonMText, T_START);
+        return;
+      }
+    }
     if (isRunningUiState(OSSM_State)) {
       lv_obj_set_style_bg_color(ui_StreamingButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
       lv_label_set_text(ui_StreamingButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP);
@@ -100,7 +122,8 @@ void homebuttonm_action(bool fromPhysicalMx)
     if (!isRunning) {
       syncStrokeEngineParametersBeforeStart();
     }
-    ossm_state_monitor_hold_until_ms = millis() + 1U;
+    // Briefly suppress immediate repeated home toggles
+    ossm_state_monitor_hold_until_ms = millis() + 300U;
     switch (OssmBleHandleHomeToggle(isRunning, speed)) {
       case OssmBleHomeToggleResult::Paused:
         OSSM_State = state_FALSE;

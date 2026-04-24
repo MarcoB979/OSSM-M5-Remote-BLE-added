@@ -99,4 +99,10 @@ static const AddonDefinition ADDON_DEFINITIONS[] = {
 // Minimum time to keep Start screen visible before auto-switching to Home.
 #define START_SCREEN_MIN_DISPLAY_MS 3000UL
 
+#ifdef __cplusplus
+// Runtime-configurable debug flags (defined in config_debug.cpp)
+extern bool ShowBLECommandResponses; // print BLE command responses
+extern bool ShowBLEDebugCommands;   // print concise BLE send/parse debug
+#endif
+
 

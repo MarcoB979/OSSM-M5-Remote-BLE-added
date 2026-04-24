@@ -46,13 +46,13 @@ bool clickRight_double_waspressed = false;
 static void applyHomeStartStopUi()
 {
   if (ui_HomeButtonM != nullptr && ui_HomeButtonMText != nullptr) {
-    if (isRunningUiState(OSSM_State)) {
-      lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_label_set_text(ui_HomeButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP);
-    } else {
-      lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_label_set_text(ui_HomeButtonMText, T_START);
-    }
+      if (isRunningUiState(OSSM_State)) {
+        lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_label_set_text(ui_HomeButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP);
+      } else {
+        lv_obj_set_style_bg_color(ui_HomeButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_label_set_text(ui_HomeButtonMText, T_START);
+      }
   }
 }
 
@@ -60,13 +60,13 @@ static void applyStreamingStartStopUi()
 {
   if (ui_StreamingButtonM != nullptr && ui_StreamingButtonMText != nullptr) {
     if (isRunningUiState(OSSM_State)) {
-      lv_obj_set_style_bg_color(ui_StreamingButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_label_set_text(ui_StreamingButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP);
-    } else {
-      lv_obj_set_style_bg_color(ui_StreamingButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_label_set_text(ui_StreamingButtonMText, T_START);
+        lv_obj_set_style_bg_color(ui_StreamingButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_label_set_text(ui_StreamingButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP);
+      } else {
+        lv_obj_set_style_bg_color(ui_StreamingButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_label_set_text(ui_StreamingButtonMText, T_START);
+      }
     }
-  }
 }
 
 void refreshHomeAndStreamingStartStopUi()

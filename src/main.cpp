@@ -58,10 +58,10 @@ void setup(){
 
   EspNowInitCommunication();
   
-  encoder1.attachHalfQuad(ENC_1_CLK, ENC_1_DT);
-  encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
-  encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
-  encoder4.attachHalfQuad(ENC_4_CLK, ENC_4_DT);
+  encoder1.attachFullQuad(ENC_1_CLK, ENC_1_DT);
+  encoder2.attachFullQuad(ENC_2_CLK, ENC_2_DT);
+  encoder3.attachFullQuad(ENC_3_CLK, ENC_3_DT);
+  encoder4.attachFullQuad(ENC_4_CLK, ENC_4_DT);
   Button1.attachClick(mxclick);
   Button1.attachDoubleClick(mxdouble);
   Button1.attachLongPressStart(mxlong);

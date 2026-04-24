@@ -39,6 +39,9 @@ static int  rampTime    = 75;
 static int  maxRamp     = 6;
 static int  activeEncId = 0;
 static unsigned long rampMs = 0;
+// Homing request dedupe: avoid issuing two homing requests within short window
+static unsigned long last_homing_request_ms = 0;
+static const unsigned long HOMING_REQUEST_MIN_GAP_MS = 400;
 
 // Per-loop one-shot snapshot consumed by all screen handlers in this tick.
 static ButtonEvents g_button_events = {};
@@ -203,6 +206,8 @@ void screen_power_tick()
   }
 #endif
 }
+
+// (no MX suppression here — keep MX responsive)
 
 static lv_obj_t* createStatusIconBase(lv_obj_t* parent, int width, int height)
 {
@@ -421,22 +426,33 @@ static void updateScreenTitleLabels()
 static void applyHomeDefaultsForModeChange()
 {
   speed = 0.0f;
-  depth = 0.0f;
-  stroke = 0.0f;
-  sensation = 50.0f;
+  depth = 20.0f;
+  stroke = 15.0f;
+  sensation = 0.0f;
 
   if (ui_homespeedslider != nullptr) lv_slider_set_value(ui_homespeedslider, 0, LV_ANIM_OFF);
-  if (ui_homedepthslider != nullptr) lv_slider_set_value(ui_homedepthslider, 0, LV_ANIM_OFF);
-  if (ui_homestrokeslider != nullptr) lv_slider_set_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
-  if (ui_homesensationslider != nullptr) lv_slider_set_value(ui_homesensationslider, 50, LV_ANIM_OFF);
+  if (ui_homedepthslider != nullptr) lv_slider_set_value(ui_homedepthslider, 20, LV_ANIM_OFF);
+  if (ui_homestrokeslider != nullptr) lv_slider_set_value(ui_homestrokeslider, 15, LV_ANIM_OFF);
+  if (ui_homesensationslider != nullptr) lv_slider_set_value(ui_homesensationslider, 0, LV_ANIM_OFF);
   if (ui_homespeedvalue != nullptr) lv_label_set_text(ui_homespeedvalue, "0");
-  if (ui_homedepthvalue != nullptr) lv_label_set_text(ui_homedepthvalue, "0");
-  if (ui_homestrokevalue != nullptr) lv_label_set_text(ui_homestrokevalue, "0");
+  if (ui_homedepthvalue != nullptr) lv_label_set_text(ui_homedepthvalue, "20");
+  if (ui_homestrokevalue != nullptr) lv_label_set_text(ui_homestrokevalue, "15");
+
+  // Set pattern to RoboStroke (index 2) and update UI label if available.
+  pattern = 2;
+  if (ui_PatternS != nullptr) {
+    lv_roller_set_selected(ui_PatternS, 2, LV_ANIM_OFF);
+    lv_roller_get_selected_str(ui_PatternS, patternstr, 0);
+  }
+  if (ui_HomePatternLabel != nullptr) {
+    lv_label_set_text(ui_HomePatternLabel, patternstr);
+  }
 
   SendCommand(SPEED, 0, OSSM_ID);
-  SendCommand(DEPTH, 0, OSSM_ID);
-  SendCommand(STROKE, 0, OSSM_ID);
-  SendCommand(SENSATION, 50, OSSM_ID);
+  SendCommand(DEPTH, 20, OSSM_ID);
+  SendCommand(STROKE, 15, OSSM_ID);
+  SendCommand(SENSATION, 0, OSSM_ID);
+  SendCommand(PATTERN, 2, OSSM_ID);
 }
 
 void screenmachine(lv_event_t * e)
@@ -475,7 +491,14 @@ void screenmachine(lv_event_t * e)
       // Only re-enter stroke engine from Menu when Menu flow explicitly armed it
       // (e.g. after selecting non-home actions that should force homing later).
       if (previousScreen == ST_UI_MENU && g_ble_menu_requires_stroke_reentry) {
-        OssmBleGoToStrokeEngine();
+        if ((millis() - last_homing_request_ms) >= HOMING_REQUEST_MIN_GAP_MS) {
+          OssmBleGoToStrokeEngine();
+          // Apply home defaults when returning from Menu where a re-entry was armed.
+          applyHomeDefaultsForModeChange();
+          last_homing_request_ms = millis();
+        } else {
+          LogDebugPrioFormatted("Skipped duplicate homing request (gap=%lu ms)\n", (unsigned long)(millis() - last_homing_request_ms));
+        }
         g_ble_menu_requires_stroke_reentry = false;
       }
     } else {
@@ -567,7 +590,16 @@ void syncBleConnectUi(bool forceRefresh)
 
   if (!startupMenuRequested) {
     lv_label_set_text(ui_Welcome, T_HOMING);
-    OssmBleGoToMenu();
+    // Request stroke-engine entry to force a homing sequence on connect.
+    // Using GoToStrokeEngine triggers the OSSM to enter stroke mode and
+    // start homing if necessary. Do not set UI homing text here elsewhere;
+    // the UI will update from BLE polling.
+    if ((millis() - last_homing_request_ms) >= HOMING_REQUEST_MIN_GAP_MS) {
+      OssmBleGoToStrokeEngine();
+      last_homing_request_ms = millis();
+    } else {
+      LogDebugPrioFormatted("syncBleConnectUi: skipped duplicate homing (gap=%lu ms)\n", (unsigned long)(millis() - last_homing_request_ms));
+    }
     startupMenuRequested = true;
     startupMenuRequestedMs = millis();
     return;
@@ -669,6 +701,7 @@ static void handleStartScreen(const ButtonEvents &events)
 
 static void handleHomeScreen(const ButtonEvents &events)
 {
+  static float last_speed_for_toggle = 0.0f;
   static int lastHomeTransportMode = -1;
   int currentTransportMode = OssmBleIsMode() ? 1 : 0;
   if (lastHomeTransportMode != currentTransportMode) {
@@ -702,11 +735,14 @@ static void handleHomeScreen(const ButtonEvents &events)
     lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
 
     long speedCount   = encoder1.getCount();
-    int  speedDetents = (int)(speedCount / 2);
+    int  speedDetents = (int)(speedCount / 4);
+    int  speedRem = (int)(speedCount - speedDetents * 4);
+    if (speedRem < 0) { speedRem += 4; speedDetents -= 1; }
     if (speedDetents != 0) {
       changed = true;
+      LogDebugFormatted("ENC1 raw=%ld det=%d speed_before=%f\n", speedCount, speedDetents, speed);
       speed += getRampedDetentDelta(1, speedDetents);
-      encoder1.setCount(speedCount % 2);
+      encoder1.setCount(speedRem);
       screensaver_check_activity();
     }
     if (speed < 0) { changed = true; speed = 0; }
@@ -725,22 +761,40 @@ static void handleHomeScreen(const ButtonEvents &events)
   }
   lv_label_set_text(ui_homespeedvalue, speed_v);
 
+  // Detect 0 -> non-zero and non-zero -> 0 transitions to auto start/pause OSSM.
+  {
+    float prev = last_speed_for_toggle;
+    float cur = speed;
+    bool crossed_to_nonzero = (prev <= 0.0f && cur > 0.0f);
+    bool crossed_to_zero = (prev > 0.0f && cur <= 0.0f);
+
+    if (crossed_to_nonzero) {
+      homebuttonm_action(false);
+    } else if (crossed_to_zero) {
+      homebuttonm_action(false);
+    }
+    last_speed_for_toggle = cur;
+  }
+
   // Encoder 2 – Depth
   if (lv_slider_is_dragged(ui_homedepthslider) == false) {
     changed = false;
     lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
 
     long depthCount   = encoder2.getCount();
-    int  depthDetents = (int)(depthCount / 2);
+    int  depthDetents = (int)(depthCount / 4);
+    int  depthRem = (int)(depthCount - depthDetents * 4);
+    if (depthRem < 0) { depthRem += 4; depthDetents -= 1; }
     if (depthDetents != 0) {
       changed = true;
+      LogDebugFormatted("ENC2 raw=%ld det=%d depth_before=%f\n", depthCount, depthDetents, depth);
       int depthDelta = getRampedDetentDelta(2, depthDetents);
       depth += depthDelta;
       if (dynamicStroke == true) {
         stroke += depthDelta;
         if (stroke >= depth) stroke = depth;
       }
-      encoder2.setCount(depthCount % 2);
+      encoder2.setCount(depthRem);
       screensaver_check_activity();
     }
     if (depth < 0) { changed = true; depth = 0; }
@@ -772,21 +826,33 @@ static void handleHomeScreen(const ButtonEvents &events)
     }
 
     long strokeCount   = encoder3.getCount();
-    int  strokeDetents = (int)(strokeCount / 2);
+    int  strokeDetents = (int)(strokeCount / 4);
+    int  strokeRem = (int)(strokeCount - strokeDetents * 4);
+    if (strokeRem < 0) { strokeRem += 4; strokeDetents -= 1; }
     if (strokeDetents != 0) {
-      changed = true;
+      LogDebugFormatted("ENC3 raw=%ld det=%d stroke_before=%f\n", strokeCount, strokeDetents, stroke);
+      int delta = getRampedDetentDelta(3, strokeDetents);
+      float newStroke = stroke;
       if (!strokeinvert_mode) {
-        stroke += getRampedDetentDelta(3, strokeDetents);
+        newStroke += delta;
       } else {
-        stroke -= getRampedDetentDelta(3, strokeDetents);
+        newStroke -= delta;
       }
-      encoder3.setCount(strokeCount % 2);
+      // clamp proposed value
+      if (newStroke < 0.0f) newStroke = 0.0f;
+      const float strokeMax = OssmBleIsMode() ? 100.0f : maxdepthinmm;
+      if (newStroke > strokeMax) newStroke = strokeMax;
+      if (newStroke > depth) newStroke = depth;
+
+      if (newStroke != stroke) {
+        float oldStroke = stroke;
+        changed = true;
+        stroke = newStroke;
+        LogDebugFormatted("ENC3 applied stroke change old=%f new=%f raw=%ld det=%d\n", oldStroke, stroke, strokeCount, strokeDetents);
+      }
+      encoder3.setCount(strokeRem);
       screensaver_check_activity();
     }
-    if (stroke < 0) { changed = true; stroke = 0; }
-    const float strokeMax = OssmBleIsMode() ? 100.0f : maxdepthinmm;
-    if (stroke > strokeMax) { changed = true; stroke = strokeMax; }
-    if (stroke > depth)     { changed = true; stroke = depth; }
     if (changed) SendCommand(STROKE, stroke, OSSM_ID);
   } else {
     if (!strokeinvert_mode) {
@@ -823,11 +889,14 @@ static void handleHomeScreen(const ButtonEvents &events)
     lv_slider_set_value(ui_homesensationslider, sensation, LV_ANIM_OFF);
 
     long sensationCount   = encoder4.getCount();
-    int  sensationDetents = (int)(sensationCount / 2);
+    int  sensationDetents = (int)(sensationCount / 4);
+    int  sensationRem = (int)(sensationCount - sensationDetents * 4);
+    if (sensationRem < 0) { sensationRem += 4; sensationDetents -= 1; }
     if (sensationDetents != 0) {
       changed = true;
+      LogDebugFormatted("ENC4 raw=%ld det=%d sensation_before=%f\n", sensationCount, sensationDetents, sensation);
       sensation += 2.0f * getRampedDetentDelta(4, sensationDetents);
-      encoder4.setCount(sensationCount % 2);
+      encoder4.setCount(sensationRem);
       screensaver_check_activity();
     }
     if (sensation < -100) { changed = true; sensation = -100; }
@@ -1092,11 +1161,13 @@ static void handleStreamingScreen(const ButtonEvents &events)
     changed = false;
     lv_slider_set_value(ui_streamingspeedslider, speed, LV_ANIM_OFF);
     long enc = encoder1.getCount();
-    int  det = (int)(enc / 2);
+    int  det = (int)(enc / 4);
+    int  rem = (int)(enc - det * 4);
+    if (rem < 0) { rem += 4; det -= 1; }
     if (det != 0) {
       changed = true;
       speed += getRampedDetentDelta(1, det);
-      encoder1.setCount(enc % 2);
+      encoder1.setCount(rem);
       screensaver_check_activity();
     }
     if (speed < 0)      { changed = true; speed = 0; }
@@ -1119,11 +1190,13 @@ static void handleStreamingScreen(const ButtonEvents &events)
     changed = false;
     lv_slider_set_value(ui_streamingdepthslider, depth, LV_ANIM_OFF);
     long enc = encoder2.getCount();
-    int  det = (int)(enc / 2);
+    int  det = (int)(enc / 4);
+    int  rem = (int)(enc - det * 4);
+    if (rem < 0) { rem += 4; det -= 1; }
     if (det != 0) {
       changed = true;
       depth += getRampedDetentDelta(2, det);
-      encoder2.setCount(enc % 2);
+      encoder2.setCount(rem);
       screensaver_check_activity();
     }
     if (depth < 0)      { changed = true; depth = 0; }
@@ -1146,11 +1219,14 @@ static void handleStreamingScreen(const ButtonEvents &events)
     changed = false;
     lv_slider_set_value(ui_streamingstrokeslider, stroke, LV_ANIM_OFF);
     long enc = encoder3.getCount();
-    int  det = (int)(enc / 2);
+    int  det = (int)(enc / 4);
+    int  rem = (int)(enc - det * 4);
+    if (rem < 0) { rem += 4; det -= 1; }
     if (det != 0) {
       changed = true;
+      LogDebugFormatted("ENC3(stream) raw=%ld det=%d stroke_before=%f\n", enc, det, stroke);
       stroke += getRampedDetentDelta(3, det);
-      encoder3.setCount(enc % 2);
+      encoder3.setCount(rem);
       screensaver_check_activity();
     }
     if (stroke < 0)      { changed = true; stroke = 0; }

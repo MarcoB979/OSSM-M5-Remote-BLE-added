@@ -300,40 +300,6 @@ static void ui_event_HomeButtonR(lv_event_t * e)
     }
 }
 
-/*
-static void ui_evenT_MENU(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SCREEN_LOADED) {
-        screenmachine(e);
-    }
-}
-static void ui_evenT_MENUButtonL(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
-        _ui_screen_change(ui_Settings, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    }
-}
-static void ui_evenT_MENUButtonM(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    }
-}
-static void ui_evenT_MENUButtonR(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
-        xtoysMenuButtonRToggle();
-    }
-}
-*/
 
 static void ui_event_Brightness_sliderChange(lv_event_t * e)
 {
@@ -467,7 +433,7 @@ static void ui_event_Settings(lv_event_t * e)
         screenmachine(e);
     }
 }
-static void ui_event_SettingsButtonL(lv_event_t * e)
+static void ui_event_SettingsButtonM(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
@@ -475,7 +441,7 @@ static void ui_event_SettingsButtonL(lv_event_t * e)
         savesettings(e);
     }
 }
-static void ui_event_SettingsButtonM(lv_event_t * e)
+static void ui_event_SettingsButtonL(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
@@ -518,6 +484,8 @@ static void ui_event_MenuButtonTR(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
+        //THIS WILL BE REPLACED BY A STROKE MODE ENTRY IN THE FUTURE
+        return;
         menuPrepareNonHomeAction();
         requestStreamingEntryFlow();
         _ui_screen_change(ui_Streaming, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
@@ -1789,7 +1757,7 @@ void ui_Settings_screen_init(void)
     lv_obj_set_align(ui_SettingsButtonLText, LV_ALIGN_CENTER);
 
 //CHECK    lv_obj_add_event_cb(ui_vibrate, settings_checkbox_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    lv_label_set_text(ui_SettingsButtonLText, T_SAVE);
+    lv_label_set_text(ui_SettingsButtonLText, T_BACK);
 
     lv_obj_add_style(ui_SettingsButtonLText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -1826,7 +1794,7 @@ void ui_Settings_screen_init(void)
     lv_obj_set_align(ui_SettingsButtonMText, LV_ALIGN_CENTER);
 
     // MX (middle) button now goes to menu
-    lv_label_set_text(ui_SettingsButtonMText, T_MENU);
+    lv_label_set_text(ui_SettingsButtonMText, T_SAVE);
 
     lv_obj_add_style(ui_SettingsButtonMText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -2125,7 +2093,7 @@ void ui_Menu_screen_init(void)
     lv_obj_set_width(ui_MenuButtonTRText, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_MenuButtonTRText, LV_SIZE_CONTENT);
     lv_obj_set_align(ui_MenuButtonTRText, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_MenuButtonTRText, T_STREAMING "\n" T_STREAMING_SUB);
+    lv_label_set_text(ui_MenuButtonTRText, T_STREAMING "\n" "");
     lv_obj_add_style(ui_MenuButtonTRText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_align(ui_MenuButtonTRText, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_MenuButtonTRText, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);

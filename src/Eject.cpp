@@ -293,11 +293,13 @@ static bool applySliderFromEncoder(ESP32Encoder &encoder,
   if (lv_slider_is_dragged(slider) == false) {
     lv_slider_set_value(slider, (int)value, LV_ANIM_OFF);
     long count = encoder.getCount();
-    int detents = (int)(count / 2);
+    int detents = (int)(count / 4);
+    int rem = (int)(count - detents * 4);
+    if (rem < 0) { rem += 4; detents -= 1; }
 
     if (detents != 0) {
       value += (float)getRampedDetentDelta(encoderId, detents);
-      encoder.setCount(count % 2);
+      encoder.setCount(rem);
       changed = true;
       screensaver_check_activity();
     }

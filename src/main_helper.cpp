@@ -2,6 +2,7 @@
 #include <Arduino.h>
 #include <esp_sleep.h>
 #include <esp_timer.h>
+#include <NimBLEDevice.h>
 
 #include "main.h"
 #include "config.h"
@@ -127,6 +128,14 @@ void monitorOssmState(bool forceBlePoll)
           default:
             g_homing_direction = 0;
             break;
+        }
+        // If OSSM BLE code intentionally paused the device as a workaround
+        // for setting stroke->0, suppress transient UI pause transitions
+        // until the machine actually reports stroke==0.
+        if (nextState == state_PAUSE) {
+          if (OssmBleShouldSuppressUiPause(bleState.stroke)) {
+            nextState = OSSM_State; // keep previous UI state
+          }
         }
       }
     }
@@ -470,9 +479,9 @@ bool SendCommand(int Command, float Value, int Target)
   } else  if (Target == OSSM_ID && !OssmBleIsMode()) {
 
     if (Ossm_paired == true) {
-      LogDebugFormatted("TX ESP cmd=%d val=%.2f target=%d (paired=%d)\n", Command, Value, Target, Ossm_paired ? 1 : 0);
+      LogDebugFormatted("TEMP TX ESP cmd=%d val=%.2f target=%d (paired=%d)\n", Command, Value, Target, Ossm_paired ? 1 : 0);
       bool ok = EspNowSendControlCommand(Command, Value, Target);
-      LogDebugFormatted("TX ESP result=%s cmd=%d target=%d\n", ok ? "OK" : "FAIL", Command, Target);
+      LogDebugFormatted("TEMP TX ESP result=%s cmd=%d target=%d\n", ok ? "OK" : "FAIL", Command, Target);
       return ok;
     } else {
       LogDebugFormatted("ESP-NOW command not sent because not paired (cmd=%d val=%.2f target=%d)\n", Command, Value, Target);
