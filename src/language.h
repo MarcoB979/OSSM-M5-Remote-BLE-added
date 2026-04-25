@@ -99,6 +99,8 @@
 // Screen titles
 #define T_SCREEN_START            "Start"
 #define T_SCREEN_STROKE_ENGINE    "OSSM Home"
+// Stroke screen title
+#define T_SCREEN_STROKE          "Stroke"
 #define T_SCREEN_MENU             "Menu"
 #define T_SCREEN_STREAMING        "Streaming"
 #define T_SCREEN_SETTINGS         "Settings"

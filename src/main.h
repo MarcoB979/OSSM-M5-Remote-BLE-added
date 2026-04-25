@@ -50,6 +50,7 @@
 
 #define ST_UI_START 0
 #define ST_UI_HOME 1
+#define ST_UI_STROKE 2
 #define ST_UI_MENUE 10
 #define ST_UI_PATTERN 11
 #define ST_UI_Torqe 12

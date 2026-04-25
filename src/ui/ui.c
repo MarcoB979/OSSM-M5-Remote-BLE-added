@@ -294,7 +294,7 @@ static void ui_event_HomeButtonR(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
-        _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        _ui_screen_change(ui_Stroke, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     } else if(event == LV_EVENT_LONG_PRESSED){
         homebuttonRlongEvent(e);
     }
@@ -611,6 +611,35 @@ static void ui_event_StreamingButtonR(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
         streamingReturnToMenu();
+    }
+}
+
+// UI_STROKE event handlers
+static void ui_event_Stroke(lv_event_t * e)
+{
+    lv_event_code_t event = lv_event_get_code(e);
+    if(event == LV_EVENT_SCREEN_LOADED) {
+        screenmachine(e);
+    }
+}
+static void ui_event_StrokeButtonL(lv_event_t * e)
+{
+    lv_event_code_t event = lv_event_get_code(e);
+    (void)event;
+}
+static void ui_event_StrokeButtonM(lv_event_t * e)
+{
+    lv_event_code_t event = lv_event_get_code(e);
+    if(event == LV_EVENT_SHORT_CLICKED) {
+        strokebuttonmevent(e);
+    }
+}
+static void ui_event_StrokeButtonR(lv_event_t * e)
+{
+    lv_event_code_t event = lv_event_get_code(e);
+    if(event == LV_EVENT_SHORT_CLICKED) {
+        // return to menu
+        _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
 
@@ -2449,6 +2478,145 @@ void ui_Streaming_screen_init(void)
     lv_obj_set_x(ui_streamingstrokevalue, 80);
     lv_obj_set_y(ui_streamingstrokevalue, 0);
     lv_obj_set_align(ui_streamingstrokevalue, LV_ALIGN_LEFT_MID);
+    
+    // --- ui_Stroke: similar layout to Home but focused on stroke mode ---
+    ui_Stroke = lv_obj_create(NULL);
+    lv_obj_clear_flag(ui_Stroke, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(ui_Stroke, ui_event_Stroke, LV_EVENT_ALL, NULL);
+
+    // ui_LogoStroke
+    ui_LogoStroke = lv_label_create(ui_Stroke);
+    lv_obj_set_width(ui_LogoStroke, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_LogoStroke, LV_SIZE_CONTENT);
+    lv_obj_set_y(ui_LogoStroke, -103);
+    lv_obj_set_x(ui_LogoStroke, lv_pct(0));
+    lv_obj_set_align(ui_LogoStroke, LV_ALIGN_CENTER);
+    lv_label_set_text(ui_LogoStroke, T_HEADER);
+    lv_obj_set_style_text_font(ui_LogoStroke, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_LogoStroke, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_LogoStroke, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // Bottom buttons: L, M, R
+    ui_StrokeButtonL = lv_btn_create(ui_Stroke);
+    lv_obj_set_width(ui_StrokeButtonL, 100);
+    lv_obj_set_height(ui_StrokeButtonL, 30);
+    lv_obj_set_y(ui_StrokeButtonL, 100);
+    lv_obj_set_x(ui_StrokeButtonL, lv_pct(-33));
+    lv_obj_set_align(ui_StrokeButtonL, LV_ALIGN_CENTER);
+    lv_obj_add_flag(ui_StrokeButtonL, LV_OBJ_FLAG_CHECKABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_clear_flag(ui_StrokeButtonL, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(ui_StrokeButtonL, ui_event_StrokeButtonL, LV_EVENT_SHORT_CLICKED, NULL);
+    lv_obj_add_style(ui_StrokeButtonL, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+    ui_StrokeButtonLText = lv_label_create(ui_StrokeButtonL);
+    lv_label_set_text(ui_StrokeButtonLText, T_MENU);
+    lv_obj_add_style(ui_StrokeButtonLText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_StrokeButtonM = lv_btn_create(ui_Stroke);
+    lv_obj_set_width(ui_StrokeButtonM, 100);
+    lv_obj_set_height(ui_StrokeButtonM, 30);
+    lv_obj_set_y(ui_StrokeButtonM, 100);
+    lv_obj_set_x(ui_StrokeButtonM, lv_pct(0));
+    lv_obj_set_align(ui_StrokeButtonM, LV_ALIGN_CENTER);
+    lv_obj_add_flag(ui_StrokeButtonM, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_clear_flag(ui_StrokeButtonM, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(ui_StrokeButtonM, ui_event_StrokeButtonM, LV_EVENT_SHORT_CLICKED, NULL);
+    lv_obj_add_style(ui_StrokeButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    ui_StrokeButtonMText = lv_label_create(ui_StrokeButtonM);
+    lv_label_set_text(ui_StrokeButtonMText, T_START);
+    lv_obj_add_style(ui_StrokeButtonMText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_StrokeButtonR = lv_btn_create(ui_Stroke);
+    lv_obj_set_width(ui_StrokeButtonR, 100);
+    lv_obj_set_height(ui_StrokeButtonR, 30);
+    lv_obj_set_y(ui_StrokeButtonR, 100);
+    lv_obj_set_x(ui_StrokeButtonR, lv_pct(33));
+    lv_obj_set_align(ui_StrokeButtonR, LV_ALIGN_CENTER);
+    lv_obj_add_flag(ui_StrokeButtonR, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_clear_flag(ui_StrokeButtonR, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(ui_StrokeButtonR, ui_event_StrokeButtonR, LV_EVENT_SHORT_CLICKED, NULL);
+    ui_StrokeButtonRText = lv_label_create(ui_StrokeButtonR);
+    lv_label_set_text(ui_StrokeButtonRText, T_SCREEN_PATTERN);
+    lv_obj_add_style(ui_StrokeButtonRText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // Speed slider
+    ui_StrokeSpeedL = lv_label_create(ui_Stroke);
+    lv_obj_set_width(ui_StrokeSpeedL, lv_pct(95));
+    lv_obj_set_height(ui_StrokeSpeedL, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_StrokeSpeedL, 0);
+    lv_obj_set_y(ui_StrokeSpeedL, -60);
+    lv_obj_set_align(ui_StrokeSpeedL, LV_ALIGN_CENTER);
+    lv_label_set_text(ui_StrokeSpeedL, T_SPEED);
+    lv_obj_set_style_text_font(ui_StrokeSpeedL, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    ui_strokespeedslider = lv_slider_create(ui_StrokeSpeedL);
+    lv_slider_set_range(ui_strokespeedslider, 0, speedlimit);
+    lv_obj_set_width(ui_strokespeedslider, 130);
+    lv_obj_set_height(ui_strokespeedslider, 10);
+    lv_obj_set_x(ui_strokespeedslider, -15);
+    lv_obj_set_align(ui_strokespeedslider, LV_ALIGN_RIGHT_MID);
+    lv_obj_add_style(ui_strokespeedslider, &style_slider_track[0], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_strokespeedslider, &style_slider_indicator[0], LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    ui_strokespeedvalue = lv_label_create(ui_StrokeSpeedL);
+    lv_obj_set_width(ui_strokespeedvalue, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_strokespeedvalue, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_strokespeedvalue, 80);
+    lv_obj_set_align(ui_strokespeedvalue, LV_ALIGN_LEFT_MID);
+    lv_label_set_text(ui_strokespeedvalue, T_BLANK);
+    lv_obj_add_event_cb(ui_strokespeedslider, stroke_speed_changed, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // Stroke slider (centered logic)
+    ui_StrokeL = lv_label_create(ui_Stroke);
+    lv_obj_set_width(ui_StrokeL, lv_pct(95));
+    lv_obj_set_height(ui_StrokeL, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_StrokeL, 0);
+    lv_obj_set_y(ui_StrokeL, -25);
+    lv_obj_set_align(ui_StrokeL, LV_ALIGN_CENTER);
+    lv_label_set_text(ui_StrokeL, T_STROKE);
+    lv_obj_set_style_text_font(ui_StrokeL, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    ui_strokestrokeslider = lv_slider_create(ui_StrokeL);
+    lv_slider_set_range(ui_strokestrokeslider, 0, maxdepthinmm);
+    lv_slider_set_mode(ui_strokestrokeslider, LV_SLIDER_MODE_NORMAL);
+    lv_obj_set_width(ui_strokestrokeslider, 130);
+    lv_obj_set_height(ui_strokestrokeslider, 10);
+    lv_obj_set_x(ui_strokestrokeslider, -15);
+    lv_obj_set_align(ui_strokestrokeslider, LV_ALIGN_RIGHT_MID);
+    lv_obj_add_style(ui_strokestrokeslider, &style_slider_track[2], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_strokestrokeslider, &style_slider_indicator[2], LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    ui_strokestrokevalue = lv_label_create(ui_StrokeL);
+    lv_obj_set_width(ui_strokestrokevalue, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_strokestrokevalue, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_strokestrokevalue, 80);
+    lv_obj_set_align(ui_strokestrokevalue, LV_ALIGN_LEFT_MID);
+    lv_label_set_text(ui_strokestrokevalue, T_BLANK);
+    lv_obj_add_event_cb(ui_strokestrokeslider, stroke_stroke_changed, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // Sensation slider
+    ui_SensationL = lv_label_create(ui_Stroke);
+    lv_obj_set_width(ui_SensationL, lv_pct(95));
+    lv_obj_set_height(ui_SensationL, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_SensationL, 0);
+    lv_obj_set_y(ui_SensationL, 45);
+    lv_obj_set_align(ui_SensationL, LV_ALIGN_CENTER);
+    lv_label_set_text(ui_SensationL, T_SENSATION);
+    lv_obj_set_style_text_font(ui_SensationL, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    ui_strokesensationslider = lv_slider_create(ui_SensationL);
+    lv_slider_set_range(ui_strokesensationslider, -100, 100);
+    lv_slider_set_mode(ui_strokesensationslider, LV_SLIDER_MODE_SYMMETRICAL);
+    lv_obj_set_width(ui_strokesensationslider, 170);
+    lv_obj_set_height(ui_strokesensationslider, 10);
+    lv_obj_set_x(ui_strokesensationslider, -15);
+    lv_obj_set_align(ui_strokesensationslider, LV_ALIGN_RIGHT_MID);
+    lv_obj_add_style(ui_strokesensationslider, &style_slider_track[3], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_strokesensationslider, &style_slider_indicator[3], LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_add_event_cb(ui_strokesensationslider, stroke_sensation_changed, LV_EVENT_VALUE_CHANGED, NULL);
+
+    // Pattern label
+    ui_StrokePatternLabel = lv_label_create(ui_Stroke);
+    lv_obj_set_width(ui_StrokePatternLabel, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_StrokePatternLabel, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_StrokePatternLabel, 0);
+    lv_obj_set_y(ui_StrokePatternLabel, 90);
+    lv_obj_set_align(ui_StrokePatternLabel, LV_ALIGN_CENTER);
+    lv_label_set_text(ui_StrokePatternLabel, T_BLANK);
     lv_label_set_text(ui_streamingstrokevalue, T_BLANK);
 
     // Battery display

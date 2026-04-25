@@ -78,7 +78,8 @@ static const AddonDefinition ADDON_DEFINITIONS[] = {
 	{"eject_cumpump",  "Eject Cumpump"},
 	{"fist_it",        "Fist-IT"},
 	{"color_schemes",  "Color Schemes"},
-    {"x_toys",         "X-toys Mode"},
+	{"x_toys",         "X-toys Mode"},
+	{"streaming_mode", "Streaming Mode"},
 };
 
 #define ADDON_DEFINITIONS_COUNT (sizeof(ADDON_DEFINITIONS) / sizeof(ADDON_DEFINITIONS[0]))
