@@ -1,10 +1,9 @@
-#include <M5Unified.h>
+#include "main.h"
 #include <Arduino.h>
 #include <esp_sleep.h>
 #include <esp_timer.h>
 #include <NimBLEDevice.h>
 
-#include "main.h"
 #include "config.h"
 #include "OssmBLE.h"
 #include "language.h"

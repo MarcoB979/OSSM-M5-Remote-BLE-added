@@ -1,17 +1,16 @@
 #pragma GCC optimize ("Ofast")
-#include <M5Unified.h>
+//#include "lvgl.h"
+//#include <M5Unified.h>
+#include "main.h"
 #include "config.h"
 #include <Arduino.h>
-#include <lvgl.h>
 #include "ui/ui.h"
-#include "main.h"
 #include "screen.h"
 #include "colors.h"
 #include "styles.h"
 #include "Eject.h"
 #include "Preferences.h"      //EEPROM replacement function
 #include <esp_sleep.h>
-
 
 // Tasks:
 // Single-definition globals

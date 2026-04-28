@@ -1,6 +1,6 @@
 #pragma once
 
-#include <lvgl.h>
+#include "main.h"
 #include <stdint.h>
 // Initialize LVGL styles used across the app. Call after lv_init() and
 // before creating UI screens so screens may add these styles to widgets.

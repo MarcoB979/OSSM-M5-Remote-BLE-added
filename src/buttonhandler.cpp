@@ -1,9 +1,8 @@
+#include "main.h"
 #include <Arduino.h>
-#include <M5Unified.h>
 #include <Preferences.h>
 
 #include "config.h"
-#include "main.h"
 #include "OssmBLE.h"
 #include "Eject.h"
 #include "language.h"
@@ -67,9 +66,6 @@ static void applyHomeStartStopUi()
   }
 }
 
-// forward declarations
-static void applyStrokeStartStopUi();
-
 static void applyStreamingStartStopUi()
 {
   if (ui_StreamingButtonM != nullptr && ui_StreamingButtonMText != nullptr) {
@@ -98,22 +94,6 @@ void refreshHomeAndStreamingStartStopUi()
 {
   applyHomeStartStopUi();
   applyStreamingStartStopUi();
-  applyStrokeStartStopUi();
-}
-
-static void applyStrokeStartStopUi()
-{
-  if (ui_StrokeButtonM != nullptr && ui_StrokeButtonMText != nullptr) {
-    if (stroke != 0) {
-      if (isRunningUiState(OSSM_State)) {
-        lv_obj_set_style_bg_color(ui_StrokeButtonM, lv_color_hex(0xB3261E), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_label_set_text(ui_StrokeButtonMText, OssmBleIsMode() ? T_PAUSE : T_STOP);
-      } else {
-        lv_obj_set_style_bg_color(ui_StrokeButtonM, lv_color_hex(0x228B22), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_label_set_text(ui_StrokeButtonMText, T_START);
-      }
-    }
-  }
 }
 
 static void syncStrokeEngineParametersBeforeStart()
@@ -299,120 +279,6 @@ void streamingbuttonmevent(lv_event_t * e)
   (void)e;
   LogDebugPrio("StreamingButton (touch/LVGL)");
   streamingbuttonm_action(false);
-}
-
-void strokebuttonm_action(bool fromPhysicalMx)
-{
-  (void)fromPhysicalMx;
-  const bool isRunning = isRunningUiState(OSSM_State);
-
-  // Read UI sliders if present
-  if (ui_strokespeedslider != nullptr) {
-    speed = lv_slider_get_value(ui_strokespeedslider);
-  }
-  if (ui_strokestrokeslider != nullptr) {
-    stroke = lv_slider_get_value(ui_strokestrokeslider);
-  }
-  if (ui_strokesensationslider != nullptr) {
-    sensation = lv_slider_get_value(ui_strokesensationslider);
-  }
-
-  // Compute centered depth: depth = max/2 + stroke/2
-  float computedDepth = (maxdepthinmm / 2.0f) + stroke - (stroke / 2.0f);
-  depth = computedDepth;
-
-  if (OssmBleIsMode() && st_screens == ST_UI_STROKE) {
-    if (!isRunning) {
-      // Send stroke-specific params before starting
-      SendCommand(SPEED, speed, OSSM_TARGET_ID);
-      SendCommand(DEPTH, depth, OSSM_TARGET_ID);
-      SendCommand(STROKE, stroke, OSSM_TARGET_ID);
-      SendCommand(SENSATION, sensation, OSSM_TARGET_ID);
-    }
-    // Briefly suppress immediate repeated toggles
-    ossm_state_monitor_hold_until_ms = millis() + 1U;
-    // Use same BLE toggle handler as home/streaming for parity
-    switch (OssmBleHandleHomeToggle(isRunning, speed)) {
-      case OssmBleHomeToggleResult::Paused:
-        OSSM_State = state_FALSE;
-        applyStrokeStartStopUi();
-        break;
-      case OssmBleHomeToggleResult::Resumed:
-      case OssmBleHomeToggleResult::Started:
-        OSSM_State = state_TRUE;
-        applyStrokeStartStopUi();
-        break;
-      default:
-        break;
-    }
-    return;
-  }
-
-  if (OSSM_State == state_FALSE) {
-    if (OssmBleIsMode()) {
-      OssmBleGoToStrokeEngine();
-    }
-    // Send parameters then start
-    SendCommand(SPEED, speed, OSSM_TARGET_ID);
-    SendCommand(DEPTH, depth, OSSM_TARGET_ID);
-    SendCommand(STROKE, stroke, OSSM_TARGET_ID);
-    SendCommand(SENSATION, sensation, OSSM_TARGET_ID);
-    SendCommand(ON, 0, OSSM_TARGET_ID);
-    if (OssmBleIsMode()) {
-      OSSM_State = state_TRUE;
-      applyStrokeStartStopUi();
-    }
-  } else if (isRunning) {
-    SendCommand(OFF, 0, OSSM_TARGET_ID);
-    if (OssmBleIsMode()) {
-      OSSM_State = state_FALSE;
-      applyStrokeStartStopUi();
-    }
-  }
-}
-
-void strokebuttonmevent(lv_event_t * e)
-{
-  (void)e;
-  LogDebugPrio("StrokeButton (touch/LVGL)");
-  strokebuttonm_action(false);
-}
-
-void stroke_speed_changed(lv_event_t * e)
-{
-  (void)e;
-  if (ui_strokespeedslider == nullptr || ui_strokespeedvalue == nullptr) return;
-  int val = lv_slider_get_value(ui_strokespeedslider);
-  speed = val;
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%d", val);
-  lv_label_set_text(ui_strokespeedvalue, buf);
-  SendCommand(SPEED, speed, OSSM_TARGET_ID);
-}
-
-void stroke_stroke_changed(lv_event_t * e)
-{
-  (void)e;
-  if (ui_strokestrokeslider == nullptr || ui_strokestrokevalue == nullptr) return;
-  int val = lv_slider_get_value(ui_strokestrokeslider);
-  stroke = val;
-  // Compute centered depth
-  float computedDepth = (maxdepthinmm / 2.0f) + (stroke / 2.0f);
-  depth = computedDepth;
-  char buf[16];
-  snprintf(buf, sizeof(buf), "%d", val);
-  lv_label_set_text(ui_strokestrokevalue, buf);
-  SendCommand(STROKE, stroke, OSSM_TARGET_ID);
-  SendCommand(DEPTH, depth, OSSM_TARGET_ID);
-}
-
-void stroke_sensation_changed(lv_event_t * e)
-{
-  (void)e;
-  if (ui_strokesensationslider == nullptr) return;
-  int val = lv_slider_get_value(ui_strokesensationslider);
-  sensation = val;
-  SendCommand(SENSATION, sensation, OSSM_TARGET_ID);
 }
 
 void setupDepthInter(lv_event_t * e)
@@ -726,6 +592,3 @@ void register_event_debug_callbacks()
     }
   }
 }
-
-// Forward declaration for stroke UI updater used before its definition
-static void applyStrokeStartStopUi();

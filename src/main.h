@@ -1,8 +1,13 @@
+
 #pragma once
+#define M5GFX_USING_REAL_LVGL 1
+#include "lvgl.h"
+#ifdef __cplusplus
+#include <M5Unified.h>
+#endif
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <lvgl.h>
 #include "Eject.h"
 #include "FistIT.h"
 #include "esp_nowCommunication.h"
@@ -11,6 +16,7 @@
 #include <OneButton.h>
 #include <ESP32Encoder.h>
 #endif
+
 
 // Uncomment the following line if you wish to print DEBUG info
 #define DEBUG
@@ -50,7 +56,6 @@
 
 #define ST_UI_START 0
 #define ST_UI_HOME 1
-#define ST_UI_STROKE 2
 #define ST_UI_MENUE 10
 #define ST_UI_PATTERN 11
 #define ST_UI_Torqe 12

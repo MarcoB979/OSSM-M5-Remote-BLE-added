@@ -1,7 +1,6 @@
+#include "main.h"
 #include <Arduino.h>
-#include <M5Unified.h>
 #include "PatternMath.h"
-#include <lvgl.h>
 
 #include "main.h"
 #include "config.h"

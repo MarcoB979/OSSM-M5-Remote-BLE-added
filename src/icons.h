@@ -1,6 +1,6 @@
 #pragma once
 
-#include <lvgl.h>
+#include "main.h"
 #include <stdint.h>
 
 // Render a mask (array of rows with '#' for foreground pixels) into the

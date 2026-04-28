@@ -10,14 +10,13 @@
 // Only the absolute minimum (extern "C" declarations, one ui.c call, one
 // screen.cpp dispatch line) lives outside this file.
 
+#include "main.h"
 #include <Arduino.h>
 #include <Preferences.h>
-#include <lvgl.h>
 
 #include "config.h"
 #include "language.h"
 #include "colors.h"
-#include "main.h"
 #include "screen.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"

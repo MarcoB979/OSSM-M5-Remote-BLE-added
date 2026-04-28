@@ -431,12 +431,6 @@ bool triggerAddonForSlot(int slot)
     return true;
   }
 
-  if (strcmp(ADDON_DEFINITIONS[addonIndex].id, "streaming_mode") == 0) {
-    // Launch the Streaming screen
-    _ui_screen_change(ui_Streaming, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    return true;
-  }
-
   return false;
 }
 
