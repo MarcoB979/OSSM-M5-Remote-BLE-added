@@ -1,0 +1,12 @@
+.pio
+
+# Local build logs
+core2_build.log
+core3_build.log
+.vscode/
+lvgl/backup/
+lib/
+SquareLine_Studio/
+Squareline_studio/
+ssl_certs/
+test/
