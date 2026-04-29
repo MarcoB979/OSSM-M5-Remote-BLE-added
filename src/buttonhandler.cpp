@@ -7,6 +7,7 @@
 #include "Eject.h"
 #include "language.h"
 #include "ui/ui.h"
+#include "strokeMode.h"
 
 static constexpr int OSSM_TARGET_ID = 1;
 static constexpr int HOME_LEFT_ADDON_SLOT = 1;
@@ -94,6 +95,7 @@ void refreshHomeAndStreamingStartStopUi()
 {
   applyHomeStartStopUi();
   applyStreamingStartStopUi();
+  refreshStrokeStartStopUi();
 }
 
 static void syncStrokeEngineParametersBeforeStart()
@@ -126,17 +128,17 @@ void homebuttonm_action(bool fromPhysicalMx)
     switch (OssmBleHandleHomeToggle(isRunning, speed)) {
       case OssmBleHomeToggleResult::Paused:
         OSSM_State = state_FALSE;
-        applyHomeStartStopUi();
+        refreshHomeAndStreamingStartStopUi();
         LogDebugFormatted("Sent BLE pause command with paused speed: %f\n", speed);
         break;
       case OssmBleHomeToggleResult::Resumed:
         OSSM_State = state_TRUE;
-        applyHomeStartStopUi();
+        refreshHomeAndStreamingStartStopUi();
         LogDebugFormatted("Sent BLE resume command (speed:%f)\n", OssmBleGetUnpauseSpeed());
         break;
       case OssmBleHomeToggleResult::Started:
         OSSM_State = state_TRUE;
-        applyHomeStartStopUi();
+        refreshHomeAndStreamingStartStopUi();
         LogDebugFormatted("Sent BLE start command (speed:%f)\n", OssmBleGetUnpauseSpeed());
         break;
       case OssmBleHomeToggleResult::BlockedNotReady:
@@ -150,7 +152,10 @@ void homebuttonm_action(bool fromPhysicalMx)
     return;
   }
 
-  if (OSSM_State == state_FALSE) {
+  // For non-home screens treat any non-running UI state (including MENU)
+  // as eligible to start the OSSM. Use `isRunning` to decide toggle state
+  // so MX will start the device even when current UI state is MENU.
+  if (!isRunning) {
     if (OssmBleIsMode()) {
       OssmBleGoToStrokeEngine();
     }
@@ -158,16 +163,84 @@ void homebuttonm_action(bool fromPhysicalMx)
     SendCommand(ON, 0, OSSM_TARGET_ID);
     if (OssmBleIsMode()) {
       OSSM_State = state_TRUE;
-      applyHomeStartStopUi();
+      refreshHomeAndStreamingStartStopUi();
     }
-  } else if (isRunning) {
+  } else {
     SendCommand(OFF, 0, OSSM_TARGET_ID);
     if (OssmBleIsMode()) {
       OSSM_State = state_FALSE;
-      applyHomeStartStopUi();
+      refreshHomeAndStreamingStartStopUi();
     }
   }
 }
+
+void strokebuttonm_action(bool fromPhysicalMx)
+{
+  (void)fromPhysicalMx;
+  const bool isRunning = isRunningUiState(OSSM_State);
+
+  // For Stroke screen, ensure depth is set to 50 before any start action.
+  if (st_screens == ST_UI_STROKE) {
+    const float depthMax = OssmBleIsMode() ? 100.0f : maxdepthinmm;
+    depth = depthMax/2.0f;
+    if (depth > depthMax) depth = depthMax;
+  }
+
+  // When invoked from either Home or Stroke screens use the BLE toggle
+  // helper so the OSSM BLE path is respected and parameters are synced.
+  if (OssmBleIsMode() && (st_screens == ST_UI_STROKE || st_screens == ST_UI_HOME)) {
+    if (!isRunning) {
+      syncStrokeEngineParametersBeforeStart();
+    }
+    // Briefly suppress immediate repeated toggles
+    ossm_state_monitor_hold_until_ms = millis() + 300U;
+    switch (OssmBleHandleHomeToggle(isRunning, speed)) {
+      case OssmBleHomeToggleResult::Paused:
+        OSSM_State = state_FALSE;
+        refreshHomeAndStreamingStartStopUi();
+        LogDebugFormatted("Sent BLE pause command with paused speed: %f\n", speed);
+        break;
+      case OssmBleHomeToggleResult::Resumed:
+        OSSM_State = state_TRUE;
+        refreshHomeAndStreamingStartStopUi();
+        LogDebugFormatted("Sent BLE resume command (speed:%f)\n", OssmBleGetUnpauseSpeed());
+        break;
+      case OssmBleHomeToggleResult::Started:
+        OSSM_State = state_TRUE;
+        refreshHomeAndStreamingStartStopUi();
+        LogDebugFormatted("Sent BLE start command (speed:%f)\n", OssmBleGetUnpauseSpeed());
+        break;
+      case OssmBleHomeToggleResult::BlockedNotReady:
+        LogDebugPrio("BLE start blocked: OSSM is not ready for stroke engine");
+        break;
+      case OssmBleHomeToggleResult::Failed:
+      default:
+        LogDebugPrio("BLE home toggle failed");
+        break;
+    }
+    return;
+  }
+
+  // Fallback: non-BLE or other screens — toggle via direct ON/OFF commands
+  if (!isRunning) {
+    if (OssmBleIsMode()) {
+      OssmBleGoToStrokeEngine();
+    }
+    syncStrokeEngineParametersBeforeStart();
+    SendCommand(ON, 0, OSSM_TARGET_ID);
+    if (OssmBleIsMode()) {
+      OSSM_State = state_TRUE;
+      refreshHomeAndStreamingStartStopUi();
+    }
+  } else {
+    SendCommand(OFF, 0, OSSM_TARGET_ID);
+    if (OssmBleIsMode()) {
+      OSSM_State = state_FALSE;
+      refreshHomeAndStreamingStartStopUi();
+    }
+  }
+}
+
 
 void streamingbuttonm_action(bool fromPhysicalMx)
 {
@@ -449,6 +522,7 @@ void savepattern(lv_event_t * e)
 //  pattern = lv_roller_get_selected(ui_PatternS);
   lv_roller_get_selected_str(ui_PatternS, patternstr, 0);
   lv_label_set_text(ui_HomePatternLabel, patternstr);
+  if (ui_StrokePatternLabel != nullptr) lv_label_set_text(ui_StrokePatternLabel, patternstr);
   LogDebug(pattern);
   float patterns = pattern;
   LogDebugFormatted("Saving pattern: %d\n", pattern);

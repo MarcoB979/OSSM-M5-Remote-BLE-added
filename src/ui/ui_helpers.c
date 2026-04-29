@@ -4,6 +4,11 @@
 // PROJECT: OSSM-White
 
 #include "ui_helpers.h"
+#include "ui/ui.h"
+
+// Remember which screen Pattern should return to when backing out.
+lv_obj_t * ui_PatternReturnTo = NULL;
+#include "ui/ui.h"
 
 void _ui_bar_set_property(lv_obj_t * target, int id, int val)
 {
@@ -51,6 +56,11 @@ void _ui_slider_set_property(lv_obj_t * target, int id, int val)
 
 void _ui_screen_change(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay)
 {
+    // If navigating to the Pattern screen, remember the current screen so
+    // Pattern can return to the caller instead of always going to Home.
+    if (target == ui_Pattern) {
+        ui_PatternReturnTo = lv_scr_act();
+    }
     lv_scr_load_anim(target, fademode, spd, delay, false);
 }
 

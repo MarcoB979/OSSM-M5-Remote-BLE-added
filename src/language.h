@@ -83,6 +83,8 @@
 #define T_HOMESCREEN_SUB    "(Stroke engine)"
 #define T_STREAMING         "Streaming"
 #define T_STREAMING_SUB     "mode"
+#define T_STROKE_SCREEN     "Stroke"
+#define T_STROKE_SUB        "mode"
 #define T_ADDONS            "Addons"
 #define T_PATTERN_GENERATOR "Pattern Generator"
 #define T_OVERRIDE          "Override"  //was added, but removed now (safety)

@@ -293,10 +293,10 @@ void applyColorScheme(int index) {
         lv_obj_add_style(ui_MenuButtonML, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
         lv_obj_add_style(ui_MenuButtonML, &style_button_m_disabled, LV_PART_MAIN | LV_STATE_DISABLED);
     }
-    if (ui_MenuButtonBL) {
-        lv_obj_add_style(ui_MenuButtonBL, &style_slider_indicator[3], LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_style(ui_MenuButtonBL, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
-        lv_obj_add_style(ui_MenuButtonBL, &style_button_m_disabled, LV_PART_MAIN | LV_STATE_DISABLED);
+    if (ui_MenuButtonMR) {
+        lv_obj_add_style(ui_MenuButtonMR, &style_slider_indicator[3], LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(ui_MenuButtonMR, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
+        lv_obj_add_style(ui_MenuButtonMR, &style_button_m_disabled, LV_PART_MAIN | LV_STATE_DISABLED);
     }
 
     // Ensure focused state uses the scheme's focussed_element accent (e.g., pink for Rainbow)
@@ -304,7 +304,7 @@ void applyColorScheme(int index) {
     if (ui_MenuButtonTL) rs_btnFocused(ui_MenuButtonTL, focusAccent);
     if (ui_MenuButtonTR) rs_btnFocused(ui_MenuButtonTR, focusAccent);
     if (ui_MenuButtonML) rs_btnFocused(ui_MenuButtonML, focusAccent);
-    if (ui_MenuButtonBL) rs_btnFocused(ui_MenuButtonBL, focusAccent);
+    if (ui_MenuButtonMR) rs_btnFocused(ui_MenuButtonMR, focusAccent);
 
     // --- 4. Addons items: focused state ---
     rs_btnFocused(ui_AddonsItem0, BTN_FOC);

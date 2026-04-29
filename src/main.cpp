@@ -155,6 +155,7 @@ LogDebug("Works till step 3");
   pattern = lv_roller_get_selected(ui_PatternS);
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
   lv_label_set_text(ui_HomePatternLabel,patternstr);
+  if (ui_StrokePatternLabel != nullptr) lv_label_set_text(ui_StrokePatternLabel, patternstr);
   last_activity_ms = millis();
 
   LogDebug("Setup complete");

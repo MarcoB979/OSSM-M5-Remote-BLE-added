@@ -9,11 +9,17 @@
 #include "styles.h"
 #include "OssmBLE.h"
 #include "esp_nowCommunication.h"
+#include "encoder_ramp.h"
 #include "Eject.h"
 #include "FistIT.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
 #include "language.h"
+#include "strokeMode.h"
+
+extern "C" int addonsIndexFromFocused(lv_obj_t *focused);
+extern "C" int addonsCount();
+extern "C" void addonsScrollWindowDelta(int delta);
 
 // Global UI/session state shared across modules.
 int g_brightness_value = 180;
@@ -191,19 +197,20 @@ void screen_power_tick()
     screensaver_check_activity();
   }
 
+
   if (!screensaver_active && (millis() - last_activity_ms > (unsigned long)screensaver_timeout_ms)) {
     screensaver_prev_brightness = g_brightness_value;
     M5.Lcd.setBrightness(screensaver_dim_brightness);
     screensaver_active = true;
   }
 
-#if AUTO_IDLE_DEEP_SLEEP_ENABLED
-  if (millis() - last_activity_ms > deep_sleep_timeout_ms) {
-    if (canEnterDeepSleep()) {
-      enterDeepSleep();
+  #if AUTO_IDLE_DEEP_SLEEP_ENABLED
+    if (millis() - last_activity_ms > deep_sleep_timeout_ms) {
+      if (canEnterDeepSleep()) {
+        enterDeepSleep();
+      }
     }
-  }
-#endif
+  #endif
 }
 
 // (no MX suppression here — keep MX responsive)
@@ -279,6 +286,7 @@ void updateHomeTopLeftStateLabel()
     ui_Addons,
     ui_Colors,
     FistITGetScreen(),
+    ui_Stroke,
     nullptr,
   };
 
@@ -446,6 +454,9 @@ static void applyHomeDefaultsForModeChange()
   if (ui_HomePatternLabel != nullptr) {
     lv_label_set_text(ui_HomePatternLabel, patternstr);
   }
+  if (ui_StrokePatternLabel != nullptr) {
+    lv_label_set_text(ui_StrokePatternLabel, patternstr);
+  }
 
   SendCommand(SPEED, 0, OSSM_ID);
   SendCommand(DEPTH, 20, OSSM_ID);
@@ -517,6 +528,12 @@ void screenmachine(lv_event_t * e)
     encoder4_enc = encoder4.getCount();
   } else if (lv_scr_act() == ui_EJECTSettings) {
     st_screens = ST_UI_EJECTSETTINGS;
+  } else if (lv_scr_act() == ui_Stroke) {
+    st_screens = ST_UI_STROKE;
+    encoder1.setCount(0);
+    encoder2.setCount(0);
+    encoder3.setCount(0);
+    encoder4.setCount(0);
   } else if (lv_scr_act() == ui_Settings) {
     st_screens = ST_UI_SETTINGS;
   } else if (lv_scr_act() == ui_Menu) {
@@ -630,7 +647,7 @@ void syncBleConnectUi(bool forceRefresh)
 // Encoder ramp (used by screen handlers below)
 // ---------------------------------------------------------------------------
 
-static int getRampedDetentDelta(int encoderId, int detents)
+int getRampedDetentDelta(int encoderId, int detents)
 {
   if (detents == 0) return 0;
   if (!rampEnabled) {
@@ -1081,11 +1098,35 @@ static void handleAddonsScreen(const ButtonEvents &events)
   }
 
   if (encoder4.getCount() > encoder4_enc + 2) {
-    lv_group_focus_next(ui_g_addons);
     encoder4_enc = encoder4.getCount();
+    lv_obj_t *focused = (ui_g_addons != nullptr) ? lv_group_get_focused(ui_g_addons) : nullptr;
+    if (focused == ui_AddonsItem2) {
+      int absIdx = addonsIndexFromFocused(focused);
+      if (absIdx >= 0 && absIdx + 1 < addonsCount()) {
+        addonsScrollWindowDelta(1);
+        lv_group_focus_obj(ui_AddonsItem2);
+      } else {
+        lv_group_focus_next(ui_g_addons);
+      }
+    } else {
+      lv_group_focus_next(ui_g_addons);
+    }
+    if (focused != nullptr) lv_obj_scroll_to_view(lv_group_get_focused(ui_g_addons), LV_ANIM_OFF);
   } else if (encoder4.getCount() < encoder4_enc - 2) {
-    lv_group_focus_prev(ui_g_addons);
     encoder4_enc = encoder4.getCount();
+    lv_obj_t *focused = (ui_g_addons != nullptr) ? lv_group_get_focused(ui_g_addons) : nullptr;
+    if (focused == ui_AddonsItem0) {
+      int absIdx = addonsIndexFromFocused(focused);
+      if (absIdx > 0) {
+        addonsScrollWindowDelta(-1);
+        lv_group_focus_obj(ui_AddonsItem0);
+      } else {
+        lv_group_focus_prev(ui_g_addons);
+      }
+    } else {
+      lv_group_focus_prev(ui_g_addons);
+    }
+    if (focused != nullptr) lv_obj_scroll_to_view(lv_group_get_focused(ui_g_addons), LV_ANIM_OFF);
   }
 
   if (events.leftShort) {
@@ -1094,16 +1135,8 @@ static void handleAddonsScreen(const ButtonEvents &events)
   } else if (events.mxShort) {
     // Middle button: trigger the focused addon (launch if assigned, cycle if not)
     lv_obj_t * focused = lv_group_get_focused(ui_g_addons);
-    if (focused != NULL) {
-      int addonIndex = -1;
-      if (focused == ui_AddonsItem0) {
-        addonIndex = 0;
-      } else if (focused == ui_AddonsItem1) {
-        addonIndex = 1;
-      } else if (focused == ui_AddonsItem2) {
-        addonIndex = 2;
-      }
-      
+      if (focused != NULL) {
+      int addonIndex = addonsIndexFromFocused(focused);
       if (addonIndex >= 0) {
         triggerAddonByIndex(addonIndex);
       }
@@ -1333,6 +1366,7 @@ void handleCurrentScreen(){
   switch (st_screens) {
     case ST_UI_START:         handleStartScreen(g_button_events);         break;
     case ST_UI_HOME:          handleHomeScreen(g_button_events);          break;
+    case ST_UI_STROKE:       handleStrokeScreen(g_button_events);       break;
     case ST_UI_PATTERN:       handlePatternScreen(g_button_events);       break;
     /* ST_UI_Torqe removed */
     case ST_UI_EJECTSETTINGS: handleEjectSettingsScreen(g_button_events); break;

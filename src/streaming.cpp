@@ -24,20 +24,21 @@ extern "C" void streamingReturnToMenu(void){
 }
 
 static void prepareStreamingAtFullScale(){
-  speed = 100;
-  depth = 100;
-  stroke = 100;
+  return; // TEMP: skip presetting sliders to full scale for now, as it may be confusing if user had them at custom values before starting streaming mode. OSSM will still start streaming at full scale regardless of slider positions, so this is just a UI preset that can be re-enabled later if desired.
+  speed = 0;
+  depth = 0;
+  stroke = 0;
 
   lv_slider_set_value(ui_streamingspeedslider, 100, LV_ANIM_OFF);
   lv_slider_set_value(ui_streamingdepthslider, 100, LV_ANIM_OFF);
   lv_slider_set_value(ui_streamingstrokeslider, 100, LV_ANIM_OFF);
-  lv_label_set_text(ui_streamingspeedvalue, "100");
-  lv_label_set_text(ui_streamingdepthvalue, "100");
-  lv_label_set_text(ui_streamingstrokevalue, "100");
+  lv_label_set_text(ui_streamingspeedvalue, "0");
+  lv_label_set_text(ui_streamingdepthvalue, "0");
+  lv_label_set_text(ui_streamingstrokevalue, "0");
 
-  SendCommand(SPEED, 100, OSSM_TARGET_ID);
-  SendCommand(DEPTH, 100, OSSM_TARGET_ID);
-  SendCommand(STROKE, 100, OSSM_TARGET_ID);
+  SendCommand(SPEED, 0, OSSM_TARGET_ID);
+  SendCommand(DEPTH, 0, OSSM_TARGET_ID);
+  SendCommand(STROKE, 0, OSSM_TARGET_ID);
 }
 
 void handleStreamingEntryFlow(){

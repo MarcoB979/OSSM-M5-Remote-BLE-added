@@ -18,6 +18,9 @@ extern int g_brightness_value;
 #include "styles.h"
 #include "esp_nowCommunication.h"
 
+// Ensure C-visible prototypes for addon helpers (implemented in addons.cpp)
+extern void addonsSelectRow(int row);
+
 
 // Ensure C linkage for the generated UI symbols so they match the
 // `extern` declarations in ui.h when compiled as C++.
@@ -42,6 +45,7 @@ lv_obj_t * ui_Batt;
 lv_obj_t * ui_BattValue;
 lv_obj_t * ui_Battery;
 lv_obj_t * ui_Home;
+lv_obj_t * ui_Stroke;
 lv_obj_t * ui_Logo2;
 lv_obj_t * ui_HomeButtonL;
 lv_obj_t * ui_HomeButtonLText;
@@ -140,10 +144,6 @@ lv_obj_t * ui_MenuButtonML;
 lv_obj_t * ui_MenuButtonMLText;
 lv_obj_t * ui_MenuButtonMR;
 lv_obj_t * ui_MenuButtonMRText;
-lv_obj_t * ui_MenuButtonBL;
-lv_obj_t * ui_MenuButtonBLText;
-lv_obj_t * ui_MenuButtonBR;
-lv_obj_t * ui_MenuButtonBRText;
 lv_obj_t * ui_Batt7;
 lv_obj_t * ui_BattValue7;
 lv_obj_t * ui_Battery7;
@@ -265,9 +265,28 @@ static void ui_event_Home(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_SCREEN_LOADED) {
+        /* Restore Home header and ensure depth slider visible when Home loads */
+        lv_label_set_text(ui_Logo2, T_HEADER);
+        if (ui_homedepthslider != NULL) lv_obj_clear_flag(ui_homedepthslider, LV_OBJ_FLAG_HIDDEN);
+        if (ui_homedepthvalue != NULL) lv_obj_clear_flag(ui_homedepthvalue, LV_OBJ_FLAG_HIDDEN);
+
+        /* Re-parent widgets back to ui_Home in case they were moved into ui_Stroke */
+        if (ui_Logo2) lv_obj_set_parent(ui_Logo2, ui_Home);
+        if (ui_HomeButtonL) lv_obj_set_parent(ui_HomeButtonL, ui_Home);
+        if (ui_HomeButtonM) lv_obj_set_parent(ui_HomeButtonM, ui_Home);
+        if (ui_HomeButtonR) lv_obj_set_parent(ui_HomeButtonR, ui_Home);
+        if (ui_SpeedL) lv_obj_set_parent(ui_SpeedL, ui_Home);
+        if (ui_StrokeL) lv_obj_set_parent(ui_StrokeL, ui_Home);
+        if (ui_SensationL) lv_obj_set_parent(ui_SensationL, ui_Home);
+        if (ui_Batt2) lv_obj_set_parent(ui_Batt2, ui_Home);
+        if (ui_HomePatternLabel1) lv_obj_set_parent(ui_HomePatternLabel1, ui_Home);
+        if (ui_connect) lv_obj_set_parent(ui_connect, ui_Home);
+
         screenmachine(e);
     }
 }
+
+/* ui_event_Stroke moved to src/strokeMode.cpp */
 static void ui_event_HomeButtonL(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
@@ -300,40 +319,6 @@ static void ui_event_HomeButtonR(lv_event_t * e)
     }
 }
 
-/*
-static void ui_evenT_MENU(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SCREEN_LOADED) {
-        screenmachine(e);
-    }
-}
-static void ui_evenT_MENUButtonL(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
-        _ui_screen_change(ui_Settings, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    }
-}
-static void ui_evenT_MENUButtonM(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    }
-}
-static void ui_evenT_MENUButtonR(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
-        xtoysMenuButtonRToggle();
-    }
-}
-*/
 
 static void ui_event_Brightness_sliderChange(lv_event_t * e)
 {
@@ -389,7 +374,12 @@ static void ui_event_PatternButtonM(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        if (ui_PatternReturnTo != NULL) {
+            _ui_screen_change(ui_PatternReturnTo, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+            ui_PatternReturnTo = NULL;
+        } else {
+            _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        }
     }
 }
 static void ui_event_PatternButtonR(lv_event_t * e)
@@ -398,7 +388,12 @@ static void ui_event_PatternButtonR(lv_event_t * e)
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
         savepattern(e);
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        if (ui_PatternReturnTo != NULL) {
+            _ui_screen_change(ui_PatternReturnTo, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+            ui_PatternReturnTo = NULL;
+        } else {
+            _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        }
     }
 }
 static void ui_event_Torqe(lv_event_t * e)
@@ -519,8 +514,7 @@ static void ui_event_MenuButtonTR(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
         menuPrepareNonHomeAction();
-        requestStreamingEntryFlow();
-        _ui_screen_change(ui_Streaming, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        _ui_screen_change(ui_Stroke, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
 static void ui_event_MenuButtonML(lv_event_t * e)
@@ -531,6 +525,16 @@ static void ui_event_MenuButtonML(lv_event_t * e)
         _ui_screen_change(ui_Addons, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
+
+static void ui_event_MenuButtonMR(lv_event_t * e)
+{
+    lv_event_code_t event = lv_event_get_code(e);
+    if(event == LV_EVENT_SHORT_CLICKED) {
+        menuPrepareNonHomeAction();
+        _ui_screen_change(ui_Settings, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    }
+}
+
 static void ui_event_MenuButtonM_bottom(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
@@ -560,30 +564,6 @@ static void ui_event_MenuButtonR_bottom(lv_event_t * e)
     }
 }
 
-static void ui_event_MenuButtonMR(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
-        menuPrepareNonHomeAction();
-        requestStreamingEntryFlow();
-        _ui_screen_change(ui_Streaming, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    }
-}
-static void ui_event_MenuButtonBL(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
-        menuPrepareNonHomeAction();
-        _ui_screen_change(ui_Settings, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    }
-}
-static void ui_event_MenuButtonBR(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    if(event == LV_EVENT_SHORT_CLICKED) {
-        _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    }
-}
 
 // UI_STREAMING event handlers
 static void ui_event_Streaming(lv_event_t * e)
@@ -627,7 +607,7 @@ static void ui_event_AddonsItem0(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
-        addonsSelectIndex(0);
+        addonsSelectRow(0);
     }
 }
 
@@ -635,7 +615,7 @@ static void ui_event_AddonsItem1(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
-        addonsSelectIndex(1);
+        addonsSelectRow(1);
     }
 }
 
@@ -643,7 +623,7 @@ static void ui_event_AddonsItem2(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
-        addonsSelectIndex(2);
+        addonsSelectRow(2);
     }
 }
 
@@ -2125,12 +2105,12 @@ void ui_Menu_screen_init(void)
     lv_obj_set_width(ui_MenuButtonTRText, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_MenuButtonTRText, LV_SIZE_CONTENT);
     lv_obj_set_align(ui_MenuButtonTRText, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_MenuButtonTRText, T_STREAMING "\n" T_STREAMING_SUB);
+    lv_label_set_text(ui_MenuButtonTRText, T_STROKE_SCREEN "\n" T_STROKE_SUB);
     lv_obj_add_style(ui_MenuButtonTRText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_align(ui_MenuButtonTRText, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(ui_MenuButtonTRText, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // Bottom-left: Addons
+    // Bottom(middle)-left: Addons
     ui_MenuButtonML = lv_btn_create(ui_Menu);
     lv_obj_set_width(ui_MenuButtonML, 150);
     lv_obj_set_height(ui_MenuButtonML, 44);
@@ -2151,34 +2131,28 @@ void ui_Menu_screen_init(void)
     lv_label_set_text(ui_MenuButtonMLText, T_ADDONS);
     lv_obj_add_style(ui_MenuButtonMLText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // Middle-right: removed (X-Toys redundant with streaming mode)
-    ui_MenuButtonMR = NULL;
-    ui_MenuButtonMRText = NULL;
 
-    // Bottom-right: Settings
-    ui_MenuButtonBL = lv_btn_create(ui_Menu);
-    lv_obj_set_width(ui_MenuButtonBL, 150);
-    lv_obj_set_height(ui_MenuButtonBL, 44);
-    lv_obj_set_y(ui_MenuButtonBL, 50);
-    lv_obj_set_x(ui_MenuButtonBL, 81);
-    lv_obj_set_align(ui_MenuButtonBL, LV_ALIGN_CENTER);
-    lv_obj_add_flag(ui_MenuButtonBL, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-    lv_obj_clear_flag(ui_MenuButtonBL, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(ui_MenuButtonBL, ui_event_MenuButtonBL, LV_EVENT_SHORT_CLICKED, NULL);
-    lv_obj_add_style(ui_MenuButtonBL, &style_slider_indicator[3], LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_style(ui_MenuButtonBL, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
-    lv_obj_set_style_radius(ui_MenuButtonBL, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
+    // Bottom(middle)-right: Addons
+    ui_MenuButtonMR = lv_btn_create(ui_Menu);
+    lv_obj_set_width(ui_MenuButtonMR, 150);
+    lv_obj_set_height(ui_MenuButtonMR, 44);
+    lv_obj_set_y(ui_MenuButtonMR, 50);
+    lv_obj_set_x(ui_MenuButtonMR, 81);
+    lv_obj_set_align(ui_MenuButtonMR, LV_ALIGN_CENTER);
+    lv_obj_add_flag(ui_MenuButtonMR, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_clear_flag(ui_MenuButtonMR, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_event_cb(ui_MenuButtonMR, ui_event_MenuButtonMR, LV_EVENT_SHORT_CLICKED, NULL);
+    lv_obj_add_style(ui_MenuButtonMR, &style_slider_indicator[2], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_MenuButtonMR, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
+    lv_obj_set_style_radius(ui_MenuButtonMR, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    ui_MenuButtonBLText = lv_label_create(ui_MenuButtonBL);
-    lv_obj_set_width(ui_MenuButtonBLText, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_MenuButtonBLText, LV_SIZE_CONTENT);
-    lv_obj_set_align(ui_MenuButtonBLText, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_MenuButtonBLText, T_SETTINGS);
-    lv_obj_add_style(ui_MenuButtonBLText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+    ui_MenuButtonMRText = lv_label_create(ui_MenuButtonMR);
+    lv_obj_set_width(ui_MenuButtonMRText, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_MenuButtonMRText, LV_SIZE_CONTENT);
+    lv_obj_set_align(ui_MenuButtonMRText, LV_ALIGN_CENTER);
+    lv_label_set_text(ui_MenuButtonMRText, T_ADDONS);
+    lv_obj_add_style(ui_MenuButtonMRText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    // Bottom-right: removed (Pattern Generator not implemented)
-    ui_MenuButtonBR = NULL;
-    ui_MenuButtonBRText = NULL;
 
     // Battery display at top
     ui_Batt7 = lv_label_create(ui_Menu);
@@ -2272,9 +2246,8 @@ void ui_Menu_screen_init(void)
     lv_group_add_obj(ui_g_menu, ui_MenuButtonTL);
     lv_group_add_obj(ui_g_menu, ui_MenuButtonTR);
     lv_group_add_obj(ui_g_menu, ui_MenuButtonML);
-    lv_group_add_obj(ui_g_menu, ui_MenuButtonBL);
+    lv_group_add_obj(ui_g_menu, ui_MenuButtonMR);
 }
-
 void ui_Streaming_screen_init(void)
 {
     // ui_Streaming - Copy of Home but without Sensation slider and Pattern label
@@ -2480,11 +2453,10 @@ void ui_Streaming_screen_init(void)
     lv_obj_add_style(ui_Battery8, &style_battery_main, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(ui_Battery8, &style_battery_indicator, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 }
-
 void ui_Addons_screen_init(void)
 {
     ui_Addons = lv_obj_create(NULL);
-    lv_obj_clear_flag(ui_Addons, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(ui_Addons, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(ui_Addons, ui_event_Addons, LV_EVENT_ALL, NULL);
     lv_obj_add_style(ui_Addons, &style_option_bg, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -2551,6 +2523,8 @@ void ui_Addons_screen_init(void)
     lv_label_set_text(ui_AddonsItem2Text, "");
     lv_obj_add_style(ui_AddonsItem2Text, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
+    // (No fourth static item; a sliding window will populate three visible rows)
+
     ui_AddonsButtonL = lv_btn_create(ui_Addons);
     lv_obj_set_width(ui_AddonsButtonL, 100);
     lv_obj_set_height(ui_AddonsButtonL, 30);
@@ -2597,6 +2571,7 @@ void ui_Addons_screen_init(void)
     lv_group_add_obj(ui_g_addons, ui_AddonsItem0);
     lv_group_add_obj(ui_g_addons, ui_AddonsItem1);
     lv_group_add_obj(ui_g_addons, ui_AddonsItem2);
+    /* fourth item removed; group contains three visible addon rows */
 }
 
 void ui_init(void)
@@ -2607,7 +2582,7 @@ void ui_init(void)
 
     ui_Start_screen_init();
     ui_Home_screen_init();
-//    ui_Menue_screen_init();
+    ui_Stroke_screen_init();
     ui_Pattern_screen_init();
     ui_EJECTSettings_screen_init();
     ui_Settings_screen_init();

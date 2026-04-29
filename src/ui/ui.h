@@ -31,6 +31,7 @@ extern lv_obj_t * ui_Batt;
 extern lv_obj_t * ui_BattValue;
 extern lv_obj_t * ui_Battery;
 extern lv_obj_t * ui_Home;
+extern lv_obj_t * ui_Stroke;
 extern lv_obj_t * ui_Logo2;
 extern lv_obj_t * ui_HomeButtonL;
 extern lv_obj_t * ui_HomeButtonLText;
@@ -54,6 +55,8 @@ extern lv_obj_t * ui_BattValue2;
 extern lv_obj_t * ui_Battery2;
 extern lv_obj_t * ui_HomePatternLabel1;
 extern lv_obj_t * ui_HomePatternLabel;
+extern lv_obj_t * ui_StrokePatternLabel1;
+extern lv_obj_t * ui_StrokePatternLabel;
 extern lv_obj_t * ui_connect;
 /*extern lv_obj_t * ui_Menue;
 extern lv_obj_t * ui_Logo3;
@@ -79,6 +82,7 @@ extern lv_obj_t * ui_STorqeL;
 extern lv_obj_t * ui_EJECTSettingButton;
 extern lv_obj_t * ui_EJECTSettingButtonText;
 extern lv_obj_t * ui_Pattern;
+extern lv_obj_t * ui_PatternReturnTo;
 extern lv_obj_t * ui_Logo5;
 extern lv_obj_t * ui_PatternButtonL;
 extern lv_obj_t * ui_PatternButtonLText;
@@ -136,10 +140,7 @@ extern lv_obj_t * ui_MenuButtonML;
 extern lv_obj_t * ui_MenuButtonMLText;
 extern lv_obj_t * ui_MenuButtonMR;
 extern lv_obj_t * ui_MenuButtonMRText;
-extern lv_obj_t * ui_MenuButtonBL;
-extern lv_obj_t * ui_MenuButtonBLText;
-extern lv_obj_t * ui_MenuButtonBR;
-extern lv_obj_t * ui_MenuButtonBRText;
+// Bottom-right button removed
 extern lv_obj_t * ui_Batt7;
 extern lv_obj_t * ui_BattValue7;
 extern lv_obj_t * ui_Battery7;
@@ -200,6 +201,12 @@ extern lv_group_t * ui_g_menue;
 extern lv_group_t * ui_g_settings;
 extern lv_group_t * ui_g_addons;
 
+// Addons helper APIs (implemented in src/addons.cpp)
+void addonsSelectRow(int row);
+int addonsIndexFromFocused(lv_obj_t *focused);
+int addonsCount(void);
+void addonsScrollWindowDelta(int delta);
+
 
 void screenmachine(lv_event_t * e);
 void connectbutton(lv_event_t * e);
@@ -219,6 +226,8 @@ void savesettings(lv_event_t * e);
 void brightness_slider_event_cb(lv_event_t * e);
 
 LV_IMG_DECLARE(image50x50);    // assets\logo.svg
+
+void ui_Stroke_screen_init(void);
 
 void ui_init(void);
 

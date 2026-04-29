@@ -12,7 +12,6 @@
 #include "colors.h"
 #include "Eject.h"
 #include "FistIT.h"
-#include "x-toys.h"
 #include "styles.h"
 #include "icons.h"
 #include "main.h"
@@ -37,6 +36,9 @@ static uint8_t g_icon_eject_buf[LV_CANVAS_BUF_SIZE(EJECT_ICON_W, EJECT_ICON_H, 3
 static uint8_t g_icon_fist_buf[LV_CANVAS_BUF_SIZE(FIST_ICON_W, FIST_ICON_H, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
 static bool g_icon_eject_ready = false;
 static bool g_icon_fist_ready = false;
+// Windowing state for Addons list (show 3 visible rows, allow scrolling)
+static int g_addons_window_offset = 0;
+static int g_addons_selected_index = 0; // global selected addon index
 
 static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
   "....................",
@@ -164,22 +166,15 @@ static lv_obj_t* createFistIcon(lv_obj_t* parent)
 
 static void ensureAddonRowIcons(void)
 {
-  if (ui_AddonsItem0 != nullptr && g_addon_icon_eject == nullptr) {
-    g_addon_icon_eject = createEjectIcon(ui_AddonsItem0);
-  }
-  if (ui_AddonsItem1 != nullptr && g_addon_icon_fistit == nullptr) {
-    g_addon_icon_fistit = createFistIcon(ui_AddonsItem1);
-  }
-
+  // No icons: keep labels centered on each button
   if (ui_AddonsItem0Text != nullptr) {
-    lv_obj_set_align(ui_AddonsItem0Text, LV_ALIGN_LEFT_MID);
-    lv_obj_set_x(ui_AddonsItem0Text, EJECT_ICON_W + 14);
-    lv_obj_set_y(ui_AddonsItem0Text, 0);
+    lv_obj_center(ui_AddonsItem0Text);
   }
   if (ui_AddonsItem1Text != nullptr) {
-    lv_obj_set_align(ui_AddonsItem1Text, LV_ALIGN_LEFT_MID);
-    lv_obj_set_x(ui_AddonsItem1Text, FIST_ICON_W + 14);
-    lv_obj_set_y(ui_AddonsItem1Text, 0);
+    lv_obj_center(ui_AddonsItem1Text);
+  }
+  if (ui_AddonsItem2Text != nullptr) {
+    lv_obj_center(ui_AddonsItem2Text);
   }
 }
 
@@ -297,60 +292,36 @@ static void refreshAddonsUi()
 {
   ensureAddonRowIcons();
 
-  if (ui_AddonsItem0Text != nullptr && ADDON_DEFINITIONS_COUNT > 0) {
-    char line[96];
-    snprintf(line, sizeof(line), "%s  [%s]",
-             ADDON_DEFINITIONS[0].displayName, addonSlotLabel(g_addon_slots[0]));
-    lv_label_set_text(ui_AddonsItem0Text, line);
-    // Ensure option 1 uses slider1 style mapping
-    if (ui_AddonsItem0 != nullptr) {
-      int slotIdx = 0;
-      lv_obj_add_style(ui_AddonsItem0, &style_slider_indicator[slotIdx % 4], LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_add_style(ui_AddonsItem0, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
-      if (strcmp(ADDON_DEFINITIONS[0].id, "x_toys") == 0 && Ossm_paired) {
-        // Mark this addon visually disabled when OSSM is connected via ESP-NOW
-        lv_obj_add_style(ui_AddonsItem0, &style_button_m_disabled, LV_PART_MAIN | LV_STATE_DISABLED);
-        lv_obj_add_state(ui_AddonsItem0, LV_STATE_DISABLED);
-      }
-    }
-  }
+  // Show a sliding window of up to 3 addons starting at g_addons_window_offset
+  for (int row = 0; row < 3; ++row) {
+    int idx = g_addons_window_offset + row;
+    lv_obj_t *btn = (row == 0) ? ui_AddonsItem0 : (row == 1) ? ui_AddonsItem1 : ui_AddonsItem2;
+    lv_obj_t *label = (row == 0) ? ui_AddonsItem0Text : (row == 1) ? ui_AddonsItem1Text : ui_AddonsItem2Text;
 
-  if (ui_AddonsItem1Text != nullptr && ADDON_DEFINITIONS_COUNT > 1) {
-    char line[96];
-    snprintf(line, sizeof(line), "%s  [%s]",
-             ADDON_DEFINITIONS[1].displayName, addonSlotLabel(g_addon_slots[1]));
-    lv_label_set_text(ui_AddonsItem1Text, line);
-    // Ensure option 2 uses slider2 style mapping
-    if (ui_AddonsItem1 != nullptr) {
-      int slotIdx = 1;
-      lv_obj_add_style(ui_AddonsItem1, &style_slider_indicator[slotIdx % 4], LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_add_style(ui_AddonsItem1, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
-      if (strcmp(ADDON_DEFINITIONS[1].id, "x_toys") == 0 && Ossm_paired) {
-        lv_obj_add_style(ui_AddonsItem1, &style_button_m_disabled, LV_PART_MAIN | LV_STATE_DISABLED);
-        lv_obj_add_state(ui_AddonsItem1, LV_STATE_DISABLED);
-      }
-    }
-  }
+    if (label == nullptr || btn == nullptr) continue;
 
-  if (ui_AddonsItem2Text != nullptr && ADDON_DEFINITIONS_COUNT > 2) {
-    // Color Schemes is a direct launcher — show without slot info
-    if (strcmp(ADDON_DEFINITIONS[2].id, "color_schemes") == 0) {
-      lv_label_set_text(ui_AddonsItem2Text, ADDON_DEFINITIONS[2].displayName);
-    } else {
+    if ((size_t)idx < ADDON_DEFINITIONS_COUNT) {
       char line[96];
-      snprintf(line, sizeof(line), "%s  [%s]",
-               ADDON_DEFINITIONS[2].displayName, addonSlotLabel(g_addon_slots[2]));
-      lv_label_set_text(ui_AddonsItem2Text, line);
-    }
-    // Ensure option 3 uses slider3 style mapping
-    if (ui_AddonsItem2 != nullptr) {
-      int slotIdx = 2;
-      lv_obj_add_style(ui_AddonsItem2, &style_slider_indicator[slotIdx % 4], LV_PART_MAIN | LV_STATE_DEFAULT);
-      lv_obj_add_style(ui_AddonsItem2, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
-      if (strcmp(ADDON_DEFINITIONS[2].id, "x_toys") == 0 && Ossm_paired) {
-        lv_obj_add_style(ui_AddonsItem2, &style_button_m_disabled, LV_PART_MAIN | LV_STATE_DISABLED);
-        lv_obj_add_state(ui_AddonsItem2, LV_STATE_DISABLED);
+      if (strcmp(ADDON_DEFINITIONS[idx].id, "color_schemes") == 0) {
+        snprintf(line, sizeof(line), "%s", ADDON_DEFINITIONS[idx].displayName);
+      } else if (strcmp(ADDON_DEFINITIONS[idx].id, "streaming_mode") == 0) {
+        snprintf(line, sizeof(line), "%s %s", T_STREAMING, T_STREAMING_SUB);
+      } else {
+        snprintf(line, sizeof(line), "%s  [%s]",
+                 ADDON_DEFINITIONS[idx].displayName, addonSlotLabel(g_addon_slots[idx]));
       }
+      lv_label_set_text(label, line);
+
+      // Apply per-row slider mapping (top=slider1, mid=slider2, bottom=slider3)
+      int slotIdx = row;
+      lv_obj_add_style(btn, &style_slider_indicator[slotIdx % 4], LV_PART_MAIN | LV_STATE_DEFAULT);
+      lv_obj_add_style(btn, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+      lv_obj_clear_state(btn, LV_STATE_DISABLED);
+    } else {
+      // Empty slot
+      lv_label_set_text(label, "");
+      lv_obj_clear_state(btn, LV_STATE_DISABLED);
     }
   }
 }
@@ -421,15 +392,13 @@ bool triggerAddonForSlot(int slot)
     return true;
   }
 
-  if (strcmp(ADDON_DEFINITIONS[addonIndex].id, "x_toys") == 0) {
-    if (Ossm_paired) {
-      // Do not launch X-toys while OSSM is connected via ESP-NOW
-      return false;
-    }
-    XtoysPrepareScreen();
-    _ui_screen_change(XtoysGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+  if (strcmp(ADDON_DEFINITIONS[addonIndex].id, "streaming_mode") == 0) {
+    menuPrepareNonHomeAction();
+    requestStreamingEntryFlow();
+    _ui_screen_change(ui_Streaming, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     return true;
   }
+
 
   return false;
 }
@@ -479,7 +448,48 @@ extern "C" void addonsSelectIndex(int index)
     _ui_screen_change(ui_Colors, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     return;
   }
+  // Streaming mode addon opens streaming screen directly (non-switchable)
+  if (strcmp(ADDON_DEFINITIONS[index].id, "streaming_mode") == 0) {
+    menuPrepareNonHomeAction();
+    requestStreamingEntryFlow();
+    _ui_screen_change(ui_Streaming, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    return;
+  }
   cycleAddonSelection((size_t)index);
   refreshAddonsUi();
   refreshHomeAddonButtonLabels();
+}
+
+// Select an addon by its visible row (0..2). This maps the visible row
+// to the absolute `ADDON_DEFINITIONS` index using `g_addons_window_offset`.
+extern "C" void addonsSelectRow(int row)
+{
+  int idx = g_addons_window_offset + row;
+  if (idx < 0 || (size_t)idx >= ADDON_DEFINITIONS_COUNT) return;
+  addonsSelectIndex(idx);
+}
+
+// Return the absolute addon index corresponding to a focused visible row button,
+// or -1 if the focused object is not one of the visible addon rows.
+extern "C" int addonsIndexFromFocused(lv_obj_t *focused)
+{
+  if (focused == ui_AddonsItem0) return g_addons_window_offset + 0;
+  if (focused == ui_AddonsItem1) return g_addons_window_offset + 1;
+  if (focused == ui_AddonsItem2) return g_addons_window_offset + 2;
+  return -1;
+}
+
+extern "C" int addonsCount()
+{
+  return (int)ADDON_DEFINITIONS_COUNT;
+}
+
+extern "C" void addonsScrollWindowDelta(int delta)
+{
+  int maxOffset = 0;
+  if ((int)ADDON_DEFINITIONS_COUNT > 3) maxOffset = (int)ADDON_DEFINITIONS_COUNT - 3;
+  g_addons_window_offset += delta;
+  if (g_addons_window_offset < 0) g_addons_window_offset = 0;
+  if (g_addons_window_offset > maxOffset) g_addons_window_offset = maxOffset;
+  refreshAddonsUi();
 }
