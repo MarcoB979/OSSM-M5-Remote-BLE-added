@@ -13,9 +13,12 @@
 
 int st_screens = ST_UI_START;
 
-bool dark_mode = false;
 bool strokeinvert_mode = false;
 bool touch_disabled = false;
+// When true, entering the UI Menu will send a go:menu BLE command and
+// enable the Menu->Home re-entry homing path. Default false to avoid
+// forcing homing on simple menu navigation.
+bool bleForceHomeing = false;
 
 int pattern = 2;
 
@@ -585,13 +588,21 @@ extern "C" void requestMenuEntryAction(void)
 
   // If we just came from Home (stroke engine), keep current mode so Home->Menu->Home
   // does not force an unnecessary re-home sequence.
-  if (st_screens == ST_UI_HOME) {
+  if (st_screens == ST_UI_HOME || st_screens == ST_UI_STROKE) {
     g_ble_menu_requires_stroke_reentry = false;
     return;
   }
 
-  OssmBleGoToMenu();
-  g_ble_menu_requires_stroke_reentry = true;
+  // Only force OSSM into Menu (which can trigger homing) if the
+  // `bleForceHomeing` setting is enabled. When disabled we skip the
+  // explicit `go:menu` on UI Menu load to avoid unnecessary homing.
+  if (bleForceHomeing) {
+    OssmBleGoToMenu();
+    g_ble_menu_requires_stroke_reentry = true;
+  } else {
+    // Don't require stroke re-entry since we didn't request mode change.
+    g_ble_menu_requires_stroke_reentry = false;
+  }
 }
 
 extern "C" void menuPrepareNonHomeAction(void)
@@ -601,9 +612,14 @@ extern "C" void menuPrepareNonHomeAction(void)
   }
 
   // Any non-home path from Menu should arm a full Menu/Homing path before
-  // returning to Home again.
-  OssmBleGoToMenu();
-  g_ble_menu_requires_stroke_reentry = true;
+  // returning to Home again. Only force OSSM into Menu (which can trigger
+  // homing) if the `bleForceHomeing` setting is enabled.
+  if (bleForceHomeing) {
+    OssmBleGoToMenu();
+    g_ble_menu_requires_stroke_reentry = true;
+  } else {
+    g_ble_menu_requires_stroke_reentry = false;
+  }
 }
 
 extern "C" void menuSleepAction(void)

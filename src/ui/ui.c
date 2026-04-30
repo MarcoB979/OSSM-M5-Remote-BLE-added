@@ -2,6 +2,7 @@
 extern "C" {
 #endif
 extern int g_brightness_value;
+extern int bleForceHomeing;
 #ifdef __cplusplus
 }
 #endif
@@ -127,7 +128,7 @@ lv_obj_t * ui_Batt1;
 lv_obj_t * ui_BattValue1;
 lv_obj_t * ui_Battery1;
 lv_obj_t * ui_ejectaddon;
-lv_obj_t * ui_darkmode;
+lv_obj_t * ui_forceHome;
 lv_obj_t * ui_vibrate;
 lv_obj_t * ui_lefty;
 //lv_group_t * ui_g_menue;
@@ -506,15 +507,20 @@ static void ui_event_MenuButtonTL(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+      if (bleForceHomeing) {
+        menuPrepareNonHomeAction();
+      }  
+      _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
 static void ui_event_MenuButtonTR(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     if(event == LV_EVENT_SHORT_CLICKED) {
+      if (bleForceHomeing) {
         menuPrepareNonHomeAction();
-        _ui_screen_change(ui_Stroke, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+      }  
+      _ui_screen_change(ui_Stroke, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
 static void ui_event_MenuButtonML(lv_event_t * e)
@@ -1792,9 +1798,6 @@ void ui_Settings_screen_init(void)
     lv_obj_add_event_cb(ui_SettingsButtonM, ui_event_SettingsButtonM, LV_EVENT_ALL, NULL);
     lv_obj_add_style(ui_SettingsButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-//CHECK    lv_obj_add_event_cb(ui_darkmode, settings_checkbox_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    // ui_SettingsButtonMText
-
     ui_SettingsButtonMText = lv_label_create(ui_SettingsButtonM);
 
     lv_obj_set_width(ui_SettingsButtonMText, LV_SIZE_CONTENT);
@@ -1963,30 +1966,30 @@ void ui_Settings_screen_init(void)
     //lv_obj_set_style_border_color(ui_strokeinvert, lv_color_hex(getActiveButtonLColor()), LV_PART_INDICATOR | LV_STATE_DEFAULT);
     //lv_obj_set_style_border_opa(ui_strokeinvert, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 
-    // ui_darkmode
+    // ui_forceHome
 
-    ui_darkmode = lv_checkbox_create(ui_Settings);
-    lv_checkbox_set_text(ui_darkmode, T_DARKM);
+    ui_forceHome = lv_checkbox_create(ui_Settings);
+    lv_checkbox_set_text(ui_forceHome, T_HOME_FORCE);
 
-    lv_obj_set_width(ui_darkmode, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_darkmode, LV_SIZE_CONTENT);
+    lv_obj_set_width(ui_forceHome, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_forceHome, LV_SIZE_CONTENT);
 
-    lv_obj_set_x(ui_darkmode, 10);
-    lv_obj_set_y(ui_darkmode, 30);
+    lv_obj_set_x(ui_forceHome, 10);
+    lv_obj_set_y(ui_forceHome, 30);
 
-    lv_obj_set_align(ui_darkmode, LV_ALIGN_LEFT_MID);
+    lv_obj_set_align(ui_forceHome, LV_ALIGN_LEFT_MID);
 
-    lv_obj_add_flag(ui_darkmode, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-    lv_obj_add_style(ui_darkmode, &style_option_bg, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_style(ui_darkmode, &style_slider_indicator[3], LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(ui_darkmode, lv_color_hex(COLOR_SCHEMES[g_active_color_scheme].slider4), LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(ui_darkmode, 2, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_opa(ui_darkmode, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    lv_obj_add_style(ui_darkmode, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
-    lv_obj_set_style_text_font(ui_darkmode, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_flag(ui_forceHome, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_style(ui_forceHome, &style_option_bg, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_forceHome, &style_slider_indicator[3], LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_color(ui_forceHome, lv_color_hex(COLOR_SCHEMES[g_active_color_scheme].slider4), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_width(ui_forceHome, 2, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(ui_forceHome, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_forceHome, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
+    lv_obj_set_style_text_font(ui_forceHome, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-    //lv_obj_set_style_border_color(ui_darkmode, lv_color_hex(getActiveButtonLColor()), LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    //lv_obj_set_style_border_opa(ui_darkmode, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    //lv_obj_set_style_border_color(ui_forceHome, lv_color_hex(getActiveButtonLColor()), LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    //lv_obj_set_style_border_opa(ui_forceHome, 255, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 
     
     // Sun icon and brightness slider
@@ -2032,7 +2035,7 @@ void ui_Settings_screen_init(void)
     lv_group_add_obj(ui_g_settings, ui_vibrate);
     lv_group_add_obj(ui_g_settings, ui_lefty);
     lv_group_add_obj(ui_g_settings, ui_strokeinvert);
-    lv_group_add_obj(ui_g_settings, ui_darkmode);
+    lv_group_add_obj(ui_g_settings, ui_forceHome);
 //    lv_group_add_obj(ui_g_settings, ui_brightness_slider);
     // TODO: Set encoder 2 to use ui_g_settings group here, e.g.:
     // lv_indev_set_group(encoder2_indev, ui_g_settings);
@@ -2150,7 +2153,7 @@ void ui_Menu_screen_init(void)
     lv_obj_set_width(ui_MenuButtonMRText, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_MenuButtonMRText, LV_SIZE_CONTENT);
     lv_obj_set_align(ui_MenuButtonMRText, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_MenuButtonMRText, T_ADDONS);
+    lv_label_set_text(ui_MenuButtonMRText, T_SETTINGS);
     lv_obj_add_style(ui_MenuButtonMRText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
 
@@ -2577,7 +2580,7 @@ void ui_Addons_screen_init(void)
 void ui_init(void)
 {
     lv_disp_t * dispp = lv_disp_get_default();
-    lv_theme_t * theme = lv_theme_default_init(dispp, lv_color_hex(getActivePrimaryColor()), lv_color_hex(getActiveSecondaryColor()), dark_mode, LV_FONT_DEFAULT);
+    lv_theme_t * theme = lv_theme_default_init(dispp, lv_color_hex(getActivePrimaryColor()), lv_color_hex(getActiveSecondaryColor()), true, LV_FONT_DEFAULT);  //true for dark mode
     lv_disp_set_theme(dispp, theme);
 
     ui_Start_screen_init();

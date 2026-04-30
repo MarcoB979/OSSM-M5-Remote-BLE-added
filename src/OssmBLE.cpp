@@ -645,16 +645,28 @@ bool OssmBleExecutePulloutStop(float currentSpeed, float maxDepthMm, float maxSp
 
 bool OssmBleGoToStrokeEngine()
 {
-  // If we already have a recent machine-state showing the stroke engine,
-  // don't re-issue a go:strokeEngine command which can cause duplicate
-  // homing sequences. This mirrors RADR behaviour of avoiding redundant
-  // mode transitions when already in the target mode.
-  if (ble_last_machine_state.valid) {
-    if (ble_last_machine_state.mode == OssmBleMachineMode::StrokeEngineIdle ||
-        ble_last_machine_state.mode == OssmBleMachineMode::StrokeEngineActive) {
+  // To avoid unnecessary homing, force a fresh read of the machine state
+  // and only send the mode-change command if the device is not already in
+  // the stroke engine. Fall back to cached state if the fresh read fails.
+  OssmBleMachineState ms;
+  if (OssmBleGetCurrentState(&ms, true)) {
+    if (ms.mode == OssmBleMachineMode::StrokeEngineIdle ||
+        ms.mode == OssmBleMachineMode::StrokeEngineActive) {
+      LogDebugFormatted("Suppressing go:strokeEngine — device already in stroke mode\n");
       return true; // already in stroke engine — nothing to do
     }
+  } else {
+    // If we couldn't refresh, fall back to the cached value if available
+    if (ble_last_machine_state.valid) {
+      if (ble_last_machine_state.mode == OssmBleMachineMode::StrokeEngineIdle ||
+          ble_last_machine_state.mode == OssmBleMachineMode::StrokeEngineActive) {
+        LogDebugFormatted("Suppressing go:strokeEngine based on cached state\n");
+        return true;
+      }
+    }
   }
+
+  LogDebugFormatted("Issuing go:strokeEngine command (mode unknown or not stroke)\n");
   return OssmBleSendText("go:strokeEngine", nullptr);
 }
 bool OssmBleGoToSimplePenetration() { return OssmBleSendText("go:simplePenetration", nullptr); }

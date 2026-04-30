@@ -1035,7 +1035,7 @@ static void handleSettingsScreen(const ButtonEvents &events)
     lv_obj_t *focused = lv_group_get_focused(ui_g_settings);
     if (focused) {
       if (focused == ui_vibrate || focused == ui_lefty ||
-          focused == ui_strokeinvert || focused == ui_darkmode) {
+          focused == ui_strokeinvert || focused == ui_forceHome) {
         bool checked = lv_obj_has_state(focused, LV_STATE_CHECKED);
         if (checked) {
           lv_obj_clear_state(focused, LV_STATE_CHECKED);

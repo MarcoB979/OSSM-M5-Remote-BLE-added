@@ -399,12 +399,9 @@ void brightness_slider_event_cb(lv_event_t *e)
 void savesettings(lv_event_t * e)
 {
   (void)e;
-  bool theme_Change_Previous = false;
-  bool theme_Change_New = false;
-
   Preferences pref;
   pref.begin("m5-ctnr", false);
-  theme_Change_Previous = pref.getBool("Darkmode", true);
+  bool prevBleForce = pref.getBool("BleForceHomeing", false);
 
   if (lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED) == 1) {
     pref.putBool("Vibrate", true);
@@ -429,30 +426,26 @@ void savesettings(lv_event_t * e)
     strokeinvert_mode = false;
   }
 
-  if (lv_obj_has_state(ui_darkmode, LV_STATE_CHECKED) == 1) {
-    theme_Change_New = true;
-    pref.putBool("Darkmode", true);
-  } else if (lv_obj_has_state(ui_darkmode, LV_STATE_CHECKED) == 0) {
-    theme_Change_New = false;
-    pref.putBool("Darkmode", false);
+  if (lv_obj_has_state(ui_forceHome, LV_STATE_CHECKED) == 1) {
+    pref.putBool("BleForceHomeing", true);
+    bleForceHomeing = true;
+  } else if (lv_obj_has_state(ui_forceHome, LV_STATE_CHECKED) == 0) {
+    pref.putBool("BleForceHomeing", false);
+    bleForceHomeing = false;
   }
 
   pref.putInt("Brightness", lv_slider_get_value(ui_brightness_slider));
   pref.end();
 
-  if (theme_Change_Previous != theme_Change_New) {
-    vibrate(225, 75);
-    ESP.restart();
-  } else {
-    vibrate(225, 75);
-  }
+  // No restart required for toggling BLE force-homing flag.
+  vibrate(225, 75);
 
   pref.begin("m5-ctnr", true);
   LogDebug("Settings are saved, these are the values:");
   LogDebugFormatted("Vibrate: %s",      pref.getBool("Vibrate", true) ? "true" : "false");
   LogDebugFormatted("Lefty/Touch: %s",  pref.getBool("Lefty", true) ? "true" : "false");
   LogDebugFormatted("StrokeInvert: %s", pref.getBool("StrokeInvert", false) ? "true" : "false");
-  LogDebugFormatted("Darkmode: %s",     pref.getBool("Darkmode", false) ? "true" : "false");
+  LogDebugFormatted("BleForceHomeing: %s",     pref.getBool("BleForceHomeing", false) ? "true" : "false");
   LogDebugFormatted("Brightness: %d",   pref.getInt("Brightness", 180));
   pref.end();
 }

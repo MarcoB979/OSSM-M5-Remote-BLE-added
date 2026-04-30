@@ -100,9 +100,12 @@ static const AddonDefinition ADDON_DEFINITIONS[] = {
 #define START_SCREEN_MIN_DISPLAY_MS 3000UL
 
 #ifdef __cplusplus
+
+
 // Runtime-configurable debug flags (defined in config_debug.cpp)
 extern bool ShowBLECommandResponses; // print BLE command responses
 extern bool ShowBLEDebugCommands;   // print concise BLE send/parse debug
+extern bool bleForceHomeing; // when true, UI menu entry will send go:menu to OSSM
 #endif
 
 

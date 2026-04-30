@@ -29,10 +29,11 @@ void setup(){
   m5prf.begin("m5-ctnr", false); 
   // Loads these settings at boot
   LogDebug("Loading settings...");
-  dark_mode = m5prf.getBool("Darkmode", true);       // ^ (basically first boot defaults, saving settings surives a re-flash!)
   vibrate_mode = m5prf.getBool("Vibrate", true);
   touch_home= m5prf.getBool("Lefty", false);       // = touchcreen. There apears to be no actual lefthanded mode anywhere
   strokeinvert_mode = m5prf.getBool("StrokeInvert");
+  // BLE behavior: whether entering UI Menu should force OSSM to Menu (causing homing)
+  bleForceHomeing = m5prf.getBool("BleForceHomeing", false);
   int brightness = m5prf.getInt("Brightness", -1);
   if (brightness < 0) {
     brightness = 180; // your default
@@ -142,8 +143,8 @@ LogDebug("Works till step 3");
       lv_obj_clear_state(ui_ejectaddon, LV_STATE_CHECKED);
     }
   }
-  if(dark_mode == true){
-    lv_obj_add_state(ui_darkmode, LV_STATE_CHECKED);
+  if(bleForceHomeing == true){
+    lv_obj_add_state(ui_forceHome, LV_STATE_CHECKED);
   }
   if(vibrate_mode == true){
     lv_obj_add_state(ui_vibrate, LV_STATE_CHECKED);

@@ -2,7 +2,7 @@
 // Language
 #define T_HEADER            "OSSM Remote"
 #define T_BLANK             ""
-#define T_MENU             "Menu"
+#define T_MENU              "Menu"
 #define T_DEMO              "Demo"
 #define T_CONNECT           "Connect"
 #define T_CONNECTING        "Connecting..."
@@ -49,6 +49,7 @@
 #define T_SAVE              "Save"
 #define T_LOW               "Low"
 #define T_HIGH              "High"
+#define T_HOME_FORCE        "Force re-Home"
 #define T_DARKM             "Dark Mode"
 #define T_VIBRATE           "Vibrate"
 #define T_TOUCHSETTING      "Touch Disabled"
@@ -83,7 +84,7 @@
 #define T_HOMESCREEN_SUB    "(Stroke engine)"
 #define T_STREAMING         "Streaming"
 #define T_STREAMING_SUB     "mode"
-#define T_STROKE_SCREEN     "Stroke"
+#define T_STROKE_SCREEN     "Bator"
 #define T_STROKE_SUB        "mode"
 #define T_ADDONS            "Addons"
 #define T_PATTERN_GENERATOR "Pattern Generator"
@@ -108,7 +109,7 @@
 #define T_SCREEN_COLORS           "Color Schemes"
 #define T_SCREEN_PATTERN          "Pattern"
 #define T_SCREEN_TORQUE           "Torque"
-#define T_SCREEN_EJECT            "Eject CUMpump"
+#define T_SCREEN_EJECT            "CUM pump"
 
 // Addons screen
 #define T_ADDONS_HINT             "Click addon to assign: Left -> Right -> Off"

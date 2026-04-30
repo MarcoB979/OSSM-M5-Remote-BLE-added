@@ -131,7 +131,6 @@ extern bool eject_status;
 extern bool vibrate_mode;
 extern bool touch_home;
 extern char patternstr[20];
-extern bool dark_mode;
 extern bool touch_disabled;
 extern int st_screens;
 extern int OSSM_State;

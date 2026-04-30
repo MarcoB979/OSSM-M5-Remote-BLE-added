@@ -125,7 +125,7 @@ extern lv_obj_t * ui_BattValue1;
 extern lv_obj_t * ui_Battery1;
 extern lv_obj_t * ui_ejectaddon;
 extern lv_obj_t * ui_strokeinvert;
-extern lv_obj_t * ui_darkmode;
+extern lv_obj_t * ui_forceHome;
 extern lv_obj_t * ui_vibrate;
 extern lv_obj_t * ui_lefty;
 
@@ -193,7 +193,7 @@ extern lv_obj_t * ui_AddonsButtonRText;
 // UI_COLORS screen objects
 extern lv_obj_t   * ui_Colors;
 extern lv_group_t * ui_g_colors;
-extern lv_obj_t * ui_darkmode;
+extern lv_obj_t * ui_forceHome;
 extern lv_obj_t * ui_vibrate;
 extern lv_obj_t * ui_lefty;
 extern lv_group_t * ui_g_menu;

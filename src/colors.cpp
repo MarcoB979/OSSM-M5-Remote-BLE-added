@@ -216,7 +216,7 @@ void applyColorScheme(int index) {
     lv_disp_t *dispp = lv_disp_get_default();
     if (dispp) {
         lv_theme_t *theme = lv_theme_default_init(
-            dispp, lv_color_hex(THEME_P), lv_color_hex(THEME_S), dark_mode, LV_FONT_DEFAULT);
+            dispp, lv_color_hex(THEME_P), lv_color_hex(THEME_S), true, LV_FONT_DEFAULT); //true for dark mode
         lv_disp_set_theme(dispp, theme);
     }
 
