@@ -53,8 +53,8 @@ extern bool               OSSM_On;
 extern TaskHandle_t       eRemote_t;
 
 // ---- Function declarations ----
+void espNowInit();
 bool SendCommand(int Command, float Value, int Target);
 void espNowRemoteTask(void *pvParameters);
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
-// espNowInit() will be added in Step 2 to wrap the setup() init block
