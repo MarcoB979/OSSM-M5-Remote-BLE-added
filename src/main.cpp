@@ -1,229 +1,44 @@
 #pragma GCC optimize ("Ofast")
 #include <M5Unified.h>
 #include <ESP32Encoder.h>
-#include <esp_now.h>
-#include <WiFi.h>
-#include <PatternMath.h>
-#include "OneButton.h"          //For Button Debounce and Longpress
-#include "config.h"
 #include <Arduino.h>
 #include <Wire.h>
 #include <lvgl.h>
 #include <SPI.h>
-#include "ui/ui.h"
-#include "main.h"
-#include "Preferences.h"      //EEPROM replacement function
-#include "buttonhandlers/ButtonHandlers.h"
-
-#define LV_CONF_INCLUDE_SIMPLE
-#include <lvgl.h>
 #include <esp_timer.h>
+#include "OneButton.h"    // must be before config.h which uses the OneButton type
+#include "config.h"
+#include "debug.h"
+#include "main.h"
+#include "ui/ui.h"
+#include "buttonhandlers/ButtonHandlers.h"
+#include "communication/EspNowComm.h"
+#include "screens/ScreenHandler.h"
 
-constexpr int32_t HOR_RES=320;
-constexpr int32_t VER_RES=240;
+constexpr int32_t HOR_RES = 320;
+constexpr int32_t VER_RES = 240;
 
-///////////////////////////////////////////
-////
-////  To Debug or not to Debug
-////
-///////////////////////////////////////////
-
-// Uncomment the following line if you wish to print DEBUG info
-#define DEBUG 
-
-#ifdef DEBUG
-#define LogDebug(...) Serial.println(__VA_ARGS__)
-#define LogDebugFormatted(...) Serial.printf(__VA_ARGS__)
-#else
-#define LogDebug(...) ((void)0)
-#define LogDebugFormatted(...) ((void)0)
-#endif
-
-#define OFF 0.0
-#define ON 1.0
-
-// Screens 
-
-#define ST_UI_START 0
-#define ST_UI_HOME 1
-
-#define ST_UI_MENUE 10
-#define ST_UI_PATTERN 11
-#define ST_UI_Torqe 12
-#define ST_UI_EJECTSETTINGS 13
-
-#define ST_UI_SETTINGS 20
-
-int st_screens = ST_UI_START;
-
-
-
-// Menü States
-
-#define CONNECT 0
-#define HOME 1
-#define MENUE 2
-#define MENUE2 3
-#define TORQE 4
-#define PATTERN_MENUE 5
-#define PATTERN_MENUE2 6
-#define PATTERN_MENUE3 7
-#define CUM_MENUE 20
-
-int menuestatus = CONNECT;
-
-// EEPROM replacement function using Non-volatie memory (NVS)
-Preferences m5prf; //initiate an instance of the Preferences library
-
-bool eject_status = false;
+// Shared state (defined here, declared extern in main.h)
 bool dark_mode = false;
-bool vibrate_mode = true;
-bool touch_home = false;
-bool touch_disabled = false;
 
-// Command States
-#define CONN 0
-#define SPEED 1
-#define DEPTH 2
-#define STROKE 3
-#define SENSATION 4
-#define PATTERN 5
-#define TORQE_F 6
-#define TORQE_R 7
-#define OFF 10
-#define ON  11
-#define SETUP_D_I 12
-#define SETUP_D_I_F 13
-#define REBOOT 14
+// Shared numeric limits (defined here, declared extern in main.h)
+float maxdepthinmm = 400.0f;
+float speedlimit   = 300.0f;
 
-#define CUMSPEED 20
-#define CUMTIME 21
-#define CUMSIZE   22
-#define CUMACCEL  23
+// ESP-NOW state (declared extern in communication/EspNowComm.h)
+struct_message      outgoingcontrol;
+struct_message      incomingcontrol;
+esp_now_peer_info_t peerInfo;
+uint8_t OSSM_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+bool Ossm_paired = false;
+bool OSSM_On     = false;
+TaskHandle_t eRemote_t = nullptr;
 
-#define CONNECT 88
-#define HEARTBEAT 99
-
-int displaywidth;
-int displayheight;
-int progheight = 30;
-int distheight = 10;
-int S1Pos;
-int S2Pos;
-int S3Pos;
-int S4Pos;
-bool rstate = false;
-int pattern = 2;
-char patternstr[20];
-bool onoff = false;
-
-
-long speedenc = 0;
-long depthenc = 0;
-long strokeenc = 0;
-long sensationenc = 0;
-long torqe_f_enc = 0;
-long torqe_r_enc = 0;
-long cum_t_enc = 0;
-long cum_si_enc =0;
-long cum_s_enc = 0;
-long cum_a_enc = 0;
-long encoder4_enc = 0;
-
-extern float maxdepthinmm = 400.0;
-extern float speedlimit = 300;
-int speedscale = -5;
-
-float speed = 0.0;
-float depth = 0.0;
-float stroke = 0.0;
-float sensation = 0.0;
-float torqe_f = 100.0;
-float torqe_r = -180.0;
-float cum_time = 0.0;
-float cum_speed = 0.0;
-float cum_size = 0.0;
-float cum_accel = 0.0;
-
-unsigned long nowMs;
-int  rampMs;
-bool rampEnabled = true;
-int rampValue;
-int rampTime = 75;
-int maxRamp = 8;
-int encId;
-int activeEncId;
-
-bool dynamicStroke = false;
-
+// Encoder objects (declared extern in buttonhandlers/ButtonHandlers.h)
 ESP32Encoder encoder1;
 ESP32Encoder encoder2;
 ESP32Encoder encoder3;
 ESP32Encoder encoder4;
-
-// Variable to store if sending data was successful
-String success;
-
-float out_esp_speed;
-float out_esp_depth;
-float out_esp_stroke;
-float out_esp_sensation;
-float out_esp_pattern;
-bool out_esp_rstate;
-bool out_esp_connected;
-int out_esp_command;
-float out_esp_value;
-int out_esp_target;
-
-float incoming_esp_speed;
-float incoming_esp_depth;
-float incoming_esp_stroke;
-float incoming_esp_sensation;
-float incoming_esp_pattern;
-bool incoming_esp_rstate;
-bool incoming_esp_connected;
-bool incoming_esp_heartbeat;
-int incoming_esp_target;
-
-typedef struct struct_message {
-  float esp_speed;
-  float esp_depth;
-  float esp_stroke;
-  float esp_sensation;
-  float esp_pattern;
-  bool esp_rstate;
-  bool esp_connected;
-  bool esp_heartbeat;
-  int esp_command;
-  float esp_value;
-  int esp_target;
-} struct_message;
-
-bool Ossm_paired = false;
-
-struct_message outgoingcontrol;
-struct_message incomingcontrol;
-
-esp_now_peer_info_t peerInfo;
-uint8_t OSSM_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; // Broadcast to all ESP32s, upon connection gets updated to the actual address
-
-#define HEARTBEAT_INTERVAL 5000/portTICK_PERIOD_MS	// 5 seconds
-
-// Bool
-
-bool EJECT_On = false;
-bool OSSM_On = false;
-
-// Tasks:
-
-TaskHandle_t eRemote_t  = nullptr;  // Esp Now Remote Task
-
-void espNowRemoteTask(void *pvParameters); // Handels the EspNow Remote
-bool connectbtn(); //Handels Connectbtn
-int64_t touchmenue();
-
-// vibrate(), button flags and button callbacks are in buttonhandlers/ButtonHandlers.cpp
-
 
 lv_display_t *display;
 lv_indev_t *indev;
@@ -365,13 +180,13 @@ bool SendCommand(int Command, float Value, int Target){
   
     if (result == ESP_OK) {
       return true;
-    } 
-    else {
+    } else {
       delay(20);
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
       return false;
     }
   }
+  return false;
 }
 
 void connectbutton(lv_event_t * e)
@@ -384,141 +199,9 @@ void connectbutton(lv_event_t * e)
     }
 }
 
-void savesettings(lv_event_t * e)
-{
-
-  m5prf.begin("m5-ctnr", false); //open NVS-storage container/session. False means that it's used it in read+write mode. Set true to open or create the namespace in read-only mode.
-
-  if(lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED) == 1){
-    m5prf.putBool("Vibrate", true); //NSV-storage write true to key "Vibrate"
-	}else if(lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED) == 0){
-    m5prf.putBool("Vibrate", false);
-	}
-
-  if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
-    m5prf.putBool("Lefty", true); // ui_lefty in SL-Studio code is actually Touch-enable toggle
-	}else if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 0){
-    m5prf.putBool("Lefty", false);
-	}
-
-	if(lv_obj_has_state(ui_ejectaddon, LV_STATE_CHECKED) == 1){
-    m5prf.putBool("ejectAddon", true);  
-	}else if(lv_obj_has_state(ui_ejectaddon, LV_STATE_CHECKED) == 0){
-    m5prf.putBool("ejectAddon", false);
-	}
-
-  //read darkmode saved setting to force reboot for theme change
-  bool theme_Change_Previous = false;
-  bool theme_Change_New = false;
-  theme_Change_Previous = m5prf.getBool("Darkmode", true);
-
-  if(lv_obj_has_state(ui_darkmode, LV_STATE_CHECKED) == 1){
-    theme_Change_New = true;
-    m5prf.putBool("Darkmode", true);
-	}else if(lv_obj_has_state(ui_darkmode, LV_STATE_CHECKED) == 0){
-    theme_Change_New = false;
-    m5prf.putBool("Darkmode", false);
-	}
-
-  m5prf.end(); //close storage container/session.
-  delay(100);
-
-  if(theme_Change_Previous != theme_Change_New){
-    vibrate(225,75);
-    ESP.restart(); //reboot is only required to change themes, you don't need to restart for settings to save with NVS.
-  }else{
-    vibrate(225,75);
-  }
-}
-
-void screenmachine(lv_event_t * e)
-{
-  if (lv_scr_act() == ui_Start){
-    st_screens = ST_UI_START;
-  } else if (lv_scr_act() == ui_Home){
-    st_screens = ST_UI_HOME;
-    speed = lv_slider_get_value(ui_homespeedslider);
-    LogDebug(speedenc);
-    LogDebug(speed);
-
-    lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
-    lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
-
-            
-  } else if (lv_scr_act() == ui_Menue){
-    st_screens = ST_UI_MENUE;
-  } else if (lv_scr_act() == ui_Pattern){
-    st_screens = ST_UI_PATTERN;
-  } else if (lv_scr_act() == ui_Torqe){
-    st_screens = ST_UI_Torqe;
-    torqe_f = lv_slider_get_value(ui_outtroqeslider);
-    torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
-    encoder1.setCount(torqe_f_enc);
-
-    torqe_r = lv_slider_get_value(ui_introqeslider);
-    torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
-    encoder4.setCount(torqe_r_enc);
-
-  } else if (lv_scr_act() == ui_EJECTSettings){
-    st_screens = ST_UI_EJECTSETTINGS;
-  } else if (lv_scr_act() == ui_Settings){
-    st_screens = ST_UI_SETTINGS;
-  }
-}
-
-void ejectcreampie(lv_event_t * e){
-  if(EJECT_On == true){
-    lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
-    EJECT_On = false;
-  } else if(EJECT_On == false){
-    lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
-    depth = 0;
-    speed = 0;
-    stroke = 0;
-    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
-    SendCommand(DEPTH, depth, OSSM_ID);
-    screenmachine(e);
-    EJECT_On = true;
-  } 
-}
-
-void savepattern(lv_event_t * e){
-  pattern = lv_roller_get_selected(ui_PatternS);
-  lv_roller_get_selected_str(ui_PatternS,patternstr,0);
-  lv_label_set_text(ui_HomePatternLabel,patternstr);
-  LogDebug(pattern);
-  float patterns = pattern;
-  SendCommand(PATTERN, patterns, OSSM_ID);
-}
-
-void homebuttonmevent(lv_event_t * e){
-  LogDebug("HomeButton");
-  if(OSSM_On == false){
-    SendCommand(ON, 0.0, OSSM_ID);
-  } else if(OSSM_On == true){
-    SendCommand(OFF, 0.0, OSSM_ID);
-  }
-}
-
-void setupDepthInter(lv_event_t * e){
-    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
-}
-
-void setupdepthF(lv_event_t * e){
-    SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
-}
-
 void setup(){
   auto cfg = M5.config();
   M5.begin(cfg);
-
-  m5prf.begin("m5-ctnr", false); 
-    // Loads these settings at boot
-    eject_status = m5prf.getBool("ejectAddon", false); //boolean here is used if key does not exist yet
-    dark_mode = m5prf.getBool("Darkmode", true);       // ^ (basically first boot defaults, saving settings surives a re-flash!)
-    vibrate_mode = m5prf.getBool("Vibrate", true);
-    touch_home= m5prf.getBool("Lefty", false);       // = touchcreen. There apears to be no actual lefthanded mode anywhere
-  m5prf.end();
 
   M5.Power.setChargeCurrent(BATTERY_CHARGE_CURRENT);
   LogDebug("\n Starting");      // Start LogDebug
@@ -530,518 +213,58 @@ void setup(){
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
   }
-  // Once ESPNow is successfully Init, we will register for Send CB to
-  // get the status of Trasnmitted packet
   esp_now_register_send_cb(OnDataSent);
-
-  // register peer
-  peerInfo.channel = 0;  
+  peerInfo.channel = 0;
   peerInfo.encrypt = false;
-  // register first peer  
   memcpy(peerInfo.peer_addr, OSSM_Address, 6);
-  if (esp_now_add_peer(&peerInfo) != ESP_OK){
+  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
     Serial.println("Failed to add peer");
   }
-  // Register for a callback function that will be called when data is received
   esp_now_register_recv_cb(OnDataRecv);
-  LogDebug("\n esp now initialized");      // Start LogDebug
+  LogDebug("\n esp now initialized");
 
-  xTaskCreatePinnedToCore(espNowRemoteTask,      /* Task function. */
-                            "espNowRemoteTask",  /* name of task. */
-                            3096,               /* Stack size of task */
-                            NULL,               /* parameter of the task */
-                            5,                  /* priority of the task */
-                            &eRemote_t,         /* Task handle to keep track of created task */
-                            0);                 /* pin task to core 0 */
+  xTaskCreatePinnedToCore(espNowRemoteTask, "espNowRemoteTask", 3096, NULL, 5, &eRemote_t, 0);
   delay(200);
-  LogDebug("\n esp_task created");      // Start LogDebug
+  LogDebug("\n esp_task created");
   
-  // Initialize `disp_buf` display buffer with the buffer(s).
-  // lv_draw_buf_init(&draw_buf, LV_HOR_RES_MAX, LV_VER_RES_MAX);
-  M5.Display.setEpdMode(epd_mode_t::epd_fastest); // fastest but very-low quality.
-  if (M5.Display.width() < M5.Display.height())
-  { /// Landscape mode.
-  M5.Display.setRotation(M5.Display.getRotation() ^ 1);
+  M5.Display.setEpdMode(epd_mode_t::epd_fastest);
+  if (M5.Display.width() < M5.Display.height()) {
+    M5.Display.setRotation(M5.Display.getRotation() ^ 1);
   }
-  LogDebug("\n display initialized");      // Start LogDebug
+  LogDebug("\n display initialized");
   lv_init();
   lv_tick_set_cb(my_tick_function);
-  LogDebug("\n lvgl initialized");      // Start LogDebug
+  LogDebug("\n lvgl initialized");
 
   display = lv_display_create(HOR_RES, VER_RES);
   lv_display_set_flush_cb(display, my_display_flush);
   // buf1 must be 4-byte aligned (LV_DRAW_BUF_ALIGN=4). lv_color_t is uint16_t,
   // so the linker may place it on a 2-byte boundary. Force alignment explicitly.
   static lv_color_t buf1[HOR_RES * 15] __attribute__((aligned(4)));
-  LogDebug("\n display flush callback set");      // Start LogDebug
+  LogDebug("\n display flush callback set");
   lv_display_set_buffers(display, buf1, nullptr, sizeof(buf1), LV_DISPLAY_RENDER_MODE_PARTIAL);
-LogDebug("\n display buffers set");      // Start LogDebug
+  LogDebug("\n display buffers set");
   indev = lv_indev_create();
   lv_indev_set_type(indev, LV_INDEV_TYPE_POINTER);
   lv_indev_set_read_cb(indev, my_touchpad_read);
-  LogDebug("\n display and touchpad initialized");      // Start LogDebug
-  ui_init();  
-  LogDebug("\n ui initialized");      // Start LogDebug
+  LogDebug("\n display and touchpad initialized");
+  ui_init();
+  LogDebug("\n ui initialized");
 
-  buttonInit();  // Encoders + button callbacks init after UI is ready
+  buttonInit();
+  screenInit();  // Load NVS settings and apply to UI
 
-  if(eject_status == true){
-  lv_obj_add_state(ui_ejectaddon, LV_STATE_CHECKED);
-  lv_obj_clear_state(ui_EJECTSettingButton, LV_STATE_DISABLED);
-  lv_obj_clear_state(ui_HomeButtonL, LV_STATE_DISABLED);
-  }
-  if(dark_mode == true){
-  lv_obj_add_state(ui_darkmode, LV_STATE_CHECKED);
-  }
-  if(vibrate_mode == true){
-  lv_obj_add_state(ui_vibrate, LV_STATE_CHECKED);
-  }
-  if(touch_home == true){
-  lv_obj_add_state(ui_lefty, LV_STATE_CHECKED);
-  }
-  lv_roller_set_selected(ui_PatternS,2,LV_ANIM_OFF);
-  lv_roller_get_selected_str(ui_PatternS,patternstr,0);
-  lv_label_set_text(ui_HomePatternLabel,patternstr);
-  LogDebug("\n End setup");      // Start LogDebug
-
-
+  LogDebug("\n End setup");
 }
 
 void loop()
 {
-     bool changed=false;
-     const int BatteryLevel = M5.Power.getBatteryLevel();
-     String BatteryValue = (String(BatteryLevel, DEC) + "%");
-     const char *battVal = BatteryValue.c_str();
-     lv_bar_set_value(ui_Battery, BatteryLevel, LV_ANIM_OFF);
-     lv_label_set_text(ui_BattValue, battVal);
-     lv_bar_set_value(ui_Battery1, BatteryLevel, LV_ANIM_OFF);
-     lv_label_set_text(ui_BattValue1, battVal);
-     lv_bar_set_value(ui_Battery2, BatteryLevel, LV_ANIM_OFF);
-     lv_label_set_text(ui_BattValue2, battVal);
-     lv_bar_set_value(ui_Battery3, BatteryLevel, LV_ANIM_OFF);
-     lv_label_set_text(ui_BattValue3, battVal);
-     lv_bar_set_value(ui_Battery4, BatteryLevel, LV_ANIM_OFF);
-     lv_label_set_text(ui_BattValue4, battVal);
-     lv_bar_set_value(ui_Battery5, BatteryLevel, LV_ANIM_OFF);
-     lv_label_set_text(ui_BattValue5, battVal);
-
-     M5.update();
-     lv_task_handler();
-     Button1.tick();
-     Button2.tick();
-     Button3.tick();
-
-     switch(st_screens){
-      
-     case ST_UI_START: //Menu With logo after boot
-      {
-        if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
-          touch_disabled = true;
-        }
-
-        if(click2_short_waspressed == true){
-         lv_obj_send_event(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
-        } else if(mxclick_short_waspressed == true){
-         lv_obj_send_event(ui_StartButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
-         lv_obj_send_event(ui_StartButtonR, LV_EVENT_CLICKED, NULL);
-        }
-      }
-      break;
-
-      case ST_UI_HOME: //Menu with OSSM control sliders
-      {
-        if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
-          touch_disabled = true;
-        }
-
-          //RampHelper
-          nowMs = millis();
-          if (nowMs - rampMs <= rampTime && rampEnabled == true){ 
-              if (rampValue <= maxRamp && encId == activeEncId){
-            				++rampValue;
-              }
-          }else{
-          rampValue = 1;
-          activeEncId = encId;
-          }
-
-        //
-        // Encoder 1 Speed 
-        //
-        if(lv_slider_is_dragged(ui_homespeedslider) == false){ //if knob gets rotated
-          changed = false;
-          lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
-
-          if (encoder1.getCount() >= 2){      //speed up
-            changed = true;
-            speed += rampValue;
-            encoder1.setCount(0);
-            rampMs = millis();
-            encId = 1;
-		      }else if (encoder1.getCount() <= -2){      //speed down
-            changed = true;
-            speed -=rampValue;
-            encoder1.setCount(0);
-            rampMs = millis();
-            encId = 1;
-          }
-
-          //speed min-max bounds
-          if (speed < 0){
-            changed = true;
-            speed = 0;
-          }
-          if (speed > speedlimit){
-            changed = true;
-            speed = speedlimit;
-          }
-          
-          //send speed
-          if (changed) {
-            SendCommand(SPEED, speed, OSSM_ID);
-          }
-        
-        
-        }else if (lv_slider_get_value(ui_homespeedslider) != speed){ //if slider moved
-            speed = lv_slider_get_value(ui_homespeedslider);
-            SendCommand(SPEED, speed, OSSM_ID);
-        }
-        char speed_v[7];
-        dtostrf(speed, 6, 0, speed_v);
-        lv_label_set_text(ui_homespeedvalue, speed_v);
-
-        //
-        // Encoder 2 Depth 
-        //
-        if(lv_slider_is_dragged(ui_homedepthslider) == false){ //if knob gets rotated
-          changed = false;
-          lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
-
-		      if (encoder2.getCount() >= 2){      //depth up
-            changed = true;
-            depth += rampValue;
-            if (dynamicStroke == true){
-              stroke += rampValue;
-            }
-            encoder2.setCount(0);
-            rampMs = millis();
-            encId = 2;
-		      }else if (encoder2.getCount() <= -2){      //depth down
-            changed = true;
-            depth -=rampValue;
-            if (dynamicStroke == true){
-              stroke -= rampValue;
-              if(stroke >= depth){
-                stroke = depth;
-              }
-            }
-            encoder2.setCount(0);
-            rampMs = millis();
-            encId = 2;
-          }
-
-          //depth min-max bounds
-          if (depth < 0){
-            changed = true;
-            depth = 0;
-          }
-          if (depth > maxdepthinmm){
-            changed = true;
-            depth = maxdepthinmm;
-          }
-          
-          //send depth
-          if (changed) {
-            SendCommand(DEPTH, depth, OSSM_ID);
-            SendCommand(STROKE, stroke, OSSM_ID);
-          }
-        }else if(lv_slider_get_value(ui_homedepthslider) != depth){
-            depth = lv_slider_get_value(ui_homedepthslider);
-            SendCommand(DEPTH, depth, OSSM_ID);
-            SendCommand(STROKE, stroke, OSSM_ID);
-        }
-        char depth_v[7];
-        dtostrf(depth, 6, 0, depth_v);
-        lv_label_set_text(ui_homedepthvalue, depth_v);
-        
-        //
-        // Encoder 3 Stroke 
-        //
-        if(lv_slider_is_dragged(ui_homestrokeslider) == false){ //if knob gets rotated
-          changed = false;
-          lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
-          lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
-
-
-		      if (encoder3.getCount() >= 2){      //Stroke up
-            changed = true;
-            stroke -= rampValue;
-            encoder3.setCount(0);
-            rampMs = millis();
-            encId = 3;
-		      }else if (encoder3.getCount() <= -2){      //Stroke down
-            changed = true;
-            stroke += rampValue;
-            encoder3.setCount(0);
-            rampMs = millis();
-            encId = 3;
-          }
-
-          //Stoke min-max bounds
-          if (stroke < 0){
-            changed = true;
-            stroke = 0;
-          }
-          if (stroke > maxdepthinmm){
-            changed = true;
-            stroke = maxdepthinmm;
-          }
-          
-          //send stroke
-          if (changed) {
-            SendCommand(STROKE, stroke, OSSM_ID);
-            SendCommand(DEPTH, depth, OSSM_ID);
-          }
-
-        } else if(lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke){
-            stroke = depth - lv_slider_get_left_value(ui_homestrokeslider);
-            SendCommand(STROKE, stroke, OSSM_ID);
-        } else if(lv_slider_get_value(ui_homestrokeslider) != depth){
-            depth = lv_slider_get_value(ui_homestrokeslider);
-            SendCommand(DEPTH, depth, OSSM_ID);
-            SendCommand(DEPTH, depth, OSSM_ID);
-        }
-
-        char stroke_v[7];
-        dtostrf(stroke, 6, 0, stroke_v);
-        lv_label_set_text(ui_homestrokevalue, stroke_v);  //was lv_label_set_text(ui_homestrokevalue, stroke_v);
-
-        //
-        // Encoder4 Sensation
-        //
-        if(lv_slider_is_dragged(ui_homesensationslider) == false){
-          changed = false;
-          lv_slider_set_value(ui_homesensationslider, sensation, LV_ANIM_OFF);
-
-		      if (encoder4.getCount() >= 2){      //Stroke up
-            changed = true;
-            sensation += 2;
-            encoder4.setCount(0);
-            rampMs = millis();
-            encId = 4;
-		      }else if (encoder4.getCount() <= -2){      //Stroke down
-            changed = true;
-            sensation -= 2;
-            encoder4.setCount(0);
-            rampMs = millis();
-            encId = 4;
-            
-          }
-
-          //Stoke min-max bounds
-          if (sensation < -100){
-            changed = true;
-            sensation = -100;
-          }
-          if (sensation > 100){
-            changed = true;
-            sensation = 100;
-          }
-
-          if (changed) {
-            SendCommand(SENSATION, sensation, OSSM_ID);
-          }          
-        } else if(lv_slider_get_value(ui_homesensationslider) != sensation){
-            sensation = lv_slider_get_value(ui_homesensationslider);
-            SendCommand(SENSATION, sensation, OSSM_ID);
-        }
-
-        if(click2_short_waspressed == true){
-         lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
-        } else if(mxclick_short_waspressed == true){
-         lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
-         lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
-        } else if(click3_long_waspressed == true){
-          sensation = 0;        //reset sensation to zero
-          SendCommand(SENSATION, sensation, OSSM_ID);
-        }else if(click3_double_waspressed == true){
-          if (dynamicStroke == false){
-            dynamicStroke = true;;            /// dynamicStroke = !dynamicStroke; crashes M5 for some reason
-          }else{
-            dynamicStroke = false;;
-          }
-          if (stroke >= depth){
-            stroke = depth;
-          }
-        }
-      }
-      break;
-
-      case ST_UI_MENUE:
-      {
-        if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
-          touch_disabled = true;
-        }
-        if(encoder4.getCount() > encoder4_enc + 2){
-          LogDebug("next");
-          lv_group_focus_next(ui_g_menue);
-          encoder4_enc = encoder4.getCount();
-        } else if(encoder4.getCount() < encoder4_enc -2){
-          lv_group_focus_prev(ui_g_menue);
-          LogDebug("Preview");
-          encoder4_enc = encoder4.getCount();
-        }
-
-        if(click2_short_waspressed == true){
-         lv_obj_send_event(ui_MenueButtonL, LV_EVENT_CLICKED, NULL);
-        } else if(mxclick_short_waspressed == true){
-         lv_obj_send_event(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
-         lv_obj_send_event(lv_group_get_focused(ui_g_menue), LV_EVENT_CLICKED, NULL);
-        } else if(click3_long_waspressed == true){
-         SendCommand(REBOOT, 0, OSSM_ID);
-        } 
-      }
-      break;
-
-      case ST_UI_PATTERN:
-      {
-        if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
-          touch_disabled = true;
-        }
-        if(encoder4.getCount() > encoder4_enc + 2){
-          LogDebug("next");
-          uint32_t t = LV_KEY_DOWN;
-          lv_obj_send_event(ui_PatternS, LV_EVENT_KEY, &t);
-          encoder4_enc = encoder4.getCount();
-        } else if(encoder4.getCount() < encoder4_enc -2){
-          uint32_t t = LV_KEY_UP;
-          lv_obj_send_event(ui_PatternS, LV_EVENT_KEY, &t);
-          LogDebug("Preview");
-          encoder4_enc = encoder4.getCount();
-        }
-         if(click2_short_waspressed == true){
-         lv_obj_send_event(ui_PatternButtonL, LV_EVENT_CLICKED, NULL);
-        } else if(mxclick_short_waspressed == true){
-         lv_obj_send_event(ui_PatternButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
-         lv_obj_send_event(ui_PatternButtonR, LV_EVENT_CLICKED, NULL);
-        }
-      }
-      break;
-
-      case ST_UI_Torqe:
-      {
-        if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
-          touch_disabled = true;
-        }
-        // Encoder 1 Torqe Out
-        if(lv_slider_is_dragged(ui_outtroqeslider) == false){
-          if (encoder1.getCount() != torqe_f_enc){
-            lv_slider_set_value(ui_outtroqeslider, torqe_f, LV_ANIM_OFF);
-            if(encoder1.getCount() <= 0){
-              encoder1.setCount(0);
-            } else if (encoder1.getCount() >= Encoder_MAP){
-              encoder1.setCount(Encoder_MAP);
-            } 
-            torqe_f_enc = encoder1.getCount();
-            torqe_f = fscale(0, Encoder_MAP, 50, 200, torqe_f_enc, 0);
-            SendCommand(TORQE_F, torqe_f, OSSM_ID);
-          }
-        } else if(lv_slider_get_value(ui_outtroqeslider) != torqe_f){
-            torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
-            encoder1.setCount(torqe_f_enc);
-            torqe_f = lv_slider_get_value(ui_outtroqeslider);
-            SendCommand(TORQE_F, torqe_f, OSSM_ID);
-        }
-        char torqe_f_v[7];
-        dtostrf((torqe_f*-1), 6, 0, torqe_f_v);
-        lv_label_set_text(ui_outtroqevalue, torqe_f_v);
-
-        // Encoder 4 Torqe IN
-        if(lv_slider_is_dragged(ui_introqeslider) == false){
-          if (encoder4.getCount() != torqe_r_enc){
-            lv_slider_set_value(ui_introqeslider, torqe_r, LV_ANIM_OFF);
-            if(encoder4.getCount() <= 0){
-              encoder4.setCount(0);
-            } else if (encoder4.getCount() >= Encoder_MAP){
-              encoder4.setCount(Encoder_MAP);
-            } 
-            torqe_r_enc = encoder4.getCount();
-            torqe_r = fscale(0, Encoder_MAP, 20, 200, torqe_r_enc, 0);
-            SendCommand(TORQE_R, torqe_r, OSSM_ID);
-          }
-        } else if(lv_slider_get_value(ui_introqeslider) != torqe_r){
-            torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
-            encoder4.setCount(torqe_r_enc);
-            torqe_r = lv_slider_get_value(ui_introqeslider);
-            SendCommand(TORQE_R, torqe_r, OSSM_ID);
-        }
-        char torqe_r_v[7];
-        dtostrf(torqe_r, 6, 0, torqe_r_v);
-        lv_label_set_text(ui_introqevalue, torqe_r_v);
-
-         if(click2_short_waspressed == true){
-         lv_obj_send_event(ui_TorqeButtonL, LV_EVENT_CLICKED, NULL);
-        } else if(mxclick_short_waspressed == true){
-         lv_obj_send_event(ui_TorqeButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
-         lv_obj_send_event(ui_TorqeButtonR, LV_EVENT_CLICKED, NULL);
-        }
-      }
-      break;
-
-      case ST_UI_EJECTSETTINGS:
-      {
-        if(lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1){
-          touch_disabled = true;
-        }
-        
-         if(click2_short_waspressed == true){
-         lv_obj_send_event(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
-        } else if(mxclick_short_waspressed == true){
-         lv_obj_send_event(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
-         
-        }
-      }
-      break;
-
-      case ST_UI_SETTINGS: //Settings Menu
-      {
-        touch_disabled = false;
-
-        if(encoder4.getCount() > encoder4_enc + 2){
-          LogDebug("next");
-          lv_group_focus_next(ui_g_settings);
-          encoder4_enc = encoder4.getCount();
-        } else if(encoder4.getCount() < encoder4_enc -2){
-          lv_group_focus_prev(ui_g_settings);
-          LogDebug("Preview");
-          encoder4_enc = encoder4.getCount();
-        }
-
-        if(click2_short_waspressed == true){
-         lv_obj_send_event(ui_MenueButtonL, LV_EVENT_CLICKED, NULL);
-        } else if(mxclick_short_waspressed == true){
-         lv_obj_send_event(ui_MenueButtonM, LV_EVENT_CLICKED, NULL);
-        } else if(click3_short_waspressed == true){
-         lv_obj_send_event(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
-        }
-      }
-      break;
-
-     }
-     mxclick_long_waspressed = false;
-     mxclick_short_waspressed = false;
-     click2_short_waspressed = false;
-     click3_short_waspressed = false;
-     click3_long_waspressed = false;
-     click3_double_waspressed = false;
-
+  M5.update();
+  lv_task_handler();
+  Button1.tick();
+  Button2.tick();
+  Button3.tick();
+  handleScreens();
   delay(5);
 }
 
@@ -1049,64 +272,14 @@ void espNowRemoteTask(void *pvParameters)
 {
   for(;;){
     if(Ossm_paired){
-      outgoingcontrol.esp_command = HEARTBEAT;
+      outgoingcontrol.esp_command   = HEARTBEAT;
       outgoingcontrol.esp_heartbeat = true;
-      outgoingcontrol.esp_target = OSSM_ID;
-      esp_err_t result = esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
+      outgoingcontrol.esp_target    = OSSM_ID;
+      esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
     }
     vTaskDelay(HEARTBEAT_INTERVAL);
   }
 }
 
-/*
-void cumscreentask(void *pvParameters)
-{
-  for(;;)
-  {
-    M5.Lcd.setTextColor(FrontColor);
-    if(encoder1.getCount() != cum_s_enc)
-    {
-    cum_s_enc = encoder1.getCount();
-    cum_speed = map(constrain(cum_s_enc,0,Encoder_MAP),0,Encoder_MAP,1000,30000);
-    M5.Lcd.fillRect(199,S1Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S1Pos+progheight-5);
-    M5.Lcd.print(cum_speed);
-    SendCommand(CUMSPEED, cum_speed, CUM);
-    }
-
-  if(encoder2.getCount() != cum_t_enc)
-    {
-    cum_t_enc = encoder2.getCount();
-    cum_time = map(constrain(cum_t_enc,0,Encoder_MAP),0,Encoder_MAP,0,60);
-    M5.Lcd.fillRect(199,S2Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S2Pos+progheight-5);
-    M5.Lcd.print(cum_time);
-    SendCommand(CUMTIME, cum_time, CUM);
-    }
-
-   if(encoder3.getCount() != cum_si_enc)
-    {
-    cum_si_enc = encoder3.getCount();
-    cum_size = map(constrain(cum_si_enc,0,Encoder_MAP),0,Encoder_MAP,0,40);
-    M5.Lcd.fillRect(199,S3Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S3Pos+progheight-5);
-    M5.Lcd.print(cum_size);
-    SendCommand(CUMSIZE, cum_size, CUM);
-    }
-
-   if(encoder4.getCount() != cum_a_enc)
-    {
-    cum_a_enc = encoder4.getCount();
-    cum_accel = map(constrain(cum_a_enc,0,Encoder_MAP),0,Encoder_MAP,0,20);
-    M5.Lcd.fillRect(199,S4Pos,85,30,BgColor);
-    M5.Lcd.setCursor(200,S4Pos+progheight-5);
-    M5.Lcd.print(cum_accel);
-    SendCommand(CUMACCEL, cum_accel, CUM);
-    }
-  vTaskDelay(100);
-  }
-}
-*/
-
-
-// Button handler implementations moved to buttonhandlers/ButtonHandlers.cpp
+// Screen event callbacks and handler moved to src/screens/ScreenHandler.cpp
+// ESP-NOW functions will move to src/communication/EspNowComm.cpp in Step 2
