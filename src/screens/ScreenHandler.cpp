@@ -732,10 +732,10 @@ void handleScreens() {
 
         if (encoder4.getCount() > encoder4_enc + 2) {
             LogDebug("next");
-            lv_group_focus_next(ui_g_settings);
+            if (ui_g_settings) lv_group_focus_next(ui_g_settings);
             encoder4_enc = encoder4.getCount();
         } else if (encoder4.getCount() < encoder4_enc - 2) {
-            lv_group_focus_prev(ui_g_settings);
+            if (ui_g_settings) lv_group_focus_prev(ui_g_settings);
             LogDebug("Preview");
             encoder4_enc = encoder4.getCount();
         }
@@ -744,9 +744,9 @@ void handleScreens() {
         } else if (mxclick_short_waspressed) {
             lv_obj_send_event(ui_SettingsButtonM, LV_EVENT_CLICKED, NULL);
         } else if (click3_short_waspressed) {
-            lv_obj_t *focused = lv_group_get_focused(ui_g_settings);
+            lv_obj_t *focused = ui_g_settings ? lv_group_get_focused(ui_g_settings) : NULL;
             if (focused) {
-                bool isToggle = (focused == ui_ejectaddon || focused == ui_vibrate || focused == ui_lefty ||
+                bool isToggle = (focused == ui_vibrate || focused == ui_lefty ||
                                  focused == ui_strokeinvert || focused == ui_forceHome);
                 if (isToggle) {
                     if (lv_obj_has_state(focused, LV_STATE_CHECKED)) {

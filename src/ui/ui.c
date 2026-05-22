@@ -209,6 +209,7 @@ static void applyCheckboxStyles(lv_obj_t *obj)
 {
     lv_obj_add_style(obj, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(obj, &style_checkbox_indicator, LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_add_style(obj, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
 }
 
 ///////////////////// ANIMATIONS ////////////////////
@@ -2116,6 +2117,8 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_style_text_font(ui_ejectaddon, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyCheckboxStyles(ui_ejectaddon);
+    // Legacy checkbox kept for backward compatibility, but hidden in new settings UI.
+    lv_obj_add_flag(ui_ejectaddon, LV_OBJ_FLAG_HIDDEN);
 
     // ui_vibrate
 
@@ -2232,11 +2235,11 @@ void ui_Settings_screen_init(void)
         lv_group_del(ui_g_settings);
     }
     ui_g_settings = lv_group_create();
-    lv_group_add_obj(ui_g_settings, ui_ejectaddon);
     lv_group_add_obj(ui_g_settings, ui_vibrate);
     lv_group_add_obj(ui_g_settings, ui_lefty);
     lv_group_add_obj(ui_g_settings, ui_strokeinvert);
     lv_group_add_obj(ui_g_settings, ui_forceHome);
+    lv_group_focus_obj(ui_vibrate);
 
 }
 
