@@ -145,10 +145,13 @@ lv_obj_t * ui_SettingsButtonM;
 lv_obj_t * ui_SettingsButtonMText;
 lv_obj_t * ui_SettingsButtonR;
 lv_obj_t * ui_SettingsButtonRText;
+lv_obj_t * ui_brightness_icon;
 lv_obj_t * ui_Batt1;
 lv_obj_t * ui_BattValue1;
 lv_obj_t * ui_Battery1;
 lv_obj_t * ui_ejectaddon;
+lv_obj_t * ui_strokeinvert;
+lv_obj_t * ui_forceHome;
 lv_obj_t * ui_vibrate;
 lv_obj_t * ui_lefty;
 lv_group_t * ui_g_settings;
@@ -446,6 +449,15 @@ static void ui_event_ejectaddon(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
+}
+
+static void ui_event_Brightness_sliderChange(lv_event_t * e)
+{
+    lv_event_code_t event = lv_event_get_code(e);
+    lv_obj_t * ta = lv_event_get_target(e);
+    if (event == LV_EVENT_VALUE_CHANGED) {
+        brightness_slider_event_cb(e);
+    }
 }
 
 ///////////////////// SCREENS ////////////////////
@@ -2102,7 +2114,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_add_event_cb(ui_ejectaddon, ui_event_ejectaddon, LV_EVENT_ALL, NULL);
 
-    lv_obj_set_style_text_font(ui_ejectaddon, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_ejectaddon, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyCheckboxStyles(ui_ejectaddon);
 
     // ui_vibrate
@@ -2113,14 +2125,14 @@ void ui_Settings_screen_init(void)
     lv_obj_set_width(ui_vibrate, LV_SIZE_CONTENT);
     lv_obj_set_height(ui_vibrate, LV_SIZE_CONTENT);
 
-    lv_obj_set_x(ui_vibrate, 155);
+    lv_obj_set_x(ui_vibrate, 10);
     lv_obj_set_y(ui_vibrate, -60);
 
     lv_obj_set_align(ui_vibrate, LV_ALIGN_LEFT_MID);
 
     lv_obj_add_flag(ui_vibrate, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
-    lv_obj_set_style_text_font(ui_vibrate, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_vibrate, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyCheckboxStyles(ui_vibrate);
 
     // ui_lefty
@@ -2132,14 +2144,99 @@ void ui_Settings_screen_init(void)
     lv_obj_set_height(ui_lefty, LV_SIZE_CONTENT);
 
     lv_obj_set_x(ui_lefty, 11);
-    lv_obj_set_y(ui_lefty, -18);
+    lv_obj_set_y(ui_lefty, -30);
 
     lv_obj_set_align(ui_lefty, LV_ALIGN_LEFT_MID);
 
     lv_obj_add_flag(ui_lefty, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
-    lv_obj_set_style_text_font(ui_lefty, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(ui_lefty, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyCheckboxStyles(ui_lefty);
+
+    // ui_strokeinvert
+
+    ui_strokeinvert = lv_checkbox_create(ui_Settings);
+    lv_checkbox_set_text(ui_strokeinvert, T_STROKEINVERT);
+
+    lv_obj_set_width(ui_strokeinvert, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_strokeinvert, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_strokeinvert, 10);
+    lv_obj_set_y(ui_strokeinvert, 0);
+
+    lv_obj_set_align(ui_strokeinvert, LV_ALIGN_LEFT_MID);
+
+    lv_obj_add_flag(ui_strokeinvert, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+    lv_obj_set_style_text_font(ui_strokeinvert, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    applyCheckboxStyles(ui_strokeinvert);
+
+    // ui_forceHome
+
+    ui_forceHome = lv_checkbox_create(ui_Settings);
+    lv_checkbox_set_text(ui_forceHome, T_HOME_FORCE);
+
+    lv_obj_set_width(ui_forceHome, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_forceHome, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_forceHome, 10);
+    lv_obj_set_y(ui_forceHome, 30);
+
+    lv_obj_set_align(ui_forceHome, LV_ALIGN_LEFT_MID);
+
+    lv_obj_add_flag(ui_forceHome, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+    lv_obj_set_style_text_font(ui_forceHome, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    applyCheckboxStyles(ui_forceHome);
+
+    // ui_brightness_icon
+
+    ui_brightness_icon = lv_label_create(ui_Settings);
+
+    lv_obj_set_width(ui_brightness_icon, 24);
+    lv_obj_set_height(ui_brightness_icon, 24);
+
+    lv_obj_set_x(ui_brightness_icon, 10);
+    lv_obj_set_y(ui_brightness_icon, 65);
+
+    lv_obj_set_align(ui_brightness_icon, LV_ALIGN_LEFT_MID);
+
+    lv_label_set_text(ui_brightness_icon, LV_SYMBOL_IMAGE);
+    lv_obj_set_style_text_font(ui_brightness_icon, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    applyTextPrimaryStyle(ui_brightness_icon);
+
+    // ui_brightness_slider
+
+    ui_brightness_slider = lv_slider_create(ui_Settings);
+    lv_slider_set_range(ui_brightness_slider, 5, 255);
+    lv_slider_set_value(ui_brightness_slider, 180, LV_ANIM_OFF);
+
+    lv_obj_set_width(ui_brightness_slider, 255);
+    lv_obj_set_height(ui_brightness_slider, 18);
+
+    lv_obj_set_x(ui_brightness_slider, 55);
+    lv_obj_set_y(ui_brightness_slider, 65);
+
+    lv_obj_set_align(ui_brightness_slider, LV_ALIGN_LEFT_MID);
+
+    lv_obj_add_flag(ui_brightness_slider, LV_OBJ_FLAG_SCROLL_ON_FOCUS | LV_OBJ_FLAG_CLICK_FOCUSABLE);
+
+    lv_obj_add_style(ui_brightness_slider, &style_slider_track[0], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_brightness_slider, &style_slider_indicator[0], LV_PART_INDICATOR | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_brightness_slider, &style_slider_indicator[0], LV_PART_KNOB | LV_STATE_DEFAULT);
+
+    lv_obj_add_event_cb(ui_brightness_slider, ui_event_Brightness_sliderChange, LV_EVENT_ALL, NULL);
+
+    // Encoder focus group for settings screen
+    if (ui_g_settings) {
+        lv_group_del(ui_g_settings);
+    }
+    ui_g_settings = lv_group_create();
+    lv_group_add_obj(ui_g_settings, ui_ejectaddon);
+    lv_group_add_obj(ui_g_settings, ui_vibrate);
+    lv_group_add_obj(ui_g_settings, ui_lefty);
+    lv_group_add_obj(ui_g_settings, ui_strokeinvert);
+    lv_group_add_obj(ui_g_settings, ui_forceHome);
 
 }
 

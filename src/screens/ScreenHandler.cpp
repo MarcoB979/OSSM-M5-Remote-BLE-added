@@ -41,6 +41,7 @@ long cum_t_enc    = 0;
 long cum_si_enc   = 0;
 long cum_s_enc    = 0;
 long cum_a_enc    = 0;
+long encoder3_enc = 0;
 long encoder4_enc = 0;
 
 int  pattern = 2;
@@ -50,6 +51,8 @@ bool dynamicStroke  = false;
 bool eject_status   = false;
 bool vibrate_mode   = true;
 bool touch_home     = false;
+bool strokeinvert_mode = false;
+bool ble_force_homeing = false;
 bool touch_disabled = false;
 bool onoff          = false;
 bool rstate         = false;
@@ -74,7 +77,15 @@ void screenInit() {
     eject_status = prefs.getBool("ejectAddon", false);
     vibrate_mode = prefs.getBool("Vibrate",    true);
     touch_home   = prefs.getBool("Lefty",      false);
+    strokeinvert_mode = prefs.getBool("StrokeInvert", false);
+    ble_force_homeing = prefs.getBool("BleForceHomeing", false);
+    int brightness = prefs.getInt("Brightness", 180);
+    if (brightness < 5) brightness = 5;
+    if (brightness > 255) brightness = 255;
     prefs.end();
+
+    M5.Display.setBrightness(brightness);
+    M5.Lcd.setBrightness(brightness);
 
     if (eject_status) {
         lv_obj_add_state(ui_ejectaddon,    LV_STATE_CHECKED);
@@ -82,12 +93,34 @@ void screenInit() {
     }
     if (vibrate_mode) { lv_obj_add_state(ui_vibrate,  LV_STATE_CHECKED); }
     if (touch_home)   { lv_obj_add_state(ui_lefty,    LV_STATE_CHECKED); }
+    if (strokeinvert_mode && ui_strokeinvert) { lv_obj_add_state(ui_strokeinvert, LV_STATE_CHECKED); }
+    if (ble_force_homeing && ui_forceHome)    { lv_obj_add_state(ui_forceHome, LV_STATE_CHECKED); }
+    if (ui_brightness_slider) {
+        lv_slider_set_value(ui_brightness_slider, brightness, LV_ANIM_OFF);
+    }
 
     lv_roller_set_selected(ui_PatternS, 2, LV_ANIM_OFF);
     lv_roller_get_selected_str(ui_PatternS, patternstr, 0);
     lv_label_set_text(ui_HomePatternLabel, patternstr);
 
     colors_init();
+}
+
+void brightness_slider_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED || !ui_brightness_slider) return;
+
+    int val = lv_slider_get_value(ui_brightness_slider);
+    if (val < 5) val = 5;
+    if (val > 255) val = 255;
+
+    M5.Display.setBrightness(val);
+    M5.Lcd.setBrightness(val);
+
+    Preferences pref;
+    pref.begin("m5-ctnr", false);
+    pref.putInt("Brightness", val);
+    pref.end();
 }
 
 // -------------------------------------------------------
@@ -148,10 +181,35 @@ void savesettings(lv_event_t * e) {
         prefs.putBool("Lefty", false);
     }
 
+    if (ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("StrokeInvert", true);
+        strokeinvert_mode = true;
+    } else {
+        prefs.putBool("StrokeInvert", false);
+        strokeinvert_mode = false;
+    }
+
+    if (ui_forceHome && lv_obj_has_state(ui_forceHome, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("BleForceHomeing", true);
+        ble_force_homeing = true;
+    } else {
+        prefs.putBool("BleForceHomeing", false);
+        ble_force_homeing = false;
+    }
+
     if (lv_obj_has_state(ui_ejectaddon, LV_STATE_CHECKED) == 1) {
         prefs.putBool("ejectAddon", true);
     } else {
         prefs.putBool("ejectAddon", false);
+    }
+
+    if (ui_brightness_slider) {
+        int brightness = lv_slider_get_value(ui_brightness_slider);
+        if (brightness < 5) brightness = 5;
+        if (brightness > 255) brightness = 255;
+        prefs.putInt("Brightness", brightness);
+        M5.Display.setBrightness(brightness);
+        M5.Lcd.setBrightness(brightness);
     }
 
     prefs.end();
@@ -327,11 +385,12 @@ void handleScreens() {
             changed = false;
             lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
             lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
+            bool invertStroke = ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED);
             if (encoder3.getCount() >= 2) {
-                changed = true; stroke -= rampValue;
+                changed = true; stroke += invertStroke ? rampValue : -rampValue;
                 encoder3.setCount(0); rampMs = millis(); encId = 3;
             } else if (encoder3.getCount() <= -2) {
-                changed = true; stroke += rampValue;
+                changed = true; stroke += invertStroke ? -rampValue : rampValue;
                 encoder3.setCount(0); rampMs = millis(); encId = 3;
             }
             if (stroke < 0)            { changed = true; stroke = 0; }
@@ -645,6 +704,32 @@ void handleScreens() {
     case ST_UI_SETTINGS:
     {
         touch_disabled = false;
+        if (encoder3.getCount() > encoder3_enc + 2) {
+            if (ui_brightness_slider) {
+                int val = lv_slider_get_value(ui_brightness_slider);
+                int mx = lv_slider_get_max_value(ui_brightness_slider);
+                if (val < mx) {
+                    int newVal = (val + 5 <= mx) ? val + 5 : mx;
+                    lv_slider_set_value(ui_brightness_slider, newVal, LV_ANIM_OFF);
+                    M5.Display.setBrightness(newVal);
+                    M5.Lcd.setBrightness(newVal);
+                }
+            }
+            encoder3_enc = encoder3.getCount();
+        } else if (encoder3.getCount() < encoder3_enc - 2) {
+            if (ui_brightness_slider) {
+                int val = lv_slider_get_value(ui_brightness_slider);
+                int mn = lv_slider_get_min_value(ui_brightness_slider);
+                if (val > mn) {
+                    int newVal = (val - 5 >= mn) ? val - 5 : mn;
+                    lv_slider_set_value(ui_brightness_slider, newVal, LV_ANIM_OFF);
+                    M5.Display.setBrightness(newVal);
+                    M5.Lcd.setBrightness(newVal);
+                }
+            }
+            encoder3_enc = encoder3.getCount();
+        }
+
         if (encoder4.getCount() > encoder4_enc + 2) {
             LogDebug("next");
             lv_group_focus_next(ui_g_settings);
@@ -659,7 +744,21 @@ void handleScreens() {
         } else if (mxclick_short_waspressed) {
             lv_obj_send_event(ui_SettingsButtonM, LV_EVENT_CLICKED, NULL);
         } else if (click3_short_waspressed) {
-            lv_obj_send_event(ui_SettingsButtonR, LV_EVENT_CLICKED, NULL);
+            lv_obj_t *focused = lv_group_get_focused(ui_g_settings);
+            if (focused) {
+                bool isToggle = (focused == ui_ejectaddon || focused == ui_vibrate || focused == ui_lefty ||
+                                 focused == ui_strokeinvert || focused == ui_forceHome);
+                if (isToggle) {
+                    if (lv_obj_has_state(focused, LV_STATE_CHECKED)) {
+                        lv_obj_clear_state(focused, LV_STATE_CHECKED);
+                    } else {
+                        lv_obj_add_state(focused, LV_STATE_CHECKED);
+                    }
+                    lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
+                } else {
+                    lv_obj_send_event(focused, LV_EVENT_SHORT_CLICKED, NULL);
+                }
+            }
         }
     }
     break;

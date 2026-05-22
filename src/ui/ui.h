@@ -164,10 +164,13 @@ extern lv_obj_t * ui_SettingsButtonM;
 extern lv_obj_t * ui_SettingsButtonMText;
 extern lv_obj_t * ui_SettingsButtonR;
 extern lv_obj_t * ui_SettingsButtonRText;
+extern lv_obj_t * ui_brightness_icon;
 extern lv_obj_t * ui_Batt1;
 extern lv_obj_t * ui_BattValue1;
 extern lv_obj_t * ui_Battery1;
 extern lv_obj_t * ui_ejectaddon;
+extern lv_obj_t * ui_strokeinvert;
+extern lv_obj_t * ui_forceHome;
 extern lv_obj_t * ui_vibrate;
 extern lv_obj_t * ui_lefty;
 extern lv_group_t * ui_g_settings;
@@ -180,6 +183,7 @@ void setupDepthInter(lv_event_t * e);
 void setupdepthF(lv_event_t * e);
 void savepattern(lv_event_t * e);
 void savesettings(lv_event_t * e);
+void brightness_slider_event_cb(lv_event_t * e);
 
 // ---- New screen inits (called from ui_init) ----
 void ui_Stroke_screen_init(void);

@@ -45,7 +45,12 @@ static SemaphoreHandle_t g_bleMutex = nullptr;
 static TaskHandle_t g_pollTask = nullptr;
 static TaskHandle_t g_txTask = nullptr;
 static SemaphoreHandle_t g_txSem = nullptr;
-static std::queue<String> g_txQueue;
+struct TxQueueItem {
+  String cmd;
+  bool requireConfirm;
+  bool isRealtime;
+};
+static std::queue<TxQueueItem> g_txQueue;
 static float g_lastRunSpeed = 0.0f;
 static MachineMode g_machineMode = MachineMode::Unknown;
 static String g_machineStateName;
@@ -254,6 +259,18 @@ static bool ensureStrokeEngineReady() {
   }
   if (!hasFreshState()) return false;
 
+  // Optional safety behavior from settings: force a menu transition (homing path)
+  // before entering stroke engine.
+  if (ble_force_homeing && g_machineMode != MachineMode::Menu && g_machineMode != MachineMode::Homing) {
+    bleSendCommandWithResponse("go:menu");
+    uint32_t menuStart = millis();
+    while ((millis() - menuStart) < 2000) {
+      bleReadStateOnce();
+      if (hasFreshState() && (g_machineMode == MachineMode::Menu || g_machineMode == MachineMode::Homing)) break;
+      vTaskDelay(pdMS_TO_TICKS(60));
+    }
+  }
+
   // If currently homing, wait a bit for completion before forcing a mode change.
   if (g_machineMode == MachineMode::Homing) {
     if (waitForStrokeEngineReady(6000)) return true;
@@ -281,7 +298,7 @@ static bool isRealtimeSetCommand(const String& cmd, String* outType = nullptr) {
   return true;
 }
 
-static bool queueCommand(const String& cmd) {
+static bool queueCommand(const String& cmd, bool requireConfirm = true) {
   if (cmd.length() == 0) return false;
   if (!g_bleMutex) return false;
 
@@ -290,19 +307,23 @@ static bool queueCommand(const String& cmd) {
 
   xSemaphoreTake(g_bleMutex, portMAX_DELAY);
   if (dedupeType) {
-    std::queue<String> temp;
+    std::queue<TxQueueItem> temp;
     while (!g_txQueue.empty()) {
-      String existing = g_txQueue.front();
+      TxQueueItem existing = g_txQueue.front();
       g_txQueue.pop();
       String existingType;
-      if (isRealtimeSetCommand(existing, &existingType) && existingType == type) {
+      if (isRealtimeSetCommand(existing.cmd, &existingType) && existingType == type) {
         continue;
       }
       temp.push(existing);
     }
     g_txQueue = temp;
   }
-  g_txQueue.push(cmd);
+  TxQueueItem item;
+  item.cmd = cmd;
+  item.requireConfirm = requireConfirm;
+  item.isRealtime = dedupeType;
+  g_txQueue.push(item);
   xSemaphoreGive(g_bleMutex);
 
   if (g_txSem) xSemaphoreGive(g_txSem);
@@ -375,16 +396,17 @@ static void blePollTask(void*) {
 }
 
 static void bleTxTask(void*) {
+  uint32_t lastRealtimeTxMs = 0;
   for (;;) {
     if (!g_txSem || xSemaphoreTake(g_txSem, portMAX_DELAY) != pdTRUE) continue;
 
     for (;;) {
-      String cmd;
+      TxQueueItem item;
       bool hasWork = false;
 
       if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
       if (!g_txQueue.empty()) {
-        cmd = g_txQueue.front();
+        item = g_txQueue.front();
         g_txQueue.pop();
         hasWork = true;
       }
@@ -395,18 +417,29 @@ static void bleTxTask(void*) {
       if (!bleCommTryConnect()) {
         // Push command back for retry on next wake-up.
         if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
-        g_txQueue.push(cmd);
+        g_txQueue.push(item);
         if (g_bleMutex) xSemaphoreGive(g_bleMutex);
         vTaskDelay(pdMS_TO_TICKS(120));
         break;
       }
 
+      if (item.isRealtime) {
+        uint32_t nowMs = millis();
+        uint32_t elapsedMs = nowMs - lastRealtimeTxMs;
+        if (elapsedMs < 30) {
+          vTaskDelay(pdMS_TO_TICKS(30 - elapsedMs));
+        }
+        lastRealtimeTxMs = millis();
+      }
+
       uint32_t previousStateUpdateMs = g_lastStateUpdateMs;
-      bleWriteCommand(cmd);
-      String response;
-      bleReadCommandResponse(&response);
-      if (response.length() == 0 || !response.startsWith("{")) {
-        waitForConfirmedStateUpdate(700, previousStateUpdateMs);
+      bleWriteCommand(item.cmd);
+      if (item.requireConfirm) {
+        String response;
+        bleReadCommandResponse(&response);
+        if (response.length() == 0 || !response.startsWith("{")) {
+          waitForConfirmedStateUpdate(700, previousStateUpdateMs);
+        }
       }
       vTaskDelay(pdMS_TO_TICKS(8));
     }
@@ -547,15 +580,17 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
        appCommand == OFF);
 
   if (isMotionControl) {
-    // Motion control is only allowed with fresh state knowledge and strokeEngine readiness.
-    if (!ensureStrokeEngineReady()) return false;
+    // Keep fast path cheap: only run full readiness check when mode/state are not already known-good.
+    if (!(hasFreshState() && g_machineMode == MachineMode::StrokeEngine)) {
+      if (!ensureStrokeEngineReady()) return false;
+    }
   }
 
   if (appCommand == SETUP_D_I) {
-    return queueCommand("go:simplePenetration");
+    return queueCommand("go:simplePenetration", true);
   }
   if (appCommand == SETUP_D_I_F) {
-    return queueCommand("go:strokeEngine");
+    return queueCommand("go:strokeEngine", true);
   }
   if (appCommand == CONN) {
     return bleCommTryConnect();
@@ -584,14 +619,14 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
       if (currentSpeed > 0.001f) {
         bleStoreUnpauseSpeed(currentSpeed);
       }
-      queueCommand("set:speed:0");
+      queueCommand("set:speed:0", true);
     }
 
     if (requestedStroke > 0.001f && prevStroke <= 0.001f) {
       float resume = bleGetUnpauseSpeed();
       if (resume > 0.001f) {
-        bool ok1 = queueCommand(String("set:stroke:") + String(clampPercent(requestedStroke)));
-        bool ok2 = queueCommand(String("set:speed:") + String(clampPercent(resume)));
+        bool ok1 = queueCommand(String("set:stroke:") + String(clampPercent(requestedStroke)), true);
+        bool ok2 = queueCommand(String("set:speed:") + String(clampPercent(resume)), true);
         g_lastRequestedStroke = requestedStroke;
         return ok1 && ok2;
       }
@@ -634,5 +669,7 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
       return false;
   }
 
-  return queueCommand(cmd);
+  const bool isRealtime = (appCommand == SPEED || appCommand == DEPTH || appCommand == STROKE ||
+                           appCommand == SENSATION || appCommand == PATTERN);
+  return queueCommand(cmd, !isRealtime);
 }

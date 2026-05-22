@@ -25,6 +25,8 @@ extern bool  dynamicStroke;
 extern bool  eject_status;
 extern bool  vibrate_mode;
 extern bool  touch_home;
+extern bool  strokeinvert_mode;
+extern bool  ble_force_homeing;
 extern bool  touch_disabled;
 extern bool  EJECT_On;
 

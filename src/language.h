@@ -39,6 +39,8 @@
 #define T_HIGH              "High"
 #define T_VIBRATE           "Vibrate"
 #define T_TOUCHSETTING      "Touch Disabled"
+#define T_STROKEINVERT      "Stroke inverted"
+#define T_HOME_FORCE        "BLE Force Homing"
 
 // New screens / UI-MENU
 #define T_HOMESCREEN        "Home screen"
