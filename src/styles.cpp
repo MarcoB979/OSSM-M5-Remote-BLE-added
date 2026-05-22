@@ -22,6 +22,7 @@ lv_style_t style_slider_indicator[4];
 lv_style_t style_battery_main;
 lv_style_t style_battery_indicator;
 lv_style_t style_roller;
+lv_style_t style_roller_main;
 lv_style_t style_background;
 lv_style_t style_text_primary;
 lv_style_t style_text_secondary;
@@ -31,6 +32,7 @@ lv_style_t style_button_r_focused;
 lv_style_t style_button_l_disabled;
 lv_style_t style_button_m_disabled;
 lv_style_t style_button_r_disabled;
+lv_style_t style_checkbox_indicator;
 lv_style_t style_option_bg;
 
 static lv_color_t mix_with_white(uint32_t hex, uint8_t mix_amount) {
@@ -66,9 +68,11 @@ void styles_init(void) {
     lv_style_init(&style_battery_main);
     lv_style_init(&style_battery_indicator);
     lv_style_init(&style_roller);
+    lv_style_init(&style_roller_main);
     lv_style_init(&style_background);
     lv_style_init(&style_text_primary);
     lv_style_init(&style_text_secondary);
+    lv_style_init(&style_checkbox_indicator);
 
     // Populate styles with the active scheme
     styles_apply_scheme(g_active_color_scheme);
@@ -166,6 +170,9 @@ void styles_apply_scheme(int index) {
     lv_style_set_bg_color(&style_roller, lv_color_hex(COLOR_SCHEMES[index].roller));
     lv_style_set_bg_opa(&style_roller, 255);
 
+    lv_style_set_bg_color(&style_roller_main, mix_with_white(COLOR_SCHEMES[index].roller, 160));
+    lv_style_set_bg_opa(&style_roller_main, 255);
+
     // Background
     lv_style_set_bg_color(&style_background, lv_color_hex(COLOR_SCHEMES[index].background));
     lv_style_set_bg_opa(&style_background, 255);
@@ -183,6 +190,9 @@ void styles_apply_scheme(int index) {
 
     lv_style_set_text_color(&style_text_secondary, primary_text);
     lv_style_set_text_opa(&style_text_secondary, 255);
+
+    lv_style_set_border_color(&style_checkbox_indicator, lv_color_hex(COLOR_SCHEMES[index].battery_indicator));
+    lv_style_set_border_opa(&style_checkbox_indicator, 255);
 
     // Option background: follows the scheme background for dark/light consistency
     lv_style_set_bg_color(&style_option_bg, lv_color_hex(COLOR_SCHEMES[index].background));

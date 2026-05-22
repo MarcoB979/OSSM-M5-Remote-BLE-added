@@ -36,6 +36,7 @@ extern lv_style_t style_slider_indicator[4];
 extern lv_style_t style_battery_main;
 extern lv_style_t style_battery_indicator;
 extern lv_style_t style_roller;
+extern lv_style_t style_roller_main;
 extern lv_style_t style_background;
 extern lv_style_t style_text_primary;
 extern lv_style_t style_text_secondary;
@@ -45,6 +46,7 @@ extern lv_style_t style_button_r_focused;
 extern lv_style_t style_button_l_disabled;
 extern lv_style_t style_button_m_disabled;
 extern lv_style_t style_button_r_disabled;
+extern lv_style_t style_checkbox_indicator;
 extern lv_style_t style_option_bg;
 
 #ifdef __cplusplus
