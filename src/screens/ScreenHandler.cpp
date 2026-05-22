@@ -11,8 +11,13 @@
 #include "../PatternMath.h"
 #include "../buttonhandlers/ButtonHandlers.h"
 #include "../communication/EspNowComm.h"
+#include "../communication/CommManager.h"
+#include "../communication/BleComm.h"
 #include "../colors.h"
+#include "../styles.h"
 #include "../strokeMode.h"
+#include "../addonsStreaming.h"
+#include "../icons.h"
 
 // -------------------------------------------------------
 // Screen and control state
@@ -66,6 +71,235 @@ static int           rampTime   = 75;
 static int           maxRamp    = 8;
 static int           encId      = 0;
 static int           activeEncId = 0;
+
+static constexpr int EJECT_ICON_W = 20;
+static constexpr int EJECT_ICON_H = 21;
+static constexpr int FIST_ICON_W = 18;
+static constexpr int FIST_ICON_H = 23;
+
+static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
+  "....................",
+  "...#.....###.....#..",
+  "..###..#####....###.",
+  ".####..######..####.",
+  "..###...####...###..",
+  "....#.....#.....#...",
+  "....................",
+  "........#####.......",
+  "......##..#..##.....",
+  ".....##.......##....",
+  ".....##.......##....",
+  "......###...###.....",
+  "......##.....#.#....",
+  "......##.....#.#....",
+  "......##.....#.#....",
+  "......##.....#.#....",
+  "......##.....#.#....",
+  "......##.....#.#....",
+  "......##########....",
+  "........#####.......",
+  "....................",
+};
+
+static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
+  "..........#####...",
+  ".....##.##.##..#..",
+  "..##...#...#...##.",
+  "##..#...#...#..##.",
+  "##...##..##..##.##",
+  ".##.............##",
+  ".##............##.",
+  ".###.##........##.",
+  "..#######......##.",
+  ".###....##.....##.",
+  "##.##....##...##..",
+  "##..##....##..##..",
+  "##...##....##.##..",
+  "##....##....#.##..",
+  "##.....##.....##..",
+  "##......##....##..",
+  "##.......##..###..",
+  "##........######..",
+  ".##.........###...",
+  "..##........##....",
+  "...##.......##....",
+  "....#########.....",
+  "..................",
+};
+
+static lv_obj_t* createStatusIconBase(lv_obj_t* parent, int width, int height) {
+    if (!parent) return nullptr;
+    lv_obj_t* icon = lv_canvas_create(parent);
+    lv_obj_remove_style_all(icon);
+    lv_obj_set_size(icon, width, height);
+    lv_obj_clear_flag(icon, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_bg_opa(icon, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_border_opa(icon, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+    return icon;
+}
+
+static lv_obj_t* createStatusEjectIcon(lv_obj_t* parent) {
+    static uint8_t iconBuffer[LV_CANVAS_BUF_SIZE(32, 32, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+    static bool iconReady = false;
+    lv_obj_t* icon = createStatusIconBase(parent, EJECT_ICON_W, EJECT_ICON_H);
+    if (!icon) return nullptr;
+    icons_render_mask_canvas(icon, iconBuffer, iconReady, EJECT_ICON_MASK, EJECT_ICON_W, EJECT_ICON_H,
+                             getActiveBackgroundColor(), getActiveTextPrimaryColor());
+    return icon;
+}
+
+static lv_obj_t* createStatusFistIcon(lv_obj_t* parent) {
+    static uint8_t iconBuffer[LV_CANVAS_BUF_SIZE(32, 32, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+    static bool iconReady = false;
+    lv_obj_t* icon = createStatusIconBase(parent, FIST_ICON_W, FIST_ICON_H);
+    if (!icon) return nullptr;
+    icons_render_mask_canvas(icon, iconBuffer, iconReady, FIST_ICON_MASK, FIST_ICON_W, FIST_ICON_H,
+                             getActiveBackgroundColor(), getActiveTextPrimaryColor());
+    return icon;
+}
+
+static void updateStatusStrip() {
+    static lv_obj_t* statusLabels[12] = { nullptr };
+    static lv_obj_t* statusEjectIcons[12] = { nullptr };
+    static lv_obj_t* statusFistIcons[12] = { nullptr };
+    lv_obj_t* statusScreens[12] = {
+        ui_Start,
+        ui_Home,
+        ui_Pattern,
+        ui_EJECTSettings,
+        ui_Settings,
+        ui_Menu,
+        ui_Streaming,
+        ui_Addons,
+        ui_Colors,
+        ui_FistIT,
+        ui_Stroke,
+        nullptr,
+    };
+
+    for (size_t i = 0; i < 12; ++i) {
+        if (statusLabels[i] != nullptr) continue;
+        if (statusScreens[i] == nullptr) continue;
+
+        if (statusScreens[i] == ui_Home && ui_connect != nullptr) {
+            statusLabels[i] = ui_connect;
+        } else {
+            statusLabels[i] = lv_label_create(statusScreens[i]);
+        }
+
+        lv_obj_set_width(statusLabels[i], LV_SIZE_CONTENT);
+        lv_obj_set_height(statusLabels[i], LV_SIZE_CONTENT);
+        lv_obj_set_align(statusLabels[i], LV_ALIGN_LEFT_MID);
+        lv_obj_set_x(statusLabels[i], 10);
+        lv_obj_set_y(statusLabels[i], -102);
+        lv_obj_add_style(statusLabels[i], &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(statusLabels[i], &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(statusLabels[i], LV_OBJ_FLAG_HIDDEN);
+
+        if (statusEjectIcons[i] == nullptr) {
+            statusEjectIcons[i] = createStatusEjectIcon(statusScreens[i]);
+        }
+        if (statusFistIcons[i] == nullptr) {
+            statusFistIcons[i] = createStatusFistIcon(statusScreens[i]);
+        }
+    }
+
+    char labelText[48];
+    size_t pos = 0;
+    labelText[0] = '\0';
+
+    auto appendToken = [&](const char* token) {
+        if (token == nullptr || token[0] == '\0' || pos >= sizeof(labelText) - 1) return;
+        if (pos > 0 && pos < sizeof(labelText) - 1) {
+            labelText[pos++] = ' ';
+            labelText[pos] = '\0';
+        }
+        int written = snprintf(labelText + pos, sizeof(labelText) - pos, "%s", token);
+        if (written > 0) {
+            pos += (size_t)written;
+            if (pos >= sizeof(labelText)) pos = sizeof(labelText) - 1;
+        }
+    };
+
+    if (bleCommIsConnected()) appendToken(LV_SYMBOL_BLUETOOTH);
+    if (espNowIsPaired()) appendToken(LV_SYMBOL_WIFI);
+    if (bleCommIsHoming()) {
+        int dir = bleCommGetHomingDirection();
+        if (dir > 0) appendToken(LV_SYMBOL_UP);
+        else if (dir < 0) appendToken(LV_SYMBOL_DOWN);
+    }
+    if (labelText[0] == '\0') {
+        snprintf(labelText, sizeof(labelText), " ");
+    }
+
+    const bool ejectPaired = espNowIsEjectConnected();
+    const bool fistPaired = espNowIsFistConnected();
+
+    for (size_t i = 0; i < 12; ++i) {
+        lv_obj_t* label = statusLabels[i];
+        if (label == nullptr) continue;
+
+        lv_obj_add_style(label, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_font(label, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_label_set_text(label, labelText);
+        lv_obj_update_layout(label);
+
+        int iconX = 10 + lv_obj_get_width(label) + 4;
+
+        if (statusEjectIcons[i] != nullptr) {
+            lv_obj_set_align(statusEjectIcons[i], LV_ALIGN_LEFT_MID);
+            lv_obj_set_x(statusEjectIcons[i], iconX);
+            lv_obj_set_y(statusEjectIcons[i], -102);
+            if (ejectPaired) {
+                lv_obj_clear_flag(statusEjectIcons[i], LV_OBJ_FLAG_HIDDEN);
+                iconX += lv_obj_get_width(statusEjectIcons[i]) + 2;
+            } else {
+                lv_obj_add_flag(statusEjectIcons[i], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+
+        if (statusFistIcons[i] != nullptr) {
+            lv_obj_set_align(statusFistIcons[i], LV_ALIGN_LEFT_MID);
+            lv_obj_set_x(statusFistIcons[i], iconX);
+            lv_obj_set_y(statusFistIcons[i], -102);
+            if (fistPaired) {
+                lv_obj_clear_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+    }
+}
+
+static int rangeFromLimit(float limitValue) {
+    int limit = (int)(limitValue + 0.5f);
+    if (limit < 1) limit = 1;
+    return limit;
+}
+
+static void syncHomeSliderRangesToLimits() {
+    if (!ui_homespeedslider || !ui_homedepthslider || !ui_homestrokeslider) return;
+
+    const int speedMax = rangeFromLimit(speedlimit);
+    const int depthMax = rangeFromLimit(maxdepthinmm);
+
+    // Keep slider ranges aligned with current transport limits (BLE vs ESP-NOW).
+    if (lv_slider_get_max_value(ui_homespeedslider) != speedMax) {
+        lv_slider_set_range(ui_homespeedslider, 0, speedMax);
+    }
+    if (lv_slider_get_max_value(ui_homedepthslider) != depthMax) {
+        lv_slider_set_range(ui_homedepthslider, 0, depthMax);
+    }
+    if (lv_slider_get_max_value(ui_homestrokeslider) != depthMax) {
+        lv_slider_set_range(ui_homestrokeslider, 0, depthMax);
+    }
+
+    if (speed > speedMax) speed = (float)speedMax;
+    if (depth > depthMax) depth = (float)depthMax;
+    if (stroke > depthMax) stroke = (float)depthMax;
+    if (stroke > depth) stroke = depth;
+}
 
 // -------------------------------------------------------
 // screenInit() — load NVS settings and apply to UI
@@ -132,11 +366,10 @@ void screenmachine(lv_event_t * e) {
         st_screens = ST_UI_START;
     } else if (lv_scr_act() == ui_Home) {
         st_screens = ST_UI_HOME;
+        syncHomeSliderRangesToLimits();
         speed = lv_slider_get_value(ui_homespeedslider);
         LogDebug(speedenc);
         LogDebug(speed);
-        lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
-        lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
     } else if (lv_scr_act() == ui_Menu) {
         st_screens = ST_UI_MENU;
     } else if (lv_scr_act() == ui_Pattern) {
@@ -162,6 +395,9 @@ void screenmachine(lv_event_t * e) {
         st_screens = ST_UI_STREAMING;
     } else if (lv_scr_act() == ui_Addons) {
         st_screens = ST_UI_ADDONS;
+        addonsSyncSelectionVisual();
+    } else if (lv_scr_act() == ui_FistIT) {
+        st_screens = ST_UI_FISTIT;
     }
 }
 
@@ -264,6 +500,8 @@ void setupdepthF(lv_event_t * e) {
 // Called every loop iteration from main loop()
 // -------------------------------------------------------
 void handleScreens() {
+    updateStatusStrip();
+
     // ---- Battery display (all screens share the battery bars) ----
     const int    BatteryLevel = M5.Power.getBatteryLevel();
     String       BatteryValue = String(BatteryLevel, DEC) + "%";
@@ -316,6 +554,8 @@ void handleScreens() {
         if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
             touch_disabled = true;
         }
+
+        syncHomeSliderRangesToLimits();
 
         // Ramp helper
         nowMs = millis();
@@ -593,7 +833,10 @@ void handleScreens() {
     case ST_UI_ADDONS:
     {
         if (encoder4.getCount() > encoder4_enc + 2) {
-            lv_obj_send_event(ui_AddonsButtonM, LV_EVENT_SHORT_CLICKED, NULL);
+            addonsMoveSelection(1);
+            encoder4_enc = encoder4.getCount();
+        } else if (encoder4.getCount() < encoder4_enc - 2) {
+            addonsMoveSelection(-1);
             encoder4_enc = encoder4.getCount();
         }
         if (click2_short_waspressed) {
@@ -601,7 +844,7 @@ void handleScreens() {
         } else if (mxclick_short_waspressed) {
             lv_obj_send_event(ui_AddonsButtonM, LV_EVENT_SHORT_CLICKED, NULL);
         } else if (click3_short_waspressed) {
-            lv_obj_send_event(ui_AddonsButtonR, LV_EVENT_SHORT_CLICKED, NULL);
+            addonsActivateSelection();
         }
     }
     break;
@@ -689,6 +932,7 @@ void handleScreens() {
 
     case ST_UI_EJECTSETTINGS:
     {
+        addonsHandleEjectScreen();
         if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
             touch_disabled = true;
         }
@@ -696,8 +940,22 @@ void handleScreens() {
             lv_obj_send_event(ui_EJECTButtonL, LV_EVENT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {
             lv_obj_send_event(ui_EJECTButtonM, LV_EVENT_CLICKED, NULL);
+        } else if (click3_short_waspressed) {
+            lv_obj_send_event(ui_EJECTButtonR, LV_EVENT_CLICKED, NULL);
         }
-        // click3_short: intentionally empty
+    }
+    break;
+
+    case ST_UI_FISTIT:
+    {
+        addonsHandleFistScreen();
+        if (click2_short_waspressed) {
+            addonsFistToggle();
+        } else if (mxclick_short_waspressed) {
+            _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        } else if (click3_short_waspressed) {
+            _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        }
     }
     break;
 

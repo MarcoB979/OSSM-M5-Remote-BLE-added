@@ -18,3 +18,5 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
 // State-machine polling helpers
 void bleCommSetEnabled(bool enabled);
 bool bleCommIsEnabled();
+bool bleCommIsHoming();
+int bleCommGetHomingDirection();

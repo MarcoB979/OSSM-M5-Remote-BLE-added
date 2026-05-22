@@ -110,6 +110,7 @@ extern lv_obj_t * ui_AddonsItem1;
 extern lv_obj_t * ui_AddonsItem2;
 extern lv_obj_t * ui_LogoAddons;
 extern lv_group_t * ui_g_addons;
+extern lv_obj_t * ui_FistIT;
 extern lv_obj_t * ui_brightness_slider;
 extern lv_obj_t * ui_Pattern;
 extern lv_obj_t * ui_Logo5;
@@ -190,6 +191,11 @@ void ui_Stroke_screen_init(void);
 void colors_ui_screen_init(void);
 void ui_Streaming_screen_init(void);
 void ui_Addons_screen_init(void);
+void addonsMoveSelection(int delta);
+void addonsActivateSelection(void);
+void addonsSyncSelectionVisual(void);
+void addonsHandleEjectScreen(void);
+void addonsHandleFistScreen(void);
 void refreshStrokeStartStopUi(void);
 
 LV_IMG_DECLARE(image50x50);    // assets\logo.svg

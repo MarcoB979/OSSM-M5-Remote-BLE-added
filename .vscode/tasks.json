@@ -1,0 +1,329 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build core2 quick verify",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 after addon routing fix",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 mixed transport",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 status-ui",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 old-icons",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 old-icons retry",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build cores3 old-icons",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-cores3"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build cores3 old-icons quick",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-cores3"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 connect-gate-fix",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 heartbeat-pair-fix",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 addon-mac-unicast",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build cores3 addon-mac-unicast",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-cores3"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 addon-modular-refactor",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 crash-guard",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 peer-safety-fix",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build cores3 peer-safety-fix",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-cores3"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 rollback-stable-addon-path",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "Build core2 remove-callback-ui",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-core2"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "build core2 sender-dispatch",
+			"type": "shell",
+			"command": "platformio",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-core2"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build core2 sender-dispatch pass2",
+			"type": "shell",
+			"command": "platformio",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-core2"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build core2 sender-dispatch pass3",
+			"type": "shell",
+			"command": "platformio",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-core2"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build cores3 sender-dispatch pass3",
+			"type": "shell",
+			"command": "platformio",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-cores3"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build cores3 sender-dispatch confirm",
+			"type": "shell",
+			"command": "platformio",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-cores3"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build core2 ble-fix",
+			"type": "shell",
+			"command": "platformio",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-core2"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build cores3 ble-fix",
+			"type": "shell",
+			"command": "platformio",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-cores3"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build core2 heap-proof",
+			"type": "shell",
+			"command": "platformio",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-core2"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build cores3 heap-proof",
+			"type": "shell",
+			"command": "platformio",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-cores3"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
+		}
+	]
+}

@@ -1,6 +1,7 @@
 #include "BleComm.h"
 
 #include <NimBLEDevice.h>
+#include <esp_heap_caps.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 #include <freertos/task.h>
@@ -45,6 +46,9 @@ static SemaphoreHandle_t g_bleMutex = nullptr;
 static TaskHandle_t g_pollTask = nullptr;
 static TaskHandle_t g_txTask = nullptr;
 static SemaphoreHandle_t g_txSem = nullptr;
+static SemaphoreHandle_t g_connectMutex = nullptr;
+static uint32_t g_lastConnectAttemptMs = 0;
+static constexpr uint32_t BLE_CONNECT_COOLDOWN_MS = 1200;
 struct TxQueueItem {
   String cmd;
   bool requireConfirm;
@@ -79,6 +83,20 @@ enum ParamIdx { P_SPEED = 0, P_DEPTH = 1, P_STROKE = 2, P_SENSATION = 3, P_PATTE
 
 // Forward declaration (definition is below)
 static bool bleReadStateOnce();
+
+static void bleResetClient() {
+  g_cmd = nullptr;
+  g_speedKnob = nullptr;
+  g_state = nullptr;
+
+  if (!g_client) return;
+
+  if (g_client->isConnected()) {
+    g_client->disconnect();
+  }
+  NimBLEDevice::deleteClient(g_client);
+  g_client = nullptr;
+}
 
 static float extractValueAfterKey(const String& text, const String& key) {
   int keyPos = text.indexOf(key);
@@ -462,6 +480,9 @@ void bleCommInit() {
   if (!g_txSem) {
     g_txSem = xSemaphoreCreateBinary();
   }
+  if (!g_connectMutex) {
+    g_connectMutex = xSemaphoreCreateMutex();
+  }
   if (!g_pollTask) {
 #if CONFIG_FREERTOS_UNICORE
     xTaskCreatePinnedToCore(blePollTask, "blePollTask", 6144, nullptr, 2, &g_pollTask, 0);
@@ -482,14 +503,34 @@ bool bleCommTryConnect() {
   if (bleCommIsConnected()) return true;
   bleCommInit();
 
-  NimBLEScan* scanner = NimBLEDevice::getScan();
-  if (!scanner) return false;
+  if (!g_connectMutex) return false;
+  if (xSemaphoreTake(g_connectMutex, pdMS_TO_TICKS(250)) != pdTRUE) return false;
 
+  if (bleCommIsConnected()) {
+    xSemaphoreGive(g_connectMutex);
+    return true;
+  }
+
+  const uint32_t nowMs = millis();
+  if ((nowMs - g_lastConnectAttemptMs) < BLE_CONNECT_COOLDOWN_MS) {
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
+  g_lastConnectAttemptMs = nowMs;
+
+  NimBLEScan* scanner = NimBLEDevice::getScan();
+  if (!scanner) {
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
+
+  scanner->stop();
+  scanner->clearResults();
   scanner->setActiveScan(true);
   scanner->setInterval(160);
   scanner->setWindow(160);
 
-  NimBLEScanResults results = scanner->getResults(5000, false);
+  NimBLEScanResults results = scanner->getResults(2500, false);
   std::string targetAddress;
   NimBLEUUID serviceUuid(OSSM_BLE_SERVICE_UUID);
 
@@ -503,27 +544,34 @@ bool bleCommTryConnect() {
       break;
     }
   }
+
   scanner->clearResults();
-  if (targetAddress.empty()) return false;
+  if (targetAddress.empty()) {
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
 
   if (!g_client) {
     g_client = NimBLEDevice::createClient();
-    if (!g_client) return false;
+    if (!g_client) {
+      xSemaphoreGive(g_connectMutex);
+      return false;
+    }
     g_client->setConnectionParams(12, 12, 0, 150);
     g_client->setConnectTimeout(5000);
   }
 
   NimBLEAddress remoteAddress(targetAddress, 0);
   if (!g_client->connect(remoteAddress)) {
-    g_cmd = nullptr;
-    g_speedKnob = nullptr;
-    g_state = nullptr;
+    bleResetClient();
+    xSemaphoreGive(g_connectMutex);
     return false;
   }
 
   NimBLERemoteService* service = g_client->getService(NimBLEUUID(OSSM_BLE_SERVICE_UUID));
   if (!service) {
-    g_client->disconnect();
+    bleResetClient();
+    xSemaphoreGive(g_connectMutex);
     return false;
   }
 
@@ -532,10 +580,8 @@ bool bleCommTryConnect() {
   g_state = service->getCharacteristic(NimBLEUUID(OSSM_BLE_STATE_CHAR_UUID));
 
   if (!g_cmd || !g_cmd->canWrite()) {
-    g_client->disconnect();
-    g_cmd = nullptr;
-    g_speedKnob = nullptr;
-    g_state = nullptr;
+    bleResetClient();
+    xSemaphoreGive(g_connectMutex);
     return false;
   }
 
@@ -548,8 +594,9 @@ bool bleCommTryConnect() {
     g_state->subscribe(true, stateNotify);
   }
   g_lastStateUpdateMs = 0;
-  bleReadStateOnce();
-  return true;
+  const bool stateOk = bleReadStateOnce();
+  xSemaphoreGive(g_connectMutex);
+  return stateOk || bleCommIsConnected();
 }
 
 bool bleCommIsConnected() {
@@ -563,6 +610,20 @@ void bleCommSetEnabled(bool enabled) {
 bool bleCommIsEnabled() {
   return g_bleEnabled;
 }
+
+bool bleCommIsHoming() {
+  return hasFreshState() && g_machineMode == MachineMode::Homing;
+}
+
+int bleCommGetHomingDirection() {
+  if (!hasFreshState() || g_machineMode != MachineMode::Homing) return 0;
+  String s = g_machineStateName;
+  s.toLowerCase();
+  if (s.indexOf("forward") >= 0 || s.indexOf("up") >= 0) return 1;
+  if (s.indexOf("backward") >= 0 || s.indexOf("down") >= 0) return -1;
+  return 0;
+}
+
 
 bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
                            float currentDepth, float currentStroke,

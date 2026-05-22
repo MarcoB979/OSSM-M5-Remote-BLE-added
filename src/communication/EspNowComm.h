@@ -23,8 +23,15 @@
 #define CUMTIME      21
 #define CUMSIZE      22
 #define CUMACCEL     23
+#define FIST_SPEED   30
+#define FIST_ROTATION 31
+#define FIST_PAUSE   32
+#define FIST_ACCEL   33
 #define CONNECT      88
 #define HEARTBEAT    99
+
+#define CUM_ID       2
+#define FIST_ID      3
 
 #define HEARTBEAT_INTERVAL  (5000 / portTICK_PERIOD_MS)
 
@@ -41,6 +48,7 @@ typedef struct {
   int   esp_command;
   float esp_value;
   int   esp_target;
+  int   esp_sender;
 } struct_message;
 
 // ---- Variables (defined in main.cpp until Step 2 moves them to EspNowComm.cpp) ----
@@ -57,6 +65,8 @@ void espNowInit();
 bool espNowSendCommand(int Command, float Value, int Target);
 void espNowKickPairing();
 bool espNowIsPaired();
+bool espNowIsEjectConnected();
+bool espNowIsFistConnected();
 void espNowRemoteTask(void *pvParameters);
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);

@@ -30,6 +30,10 @@ static bool tryEspNowFastConnect() {
   return false;
 }
 
+static bool isAddonTarget(int target) {
+  return target == CUM || target == CUM_ID || target == FIST_ID;
+}
+
 }  // namespace
 
 void commInit() {
@@ -57,34 +61,61 @@ bool commIsEspNowMode() {
 
 void connectbutton(lv_event_t* e) {
   (void)e;
-
+LogDebug("Connect button clicked");
   if (commGetMode() == COMM_MODE_ESPNOW || commGetMode() == COMM_MODE_BLE) {
     return;
   }
-
+LogDebug("Attempting to connect...");
   if (ui_connect) lv_label_set_text(ui_connect, "Connecting...");
+  if (ui_Welcome) lv_label_set_text(ui_Welcome, "Connecting...");
 
   // Fast path: ESP-NOW first, because it is local and handshake is quick.
   if (tryEspNowFastConnect()) {
     setMode(COMM_MODE_ESPNOW);
     if (ui_connect) lv_label_set_text(ui_connect, "Connected (ESP-NOW)");
+    if (ui_Welcome) lv_label_set_text(ui_Welcome, "Connected");
     lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+    LogDebug("Connected via ESP-NOW");
     return;
   }
-
+LogDebug("ESP-NOW connect failed, trying BLE...");
   // Fallback: RADR-compatible BLE connection.
   if (bleCommTryConnect()) {
+    LogDebug("BLE device found, connecting...");
     setMode(COMM_MODE_BLE);
+    LogDebug("BLE connection established");
     if (ui_connect) lv_label_set_text(ui_connect, "Connected (BLE)");
+    if (ui_Welcome) lv_label_set_text(ui_Welcome, "Connected");
+    LogDebug("Loading ui_Menu...");
     lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+    LogDebug("Connected via BLE");
     return;
   }
-
+LogDebug("BLE connect failed");
   if (ui_connect) lv_label_set_text(ui_connect, "No OSSM found");
+  if (ui_Welcome) lv_label_set_text(ui_Welcome, "No OSSM found");
 }
 
 bool SendCommand(int Command, float Value, int Target) {
-  (void)Target;
+  // Addon traffic always uses ESP-NOW so BLE OSSM control can coexist with addon modules.
+  if (isAddonTarget(Target)) {
+    return espNowSendCommand(Command, Value, Target);
+  }
+
+  // OSSM traffic prefers BLE when available, with ESP-NOW as fallback.
+  if (bleCommIsConnected()) {
+    if (commGetMode() != COMM_MODE_BLE) {
+      setMode(COMM_MODE_BLE);
+    }
+    return bleCommSendAppCommand(Command, Value, speed, depth, stroke, maxdepthinmm, speedlimit);
+  }
+
+  if (espNowIsPaired()) {
+    if (commGetMode() != COMM_MODE_ESPNOW) {
+      setMode(COMM_MODE_ESPNOW);
+    }
+    return espNowSendCommand(Command, Value, Target);
+  }
 
   CommTransportMode mode = commGetMode();
   if (mode == COMM_MODE_NONE) {
@@ -100,7 +131,7 @@ bool SendCommand(int Command, float Value, int Target) {
   }
 
   if (mode == COMM_MODE_ESPNOW) {
-    return espNowSendCommand(Command, Value, OSSM_ID);
+    return espNowSendCommand(Command, Value, Target);
   }
 
   if (mode == COMM_MODE_BLE) {

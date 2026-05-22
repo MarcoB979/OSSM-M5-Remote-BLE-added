@@ -13,6 +13,7 @@
 #define ST_UI_COLORS        15
 #define ST_UI_STREAMING     16
 #define ST_UI_ADDONS        17
+#define ST_UI_FISTIT        18
 #define ST_UI_SETTINGS      20
 
 // ---- Shared screen state (defined in ScreenHandler.cpp) ----
@@ -29,6 +30,7 @@ extern bool  strokeinvert_mode;
 extern bool  ble_force_homeing;
 extern bool  touch_disabled;
 extern bool  EJECT_On;
+extern bool  rstate;
 
 // ---- Lifecycle ----
 void screenInit();     // Load NVS settings and apply to UI; call after ui_init() + buttonInit()
