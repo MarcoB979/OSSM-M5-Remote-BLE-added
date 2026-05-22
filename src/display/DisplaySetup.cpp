@@ -3,6 +3,7 @@
 #include <lvgl.h>
 #include <esp_timer.h>
 #include "../debug.h"
+#include "../styles.h"
 
 extern bool touch_disabled;  // defined in screens/ScreenHandler.cpp
 
@@ -49,6 +50,7 @@ void displayInit() {
   LogDebug("\n display initialized");
 
   lv_init();
+  styles_init();
   lv_tick_set_cb(my_tick_function);
   LogDebug("\n lvgl initialized");
 

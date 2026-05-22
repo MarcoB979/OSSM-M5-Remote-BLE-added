@@ -4,10 +4,15 @@
 // ---- Screen states ----
 #define ST_UI_START         0
 #define ST_UI_HOME          1
-#define ST_UI_MENUE         10
+#define ST_UI_MENU          10
+#define ST_UI_MENUE         ST_UI_MENU   // legacy alias
 #define ST_UI_PATTERN       11
 #define ST_UI_Torqe         12
 #define ST_UI_EJECTSETTINGS 13
+#define ST_UI_STROKE        14
+#define ST_UI_COLORS        15
+#define ST_UI_STREAMING     16
+#define ST_UI_ADDONS        17
 #define ST_UI_SETTINGS      20
 
 // ---- Shared screen state (defined in ScreenHandler.cpp) ----

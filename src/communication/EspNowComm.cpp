@@ -77,7 +77,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
 }
 
 // Sends command and value to remote device; returns true if sent successfully
-bool SendCommand(int Command, float Value, int Target){
+bool espNowSendCommand(int Command, float Value, int Target){
   if(Ossm_paired == true){
     outgoingcontrol.esp_connected = true;
     outgoingcontrol.esp_command = Command;
@@ -95,14 +95,17 @@ bool SendCommand(int Command, float Value, int Target){
   return false;
 }
 
-void connectbutton(lv_event_t * e)
-{
+void espNowKickPairing() {
   if(!Ossm_paired){
     outgoingcontrol.esp_command = HEARTBEAT;
     outgoingcontrol.esp_heartbeat = true;
     outgoingcontrol.esp_target = OSSM_ID;
     esp_now_send(OSSM_Address, (uint8_t *) &outgoingcontrol, sizeof(outgoingcontrol));
   }
+}
+
+bool espNowIsPaired() {
+  return Ossm_paired;
 }
 
 void espNowRemoteTask(void *pvParameters)

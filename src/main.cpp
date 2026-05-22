@@ -12,6 +12,7 @@
 #include "ui/ui.h"
 #include "buttonhandlers/ButtonHandlers.h"
 #include "communication/EspNowComm.h"
+#include "communication/CommManager.h"
 #include "screens/ScreenHandler.h"
 #include "display/DisplaySetup.h"
 
@@ -36,6 +37,7 @@ void setup(){
   LogDebug("\n Starting");      // Start LogDebug
 
   espNowInit();
+  commInit();
   displayInit();  // display, LVGL, touchpad
   ui_init();
   LogDebug("\n ui initialized");

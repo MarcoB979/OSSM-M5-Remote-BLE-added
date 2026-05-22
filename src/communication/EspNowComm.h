@@ -54,7 +54,12 @@ extern TaskHandle_t       eRemote_t;
 
 // ---- Function declarations ----
 void espNowInit();
-bool SendCommand(int Command, float Value, int Target);
+bool espNowSendCommand(int Command, float Value, int Target);
+void espNowKickPairing();
+bool espNowIsPaired();
 void espNowRemoteTask(void *pvParameters);
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status);
 void OnDataRecv(const uint8_t *mac, const uint8_t *incomingData, int len);
+
+// Implemented by communication/CommManager.cpp (transport dispatcher)
+bool SendCommand(int Command, float Value, int Target);
