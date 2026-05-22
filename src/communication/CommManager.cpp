@@ -68,6 +68,7 @@ void connectbutton(lv_event_t* e) {
   if (tryEspNowFastConnect()) {
     setMode(COMM_MODE_ESPNOW);
     if (ui_connect) lv_label_set_text(ui_connect, "Connected (ESP-NOW)");
+    lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
     return;
   }
 
@@ -75,7 +76,7 @@ void connectbutton(lv_event_t* e) {
   if (bleCommTryConnect()) {
     setMode(COMM_MODE_BLE);
     if (ui_connect) lv_label_set_text(ui_connect, "Connected (BLE)");
-    lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+    lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
     return;
   }
 

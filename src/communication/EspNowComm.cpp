@@ -62,7 +62,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len) {
     if (result == ESP_OK) {
       Ossm_paired = true;
       lv_label_set_text(ui_connect, "Connected");
-      lv_scr_load_anim(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+      lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
     }
   }
   switch(incomingcontrol.esp_command)
