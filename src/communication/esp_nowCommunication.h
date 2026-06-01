@@ -1,10 +1,10 @@
 #pragma once
 
-#include "config_ids.h"
+#include "config/config_ids.h"
 
 // Old firmware addon modules used this channel constant.
 #ifndef ESP_NOW_CHANNEL
-#define ESP_NOW_CHANNEL 0
+#define ESP_NOW_CHANNEL 1
 #endif
 
 #ifndef CONN
@@ -76,3 +76,4 @@
 #ifndef HEARTBEAT
 #define HEARTBEAT    99
 #endif
+

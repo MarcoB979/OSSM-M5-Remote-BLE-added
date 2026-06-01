@@ -2,19 +2,20 @@
 
 #include <Arduino.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <cstring>
 
 #include "main.h"
 #include "language.h"
-#include "colors.h"
+#include "display/colors.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
-#include "colors.h"
-#include "styles.h"
-#include "esp_nowCommunication.h"
+#include "display/colors.h"
+#include "display/styles.h"
+#include "communication/esp_nowCommunication.h"
 #include "buttonhandlers/ButtonHandlers.h"
 #include "screens/ScreenHandler.h"
-#include "debug.h"
+#include "config/debug.h"
 // Single-definition of FIST_ID (C linkage so C code can reference it)
 extern "C" const int FIST_ID = 3;
 
@@ -86,13 +87,37 @@ static constexpr int LEGACY_M5_ID = M5_ID;
 static uint32_t s_last_pairing_heartbeat_ms = 0;
 static int s_peer_id = FIST_ID;
 static int s_local_id = M5_ID;
+static bool s_flush_buttons_once = false;
+
+static void lockEspNowChannelIfConfigured(const char *reason)
+{
+  if (ESP_NOW_CHANNEL <= 0) {
+    return;
+  }
+
+  uint8_t current = 0;
+  wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
+  if (esp_wifi_get_channel(&current, &second) != ESP_OK) {
+    return;
+  }
+  if ((int)current == ESP_NOW_CHANNEL) {
+    return;
+  }
+
+  esp_wifi_set_promiscuous(true);
+  esp_err_t setResult = esp_wifi_set_channel(ESP_NOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(false);
+  LogDebugFormatted("[FIST][CHAN] %s current=%d target=%d result=%d\n",
+                    reason ? reason : "set",
+                    (int)current,
+                    ESP_NOW_CHANNEL,
+                    (int)setResult);
+}
 
 static bool ensurePeer(const uint8_t *addr)
 {
-  // If this is the broadcast address, don't add it as a peer — broadcasts
-  // do not require a peer entry and adding FF:FF:FF:FF:FF:FF can destabilize
-  // esp_now peer management on some SDK versions.
-  const bool isBroadcast = (addr[0] == 0xFF && addr[1] == 0xFF && addr[2] == 0xFF && addr[3] == 0xFF && addr[4] == 0xFF && addr[5] == 0xFF);
+  const bool isBroadcast = (addr[0] == 0xFF && addr[1] == 0xFF && addr[2] == 0xFF &&
+                            addr[3] == 0xFF && addr[4] == 0xFF && addr[5] == 0xFF);
   if (isBroadcast) {
     return true;
   }
@@ -111,8 +136,12 @@ static bool ensurePeer(const uint8_t *addr)
 static void clearButtonFlags()
 {
   click2_short_waspressed = false;
+  click2_long_waspressed = false;
   mxclick_short_waspressed = false;
+  mxclick_long_waspressed = false;
   click3_short_waspressed = false;
+  click3_long_waspressed = false;
+  click3_double_waspressed = false;
 }
 
 static void screensaver_check_activity()
@@ -178,6 +207,7 @@ static void createScreenIfNeeded()
   }
 
   s_screen = lv_obj_create(nullptr);
+  ui_FistIT = s_screen;
   lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_event_cb(s_screen, screenmachine, LV_EVENT_SCREEN_LOADED, nullptr);
 
@@ -220,7 +250,7 @@ static void createScreenIfNeeded()
   lv_obj_add_style(s_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
   s_button_left_text = lv_label_create(s_button_left);
   lv_obj_set_align(s_button_left_text, LV_ALIGN_CENTER);
-  lv_label_set_text(s_button_left_text, T_START);
+  lv_label_set_text(s_button_left_text, T_HOME);
 
   s_button_mid = lv_btn_create(s_screen);
   lv_obj_set_width(s_button_mid, 100);
@@ -233,7 +263,7 @@ static void createScreenIfNeeded()
   lv_obj_add_style(s_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
   s_button_mid_text = lv_label_create(s_button_mid);
   lv_obj_set_align(s_button_mid_text, LV_ALIGN_CENTER);
-  lv_label_set_text(s_button_mid_text, T_HOME);
+  lv_label_set_text(s_button_mid_text, T_START);
 
   s_button_right = lv_btn_create(s_screen);
   lv_obj_set_width(s_button_right, 100);
@@ -301,8 +331,8 @@ static void refreshValueLabels()
   if (s_accel_value != nullptr) {
     lv_label_set_text_fmt(s_accel_value, "%d", (int)s_accel);
   }
-  if (s_button_left_text != nullptr) {
-    lv_label_set_text(s_button_left_text, s_is_on ? T_PAUSE : T_START);
+  if (s_button_mid_text != nullptr) {
+    lv_label_set_text(s_button_mid_text, s_is_on ? T_PAUSE : T_START);
   }
 }
 
@@ -366,6 +396,7 @@ static void sendPairingHeartbeatIfNeeded()
   msg.esp_heartbeat = true;
   msg.esp_target = FIST_ID;
   msg.esp_sender = M5_ID;
+  lockEspNowChannelIfConfigured("pair-heartbeat");
   Serial.printf("ESP-NOW TX: to=%02X:%02X:%02X:%02X:%02X:%02X target=%d cmd=%d sender=%d hb=%d len=%u\n",
                 BROADCAST_ADDR[0], BROADCAST_ADDR[1], BROADCAST_ADDR[2], BROADCAST_ADDR[3], BROADCAST_ADDR[4], BROADCAST_ADDR[5],
                 msg.esp_target, msg.esp_command, msg.esp_sender, msg.esp_heartbeat ? 1 : 0, (unsigned)sizeof(msg));
@@ -385,6 +416,8 @@ static void setPairedAddress(const uint8_t *mac)
   memcpy(s_fist_addr, mac, 6);
   if (ensurePeer(s_fist_addr)) {
     s_is_paired = true;
+    LogDebug("fistit.cpp - FIST Paired.");
+
     LogDebugFormatted("Fist-IT paired MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
                       s_fist_addr[0], s_fist_addr[1], s_fist_addr[2],
                       s_fist_addr[3], s_fist_addr[4], s_fist_addr[5]);
@@ -463,6 +496,9 @@ void FistITPrepareScreen()
   createScreenIfNeeded();
   refreshTheme();
   refreshValueLabels();
+  // The click used to enter this screen can still be latched for one loop.
+  // Flush it once so left/mid/right actions start from a clean state.
+  s_flush_buttons_once = true;
 }
 
 lv_obj_t *FistITGetScreen()
@@ -554,8 +590,6 @@ bool FistITHandleIncomingEspNowFrame(const uint8_t *mac,
   }
 
   s_peer_id = sender;
-  // Do NOT update s_local_id: M5 always identifies as M5_ID regardless of
-  // which legacy target ID the peer used to address us.
 
   // Only set paired address for this addon when the sender/target indicates
   // the frame is intended for Fist-IT (avoid stealing paired address from other addons)
@@ -569,16 +603,19 @@ bool FistITHandleIncomingEspNowFrame(const uint8_t *mac,
     s_is_on = true;
   }
 
-  // Do not touch LVGL here: this function is called from ESP-NOW recv path
-  // (wifi task). UI is refreshed in FistITHandleScreen() on the main loop.
+
   return true;
 }
 
 void FistITHandleScreen(const ButtonEvents &events)
 {
   createScreenIfNeeded();
-  refreshTheme();
   sendPairingHeartbeatIfNeeded();
+
+  if (s_flush_buttons_once) {
+    clearButtonFlags();
+    s_flush_buttons_once = false;
+  }
 
   applySliderFromEncoder(encoder1, 1, s_enc1, s_speed, s_speed_slider, FIST_SPEED);
   applySliderFromEncoder(encoder2, 2, s_enc2, s_rotation, s_rotation_slider, FIST_ROTATION);
@@ -587,10 +624,10 @@ void FistITHandleScreen(const ButtonEvents &events)
   refreshValueLabels();
 
   if (events.leftShort) {
-    toggleOnOff();
+    _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
   } else if (events.mxShort) {
-    _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    toggleOnOff();
     clearButtonFlags();
   } else if (events.rightShort) {
     _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);

@@ -1,5 +1,5 @@
 #include "icons.h"
-#include "colors.h"
+#include "display/colors.h"
 
 void icons_render_mask_canvas(lv_obj_t* canvas,
                               uint8_t* buffer,

@@ -1,0 +1,59 @@
+#pragma once
+
+#include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// Replace with your target ID constant defined in EspNowComm.h.
+extern const int YOUR_ADDON_ID;
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifndef ADDON_BUTTON_EVENTS_DEFINED
+#define ADDON_BUTTON_EVENTS_DEFINED
+struct ButtonEvents {
+    bool leftShort;
+    bool mxShort;
+    bool rightShort;
+};
+#endif
+
+typedef struct _lv_obj_t lv_obj_t;
+
+#ifdef __cplusplus
+extern "C" {
+void YourAddonHandleScreen(const struct ButtonEvents *events);
+}
+
+// Optional: call this before changing to the addon screen.
+void YourAddonPrepareScreen();
+
+// Optional: expose screen getter if addon owns the screen.
+lv_obj_t *YourAddonGetScreen();
+
+// Runtime input handler used by ScreenHandler loop.
+void YourAddonHandleScreen(const ButtonEvents &events);
+#else
+void YourAddonPrepareScreen();
+lv_obj_t *YourAddonGetScreen();
+void YourAddonHandleScreen(const struct ButtonEvents *events);
+#endif
+
+// Return true if frame belongs to this addon and was consumed.
+bool YourAddonHandleIncomingEspNowFrame(const uint8_t *mac,
+                                        int target,
+                                        int sender,
+                                        int command,
+                                        float value,
+                                        bool heartbeat);
+
+// Outgoing command API for this addon.
+bool YourAddonSendCommand(int command, float value);
+
+// Pairing and enable-state API.
+bool YourAddonIsPaired();
+void YourAddonSetAddonEnabled(bool enabled);

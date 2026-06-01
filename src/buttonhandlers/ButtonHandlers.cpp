@@ -8,7 +8,7 @@
 #include <M5Unified.h>
 #include <lvgl.h>
 #include "../ui/ui.h"        // for ui_vibrate
-#include "../config_pins.h"  // for ENC_x_CLK/DT pin defines (no object definitions)
+#include "../config/config_pins.h"  // for ENC_x_CLK/DT pin defines (no object definitions)
 
 // ---------------------------------------------------------------------------
 // Button press state flags
@@ -17,6 +17,7 @@
 bool mxclick_short_waspressed  = false;
 bool mxclick_long_waspressed   = false;
 bool click2_short_waspressed   = false;
+bool click2_long_waspressed    = false;
 bool click3_short_waspressed   = false;
 bool click3_long_waspressed    = false;
 bool click3_double_waspressed  = false;
@@ -43,6 +44,7 @@ void buttonInit() {
     Button1.attachClick(mxclick);
     Button1.attachLongPressStart(mxlong);
     Button2.attachClick(click2);
+    Button2.attachLongPressStart(click2long);
     Button3.attachClick(click3);
     Button3.attachLongPressStart(c3long);
     Button3.attachDoubleClick(c3double);
@@ -64,6 +66,11 @@ void mxlong() {
 void click2() {
     vibrate();
     click2_short_waspressed = true;
+}
+
+void click2long() {
+    vibrate(200, 200);
+    click2_long_waspressed = true;
 }
 
 void click3() {

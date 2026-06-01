@@ -35,7 +35,10 @@
  * - LV_STDLIB_RTTHREAD:    RT-Thread implementation
  * - LV_STDLIB_CUSTOM:      Implement the functions externally
  */
-#define LV_USE_STDLIB_MALLOC    LV_STDLIB_CLIB
+//#define LV_USE_STDLIB_MALLOC    LV_STDLIB_CLIB
+/* Use custom allocator so LVGL objects go to PSRAM, freeing internal SRAM for
+ * DMA-capable WiFi/BLE/ESP-NOW buffers.  Implemented in display/DisplaySetup.cpp. */
+#define LV_USE_STDLIB_MALLOC    LV_STDLIB_CUSTOM
 #define LV_USE_STDLIB_STRING    LV_STDLIB_CLIB
 #define LV_USE_STDLIB_SPRINTF   LV_STDLIB_CLIB
 

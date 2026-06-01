@@ -1,5 +1,5 @@
-#include "styles.h"
-#include "colors.h"
+#include "display/styles.h"
+#include "display/colors.h"
 #include <string.h>
 
 #ifdef __cplusplus

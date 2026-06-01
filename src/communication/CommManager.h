@@ -24,3 +24,6 @@ void connectbutton(lv_event_t* e);
 
 // Unified command dispatcher used by all screens
 bool SendCommand(int Command, float Value, int Target);
+
+// Unified streaming move dispatcher (BLE only): stream:<position>:<durationMs>
+bool SendStreamCommand(int position, int durationMs);

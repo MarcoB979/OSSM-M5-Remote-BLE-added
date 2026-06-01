@@ -2,9 +2,6 @@
 	"folders": [
 		{
 			"path": "."
-		},
-		{
-			"path": "../../OSSM_OFFICIAL/OSSM-M5-Remote-BLE-added-x-toys-experimental"
 		}
 	],
 	"settings": {

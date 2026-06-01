@@ -1,13 +1,16 @@
-#include "addonsStreaming.h"
+#include "addons/addonsStreaming.h"
 
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
 #include "language.h"
-#include "styles.h"
+#include "display/styles.h"
 #include "main.h"
-#include "config_ids.h"
+#include "config/config_ids.h"
 #include "buttonhandlers/ButtonHandlers.h"
+#include "addons/Eject.h"
+#include "addons/FistIT.h"
 #include "communication/EspNowComm.h"
+#include "communication/BleComm.h"
 
 // Extra globals exposed through ui.h
 lv_obj_t *ui_StreamingButtonM = nullptr;
@@ -23,6 +26,7 @@ static lv_obj_t *s_streaming_btn_r_text = nullptr;
 static lv_obj_t *s_streaming_speed_val = nullptr;
 static lv_obj_t *s_streaming_depth_val = nullptr;
 static lv_obj_t *s_streaming_stroke_val = nullptr;
+static bool s_streaming_paused = false;
 
 static lv_obj_t *s_addons_btn_l_text = nullptr;
 static lv_obj_t *s_addons_btn_m_text = nullptr;
@@ -150,7 +154,7 @@ static void ejectUpdateValues() {
     setSliderLabelInt(s_eject_time_val, s_eject_time);
     setSliderLabelInt(s_eject_size_val, s_eject_size);
     setSliderLabelInt(s_eject_accel_val, s_eject_accel);
-    if (ui_EJECTButtonLText) lv_label_set_text(ui_EJECTButtonLText, s_eject_on ? T_PAUSE : T_CUM);
+    if (ui_EJECTButtonMText) lv_label_set_text(ui_EJECTButtonMText, s_eject_on ? T_PAUSE : T_CUM);
 }
 
 static void createSliderRow(lv_obj_t *parent,
@@ -196,25 +200,59 @@ static void createSliderRow(lv_obj_t *parent,
 }
 
 static void fistToggle() {
-    s_fist_on = !s_fist_on;
-    SendCommand(s_fist_on ? ON : OFF, 0.0f, FIST_ID);
-    fistUpdateValues();
-}
-
-void addonsFistToggle(void) {
-    fistToggle();
+    ButtonEvents events = { true, false, false };
+    FistITHandleScreen(events);
 }
 
 static void ejectToggle() {
-    s_eject_on = !s_eject_on;
-    SendCommand(s_eject_on ? ON : OFF, 0.0f, CUM);
-    ejectUpdateValues();
+    ButtonEvents events = { true, false, false };
+    EjectHandleScreen(events);
+}
+
+static lv_timer_t *s_streaming_cmd_timer = NULL;
+static void streaming_goto_streaming_cb(lv_timer_t *t) {
+    (void)t;
+    bleCommGoToStreaming();
+    s_streaming_cmd_timer = NULL;
 }
 
 static void event_streaming_screen(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
         screenmachine(e);
+        bleCommGoToMenu();
+        if (s_streaming_cmd_timer) {
+            lv_timer_delete(s_streaming_cmd_timer);
+        }
+        s_streaming_cmd_timer = lv_timer_create(streaming_goto_streaming_cb, 200, NULL);
+        lv_timer_set_repeat_count(s_streaming_cmd_timer, 1);
     }
+    // When leaving the streaming screen, cancel any pending go:streaming timer and
+    // put the OSSM back into menu mode.  This is essential because the OSSM ignores
+    // "go:strokeEngine" from streaming mode, so we must exit streaming first.
+    // Once in menu mode the home/stroke screen's bleCommGoToStrokeEngine() will work
+    // correctly and the OSSM will re-home as expected.
+    if (lv_event_get_code(e) == LV_EVENT_SCREEN_UNLOAD_START) {
+        if (s_streaming_cmd_timer) {
+            lv_timer_delete(s_streaming_cmd_timer);
+            s_streaming_cmd_timer = NULL;
+        }
+        bleCommGoToMenu();
+    }
+}
+
+void streamingUpdateValueLabels(float spd, float dep, float str) {
+    char buf[8];
+    if (s_streaming_speed_val)  { dtostrf(spd, 3, 0, buf); lv_label_set_text(s_streaming_speed_val,  buf); }
+    if (s_streaming_depth_val)  { dtostrf(dep, 3, 0, buf); lv_label_set_text(s_streaming_depth_val,  buf); }
+    if (s_streaming_stroke_val) { dtostrf(str, 3, 0, buf); lv_label_set_text(s_streaming_stroke_val, buf); }
+}
+
+bool streamingIsPaused() { return s_streaming_paused; }
+
+void streamingResetPause() {
+    s_streaming_paused = false;
+    if (s_streaming_btn_m_text)
+        lv_label_set_text(s_streaming_btn_m_text, T_STOP);
 }
 
 static void event_streaming_btn_l(lv_event_t *e) {
@@ -225,7 +263,9 @@ static void event_streaming_btn_l(lv_event_t *e) {
 
 static void event_streaming_btn_m(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        s_streaming_paused = !s_streaming_paused;
+        if (s_streaming_btn_m_text)
+            lv_label_set_text(s_streaming_btn_m_text, s_streaming_paused ? T_START : T_STOP);
     }
 }
 
@@ -258,7 +298,8 @@ void addonsActivateSelection(void) {
     if (s_addons_selected == 0) {
         _ui_screen_change(ui_EJECTSettings, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     } else if (s_addons_selected == 1) {
-        _ui_screen_change(ui_FistIT, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        FistITPrepareScreen();
+        _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     } else {
         _ui_screen_change(ui_Streaming, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
@@ -267,6 +308,13 @@ void addonsActivateSelection(void) {
 static void event_addons_open(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
         addonsActivateSelection();
+    }
+}
+
+
+static void event_addons_enable(lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
+        // here we will have the code for enabling of disabling the addons
     }
 }
 
@@ -318,222 +366,15 @@ static void event_eject_btn_l(lv_event_t *e) {
 }
 
 static void ensureEjectUiInitialized() {
-    if (s_eject_ui_ready || !ui_EJECTSettings) return;
-
-    if (ui_EJECTButtonLText) {
-        lv_label_set_text(ui_EJECTButtonLText, T_CUM);
-    }
-
-    lv_obj_t *tmp = nullptr;
-    createSliderRow(ui_EJECTSettings, &tmp, &s_eject_speed_slider, &s_eject_speed_val, T_CUM_SPEED, -60, 0, 100, 0);
-    createSliderRow(ui_EJECTSettings, &tmp, &s_eject_time_slider, &s_eject_time_val, T_CUM_TIME, -25, 0, 61, 1);
-    createSliderRow(ui_EJECTSettings, &tmp, &s_eject_size_slider, &s_eject_size_val, T_CUM_Volume, 10, 0, 100, 2);
-    createSliderRow(ui_EJECTSettings, &tmp, &s_eject_accel_slider, &s_eject_accel_val, T_CUM_Accel, 45, 0, 100, 3);
-
-    if (ui_EJECTButtonL) {
-        lv_obj_add_event_cb(ui_EJECTButtonL, event_eject_btn_l, LV_EVENT_SHORT_CLICKED, nullptr);
-    }
-
+    // Eject UI is now owned by addons/Eject.cpp.
     s_eject_ui_ready = true;
-    ejectUpdateValues();
 }
 
 static void createFistScreen() {
-    if (ui_FistIT) return;
-
-    ui_FistIT = lv_obj_create(NULL);
-    lv_obj_clear_flag(ui_FistIT, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_add_event_cb(ui_FistIT, event_fist_screen, LV_EVENT_ALL, NULL);
-
-    lv_obj_t *title = lv_label_create(ui_FistIT);
-    lv_obj_set_align(title, LV_ALIGN_TOP_MID);
-    lv_obj_set_y(title, 10);
-    lv_label_set_text(title, "Fist-IT");
-    lv_obj_add_style(title, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    lv_obj_t *tmp = nullptr;
-    createSliderRow(ui_FistIT, &tmp, &s_fist_speed_slider, &s_fist_speed_val, T_SPEED, -60, 0, 100, 0);
-    createSliderRow(ui_FistIT, &tmp, &s_fist_rot_slider, &s_fist_rot_val, T_ROTATION, -25, 0, 360, 1);
-    createSliderRow(ui_FistIT, &tmp, &s_fist_pause_slider, &s_fist_pause_val, T_PAUSE, 10, 0, 100, 2);
-    createSliderRow(ui_FistIT, &tmp, &s_fist_accel_slider, &s_fist_accel_val, T_ACCEL, 45, 0, 100, 3);
-
-    s_fist_btn_l = lv_btn_create(ui_FistIT);
-    lv_obj_set_size(s_fist_btn_l, 100, 30);
-    lv_obj_set_align(s_fist_btn_l, LV_ALIGN_BOTTOM_LEFT);
-    lv_obj_set_x(s_fist_btn_l, 8);
-    lv_obj_set_y(s_fist_btn_l, -8);
-    applyButtonStylesLocal(s_fist_btn_l, &style_button_l, &style_button_l_focused);
-    lv_obj_add_event_cb(s_fist_btn_l, event_fist_btn_l, LV_EVENT_SHORT_CLICKED, nullptr);
-    s_fist_btn_l_text = lv_label_create(s_fist_btn_l);
-    lv_obj_center(s_fist_btn_l_text);
-
-    s_fist_btn_m = lv_btn_create(ui_FistIT);
-    lv_obj_set_size(s_fist_btn_m, 100, 30);
-    lv_obj_set_align(s_fist_btn_m, LV_ALIGN_BOTTOM_MID);
-    lv_obj_set_y(s_fist_btn_m, -8);
-    applyButtonStylesLocal(s_fist_btn_m, &style_button_m, &style_button_m_focused);
-    lv_obj_add_event_cb(s_fist_btn_m, event_fist_btn_m, LV_EVENT_SHORT_CLICKED, nullptr);
-    lv_obj_t *fist_btn_m_text = lv_label_create(s_fist_btn_m);
-    lv_obj_center(fist_btn_m_text);
-    lv_label_set_text(fist_btn_m_text, T_HOME);
-
-    s_fist_btn_r = lv_btn_create(ui_FistIT);
-    lv_obj_set_size(s_fist_btn_r, 100, 30);
-    lv_obj_set_align(s_fist_btn_r, LV_ALIGN_BOTTOM_RIGHT);
-    lv_obj_set_x(s_fist_btn_r, -8);
-    lv_obj_set_y(s_fist_btn_r, -8);
-    applyButtonStylesLocal(s_fist_btn_r, &style_button_r, &style_button_r_focused);
-    lv_obj_add_event_cb(s_fist_btn_r, event_fist_btn_r, LV_EVENT_SHORT_CLICKED, nullptr);
-    lv_obj_t *fist_btn_r_text = lv_label_create(s_fist_btn_r);
-    lv_obj_center(fist_btn_r_text);
-    lv_label_set_text(fist_btn_r_text, T_MENU);
-
-    fistUpdateValues();
-}
-
-void addonsHandleEjectScreen(void) {
-    ensureEjectUiInitialized();
-    if (!s_eject_ui_ready) return;
-
-    int d = detentsFromEncoder(encoder1, &s_eject_enc1);
-    if (d != 0) {
-        s_eject_speed += d;
-        if (s_eject_speed < 0.0f) s_eject_speed = 0.0f;
-        if (s_eject_speed > 100.0f) s_eject_speed = 100.0f;
-        SendCommand(CUMSPEED, s_eject_speed / 10.0f, CUM);
+    // Fist-IT UI is now owned by addons/FistIT.cpp.
+    if (ui_FistIT == nullptr) {
+        ui_FistIT = FistITGetScreen();
     }
-
-    d = detentsFromEncoder(encoder2, &s_eject_enc2);
-    if (d != 0) {
-        s_eject_time += d;
-        if (s_eject_time < 0.0f) s_eject_time = 0.0f;
-        if (s_eject_time > 61.0f) s_eject_time = 61.0f;
-        SendCommand(CUMTIME, s_eject_time, CUM);
-    }
-
-    d = detentsFromEncoder(encoder3, &s_eject_enc3);
-    if (d != 0) {
-        s_eject_size += d;
-        if (s_eject_size < 0.0f) s_eject_size = 0.0f;
-        if (s_eject_size > 100.0f) s_eject_size = 100.0f;
-        SendCommand(CUMSIZE, s_eject_size, CUM);
-    }
-
-    d = detentsFromEncoder(encoder4, &s_eject_enc4);
-    if (d != 0) {
-        s_eject_accel += d;
-        if (s_eject_accel < 0.0f) s_eject_accel = 0.0f;
-        if (s_eject_accel > 100.0f) s_eject_accel = 100.0f;
-        SendCommand(CUMACCEL, s_eject_accel / 10.0f, CUM);
-    }
-
-    if (s_eject_speed_slider) {
-        if (!lv_slider_is_dragged(s_eject_speed_slider)) {
-            lv_slider_set_value(s_eject_speed_slider, (int)s_eject_speed, LV_ANIM_OFF);
-        } else {
-            s_eject_speed = (float)lv_slider_get_value(s_eject_speed_slider);
-            SendCommand(CUMSPEED, s_eject_speed / 10.0f, CUM);
-        }
-    }
-    if (s_eject_time_slider) {
-        if (!lv_slider_is_dragged(s_eject_time_slider)) {
-            lv_slider_set_value(s_eject_time_slider, (int)s_eject_time, LV_ANIM_OFF);
-        } else {
-            s_eject_time = (float)lv_slider_get_value(s_eject_time_slider);
-            SendCommand(CUMTIME, s_eject_time, CUM);
-        }
-    }
-    if (s_eject_size_slider) {
-        if (!lv_slider_is_dragged(s_eject_size_slider)) {
-            lv_slider_set_value(s_eject_size_slider, (int)s_eject_size, LV_ANIM_OFF);
-        } else {
-            s_eject_size = (float)lv_slider_get_value(s_eject_size_slider);
-            SendCommand(CUMSIZE, s_eject_size, CUM);
-        }
-    }
-    if (s_eject_accel_slider) {
-        if (!lv_slider_is_dragged(s_eject_accel_slider)) {
-            lv_slider_set_value(s_eject_accel_slider, (int)s_eject_accel, LV_ANIM_OFF);
-        } else {
-            s_eject_accel = (float)lv_slider_get_value(s_eject_accel_slider);
-            SendCommand(CUMACCEL, s_eject_accel / 10.0f, CUM);
-        }
-    }
-
-    ejectUpdateValues();
-}
-
-void addonsHandleFistScreen(void) {
-    createFistScreen();
-    if (!ui_FistIT) return;
-
-    int d = detentsFromEncoder(encoder1, &s_fist_enc1);
-    if (d != 0) {
-        s_fist_speed += d;
-        if (s_fist_speed < 0.0f) s_fist_speed = 0.0f;
-        if (s_fist_speed > 100.0f) s_fist_speed = 100.0f;
-        SendCommand(FIST_SPEED, s_fist_speed, FIST_ID);
-    }
-
-    d = detentsFromEncoder(encoder2, &s_fist_enc2);
-    if (d != 0) {
-        s_fist_rot += d;
-        if (s_fist_rot < 0.0f) s_fist_rot = 0.0f;
-        if (s_fist_rot > 360.0f) s_fist_rot = 360.0f;
-        SendCommand(FIST_ROTATION, s_fist_rot, FIST_ID);
-    }
-
-    d = detentsFromEncoder(encoder3, &s_fist_enc3);
-    if (d != 0) {
-        s_fist_pause += d;
-        if (s_fist_pause < 0.0f) s_fist_pause = 0.0f;
-        if (s_fist_pause > 100.0f) s_fist_pause = 100.0f;
-        SendCommand(FIST_PAUSE, s_fist_pause, FIST_ID);
-    }
-
-    d = detentsFromEncoder(encoder4, &s_fist_enc4);
-    if (d != 0) {
-        s_fist_accel += d;
-        if (s_fist_accel < 0.0f) s_fist_accel = 0.0f;
-        if (s_fist_accel > 100.0f) s_fist_accel = 100.0f;
-        SendCommand(FIST_ACCEL, s_fist_accel, FIST_ID);
-    }
-
-    if (s_fist_speed_slider) {
-        if (!lv_slider_is_dragged(s_fist_speed_slider)) {
-            lv_slider_set_value(s_fist_speed_slider, (int)s_fist_speed, LV_ANIM_OFF);
-        } else {
-            s_fist_speed = (float)lv_slider_get_value(s_fist_speed_slider);
-            SendCommand(FIST_SPEED, s_fist_speed, FIST_ID);
-        }
-    }
-    if (s_fist_rot_slider) {
-        if (!lv_slider_is_dragged(s_fist_rot_slider)) {
-            lv_slider_set_value(s_fist_rot_slider, (int)s_fist_rot, LV_ANIM_OFF);
-        } else {
-            s_fist_rot = (float)lv_slider_get_value(s_fist_rot_slider);
-            SendCommand(FIST_ROTATION, s_fist_rot, FIST_ID);
-        }
-    }
-    if (s_fist_pause_slider) {
-        if (!lv_slider_is_dragged(s_fist_pause_slider)) {
-            lv_slider_set_value(s_fist_pause_slider, (int)s_fist_pause, LV_ANIM_OFF);
-        } else {
-            s_fist_pause = (float)lv_slider_get_value(s_fist_pause_slider);
-            SendCommand(FIST_PAUSE, s_fist_pause, FIST_ID);
-        }
-    }
-    if (s_fist_accel_slider) {
-        if (!lv_slider_is_dragged(s_fist_accel_slider)) {
-            lv_slider_set_value(s_fist_accel_slider, (int)s_fist_accel, LV_ANIM_OFF);
-        } else {
-            s_fist_accel = (float)lv_slider_get_value(s_fist_accel_slider);
-            SendCommand(FIST_ACCEL, s_fist_accel, FIST_ID);
-        }
-    }
-
-    fistUpdateValues();
 }
 
 void ui_Streaming_screen_init(void) {
@@ -565,10 +406,14 @@ void ui_Streaming_screen_init(void) {
     lv_obj_add_style(ui_streamingspeedslider, &style_slider_indicator[0], LV_PART_KNOB | LV_STATE_DEFAULT);
 
     s_streaming_speed_val = lv_label_create(ui_Streaming);
-    lv_obj_set_align(s_streaming_speed_val, LV_ALIGN_RIGHT_MID);
-    lv_obj_set_x(s_streaming_speed_val, -2);
+    lv_obj_set_width(s_streaming_speed_val, LV_SIZE_CONTENT);
+    lv_obj_set_height(s_streaming_speed_val, LV_SIZE_CONTENT);
+    lv_obj_set_align(s_streaming_speed_val, LV_ALIGN_LEFT_MID);
+    lv_obj_set_x(s_streaming_speed_val, 90);
     lv_obj_set_y(s_streaming_speed_val, -45);
     lv_label_set_text(s_streaming_speed_val, "0");
+    lv_obj_add_style(s_streaming_speed_val, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(s_streaming_speed_val, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     lv_obj_t *depth_l = lv_label_create(ui_Streaming);
     lv_obj_set_align(depth_l, LV_ALIGN_LEFT_MID);
@@ -587,10 +432,14 @@ void ui_Streaming_screen_init(void) {
     lv_obj_add_style(ui_streamingdepthslider, &style_slider_indicator[1], LV_PART_KNOB | LV_STATE_DEFAULT);
 
     s_streaming_depth_val = lv_label_create(ui_Streaming);
-    lv_obj_set_align(s_streaming_depth_val, LV_ALIGN_RIGHT_MID);
-    lv_obj_set_x(s_streaming_depth_val, -2);
+    lv_obj_set_width(s_streaming_depth_val, LV_SIZE_CONTENT);
+    lv_obj_set_height(s_streaming_depth_val, LV_SIZE_CONTENT);
+    lv_obj_set_align(s_streaming_depth_val, LV_ALIGN_LEFT_MID);
+    lv_obj_set_x(s_streaming_depth_val, 90);
     lv_obj_set_y(s_streaming_depth_val, -5);
     lv_label_set_text(s_streaming_depth_val, "0");
+    lv_obj_add_style(s_streaming_depth_val, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(s_streaming_depth_val, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     lv_obj_t *stroke_l = lv_label_create(ui_Streaming);
     lv_obj_set_align(stroke_l, LV_ALIGN_LEFT_MID);
@@ -609,22 +458,31 @@ void ui_Streaming_screen_init(void) {
     lv_obj_add_style(ui_streamingstrokeslider, &style_slider_indicator[2], LV_PART_KNOB | LV_STATE_DEFAULT);
 
     s_streaming_stroke_val = lv_label_create(ui_Streaming);
-    lv_obj_set_align(s_streaming_stroke_val, LV_ALIGN_RIGHT_MID);
-    lv_obj_set_x(s_streaming_stroke_val, -2);
+    lv_obj_set_width(s_streaming_stroke_val, LV_SIZE_CONTENT);
+    lv_obj_set_height(s_streaming_stroke_val, LV_SIZE_CONTENT);
+    lv_obj_set_align(s_streaming_stroke_val, LV_ALIGN_LEFT_MID);
+    lv_obj_set_x(s_streaming_stroke_val, 90);
     lv_obj_set_y(s_streaming_stroke_val, 35);
     lv_label_set_text(s_streaming_stroke_val, "0");
+    lv_obj_add_style(s_streaming_stroke_val, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(s_streaming_stroke_val, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_Batt8 = lv_label_create(ui_Streaming);
+    lv_obj_set_width(ui_Batt8, 85);
+    lv_obj_set_height(ui_Batt8, 30);
     lv_obj_set_align(ui_Batt8, LV_ALIGN_TOP_RIGHT);
     lv_obj_set_x(ui_Batt8, -6);
     lv_obj_set_y(ui_Batt8, 8);
     lv_label_set_text(ui_Batt8, T_BATT);
 
     ui_BattValue8 = lv_label_create(ui_Batt8);
+    lv_obj_set_width(ui_BattValue8, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_BattValue8, LV_SIZE_CONTENT);
     lv_obj_set_align(ui_BattValue8, LV_ALIGN_RIGHT_MID);
     lv_obj_set_x(ui_BattValue8, 0);
     lv_obj_set_y(ui_BattValue8, -8);
     lv_label_set_text(ui_BattValue8, T_BLANK);
+    lv_obj_add_style(ui_BattValue8, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_Battery8 = lv_bar_create(ui_Batt8);
     lv_bar_set_range(ui_Battery8, 0, 100);
@@ -654,7 +512,7 @@ void ui_Streaming_screen_init(void) {
 
     s_streaming_btn_m_text = lv_label_create(ui_StreamingButtonM);
     lv_obj_center(s_streaming_btn_m_text);
-    lv_label_set_text(s_streaming_btn_m_text, T_HOME);
+    lv_label_set_text(s_streaming_btn_m_text, T_STOP);
 
     ui_StreamingButtonR = lv_btn_create(ui_Streaming);
     lv_obj_set_size(ui_StreamingButtonR, 100, 30);
@@ -721,18 +579,18 @@ void ui_Addons_screen_init(void) {
 
     s_addons_btn_l_text = lv_label_create(ui_AddonsButtonL);
     lv_obj_center(s_addons_btn_l_text);
-    lv_label_set_text(s_addons_btn_l_text, T_BACK);
+    lv_label_set_text(s_addons_btn_l_text, T_MENU);
 
     ui_AddonsButtonM = lv_btn_create(ui_Addons);
     lv_obj_set_size(ui_AddonsButtonM, 100, 30);
     lv_obj_set_align(ui_AddonsButtonM, LV_ALIGN_BOTTOM_MID);
     lv_obj_set_y(ui_AddonsButtonM, -8);
     applyButtonStylesLocal(ui_AddonsButtonM, &style_button_m, &style_button_m_focused);
-    lv_obj_add_event_cb(ui_AddonsButtonM, event_addons_home, LV_EVENT_SHORT_CLICKED, NULL);
+    lv_obj_add_event_cb(ui_AddonsButtonM, event_addons_open, LV_EVENT_SHORT_CLICKED, NULL);
 
     s_addons_btn_m_text = lv_label_create(ui_AddonsButtonM);
     lv_obj_center(s_addons_btn_m_text);
-    lv_label_set_text(s_addons_btn_m_text, T_HOME);
+    lv_label_set_text(s_addons_btn_m_text, T_SELECT);
 
     ui_AddonsButtonR = lv_btn_create(ui_Addons);
     lv_obj_set_size(ui_AddonsButtonR, 100, 30);
@@ -740,11 +598,11 @@ void ui_Addons_screen_init(void) {
     lv_obj_set_x(ui_AddonsButtonR, -8);
     lv_obj_set_y(ui_AddonsButtonR, -8);
     applyButtonStylesLocal(ui_AddonsButtonR, &style_button_r, &style_button_r_focused);
-    lv_obj_add_event_cb(ui_AddonsButtonR, event_addons_open, LV_EVENT_SHORT_CLICKED, NULL);
+    lv_obj_add_event_cb(ui_AddonsButtonR, event_addons_enable, LV_EVENT_SHORT_CLICKED, NULL);
 
     s_addons_btn_r_text = lv_label_create(ui_AddonsButtonR);
     lv_obj_center(s_addons_btn_r_text);
-    lv_label_set_text(s_addons_btn_r_text, T_SELECT);
+    lv_label_set_text(s_addons_btn_r_text, T_ENABLEDISABLE);
 
     ui_g_addons = lv_group_create();
     lv_group_add_obj(ui_g_addons, ui_AddonsItem0);

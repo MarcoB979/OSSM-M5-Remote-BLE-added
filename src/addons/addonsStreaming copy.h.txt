@@ -1,0 +1,25 @@
+#pragma once
+
+#include <lvgl.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+extern lv_obj_t *ui_FistIT;
+
+void addonsMoveSelection(int delta);
+void addonsActivateSelection(void);
+void addonsSyncSelectionVisual(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#ifdef __cplusplus
+// Update streaming value labels (speed, depth, stroke) — called from ScreenHandler encoder logic
+void streamingUpdateValueLabels(float spd, float dep, float str);
+// Pause state — managed by addonsStreaming.cpp, polled by ScreenHandler
+bool streamingIsPaused();
+void streamingResetPause();
+#endif

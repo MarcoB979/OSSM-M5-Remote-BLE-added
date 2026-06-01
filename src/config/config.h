@@ -54,3 +54,8 @@ OneButton Button3(34, false, true); //Encoder Right
 #define FrontColor TFT_PURPLE
 #define HighlightColor TFT_BLACK
 
+// ---------------------------------------------------------------------------
+// Screensaver and deep sleep (ported from backup firmware)
+// ---------------------------------------------------------------------------
+#include "config/config_power.h"
+

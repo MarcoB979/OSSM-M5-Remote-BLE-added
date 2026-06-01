@@ -9,11 +9,11 @@
 #include <queue>
 
 #include "EspNowComm.h"
-#include "../debug.h"
+#include "../config/debug.h"
 #include "../main.h"
 #include "../screens/ScreenHandler.h"
 
-bool showBlePollSerial = true;
+bool showBlePollSerial = false; // Set to true to enable serial output of BLE poll results for debugging
 
 namespace {
 
@@ -81,8 +81,51 @@ static ConfirmedMachineState g_confirmedState;
 
 enum ParamIdx { P_SPEED = 0, P_DEPTH = 1, P_STROKE = 2, P_SENSATION = 3, P_PATTERN = 4, P_COUNT = 5 };
 
+static const char* OSSM_KNOB_LIMIT_DISABLE_VALUE = "false";
+
 // Forward declaration (definition is below)
 static bool bleReadStateOnce();
+
+static bool isKnobLimitDisabledValue(const String& value) {
+  if (value.length() == 0) return false;
+  String v = value;
+  v.trim();
+  v.toLowerCase();
+  return (v == "false" || v == "0" || v == "f");
+}
+
+static bool configureSpeedKnobAsLimitDisabled() {
+  if (!g_speedKnob || !g_client || !g_client->isConnected() || !g_speedKnob->canWrite()) {
+    return false;
+  }
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  bool writeOk = g_speedKnob->writeValue((uint8_t*)OSSM_KNOB_LIMIT_DISABLE_VALUE,
+                                         strlen(OSSM_KNOB_LIMIT_DISABLE_VALUE),
+                                         true);
+
+  bool readOk = false;
+  String readback;
+  if (writeOk && g_speedKnob->canRead()) {
+    std::string rb = g_speedKnob->readValue();
+    if (!rb.empty()) {
+      readback = String(rb.c_str());
+      readOk = isKnobLimitDisabledValue(readback);
+    }
+  }
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+
+  if (writeOk && (!g_speedKnob->canRead() || readOk)) {
+    LogDebugFormatted("[BLE] Knob-limit override disabled (value=%s)\n",
+                      readback.length() ? readback.c_str() : OSSM_KNOB_LIMIT_DISABLE_VALUE);
+    return true;
+  }
+
+  LogDebugFormatted("[BLE] Failed to confirm knob-limit override disable (write=%d, readback=%s)\n",
+                    writeOk ? 1 : 0,
+                    readback.length() ? readback.c_str() : "<none>");
+  return false;
+}
 
 static void bleResetClient() {
   g_cmd = nullptr;
@@ -316,9 +359,78 @@ static bool isRealtimeSetCommand(const String& cmd, String* outType = nullptr) {
   return true;
 }
 
+static bool tryParseIntStrict(const String& text, int* outValue) {
+  if (!outValue) return false;
+  if (text.length() == 0) return false;
+
+  char* endPtr = nullptr;
+  long value = strtol(text.c_str(), &endPtr, 10);
+  if (!endPtr || *endPtr != '\0') return false;
+  if (value < INT32_MIN || value > INT32_MAX) return false;
+
+  *outValue = (int)value;
+  return true;
+}
+
+static bool validateBleCommandFormat(const String& cmd) {
+  if (cmd.length() == 0) return false;
+
+  // go:<mode>
+  if (cmd.startsWith("go:")) {
+    return (cmd == "go:menu" ||
+            cmd == "go:streaming" ||
+            cmd == "go:strokeEngine" ||
+            cmd == "go:simplePenetration");
+  }
+
+  // set:<type>:<value>
+  if (cmd.startsWith("set:")) {
+    int typeEnd = cmd.indexOf(':', 4);
+    if (typeEnd <= 4) return false;
+
+    String type = cmd.substring(4, typeEnd);
+    String valueStr = cmd.substring(typeEnd + 1);
+
+    int value = 0;
+    if (!tryParseIntStrict(valueStr, &value)) return false;
+
+    if (type == "pattern") {
+      return value >= 0 && value <= 6;
+    }
+
+    if (type == "speed" || type == "depth" || type == "stroke" || type == "sensation") {
+      return value >= 0 && value <= 100;
+    }
+
+    return false;
+  }
+
+  // stream:<position>:<durationMs>
+  if (cmd.startsWith("stream:")) {
+    int secondColon = cmd.indexOf(':', 7);
+    if (secondColon <= 7) return false;
+
+    String posStr = cmd.substring(7, secondColon);
+    String durStr = cmd.substring(secondColon + 1);
+
+    int pos = 0;
+    int durationMs = 0;
+    if (!tryParseIntStrict(posStr, &pos)) return false;
+    if (!tryParseIntStrict(durStr, &durationMs)) return false;
+
+    return (pos >= 0 && pos <= 100 && durationMs >= 1);
+  }
+
+  return false;
+}
+
 static bool queueCommand(const String& cmd, bool requireConfirm = true) {
   if (cmd.length() == 0) return false;
   if (!g_bleMutex) return false;
+  if (!validateBleCommandFormat(cmd)) {
+    LogDebugFormatted("Rejected invalid BLE command format: %s\n", cmd.c_str());
+    return false;
+  }
 
   String type;
   bool dedupeType = isRealtimeSetCommand(cmd, &type);
@@ -343,6 +455,8 @@ static bool queueCommand(const String& cmd, bool requireConfirm = true) {
   item.isRealtime = dedupeType;
   g_txQueue.push(item);
   xSemaphoreGive(g_bleMutex);
+
+  LogDebugFormatted("Queued BLE command: %s\n", cmd.c_str());
 
   if (g_txSem) xSemaphoreGive(g_txSem);
   return true;
@@ -586,8 +700,7 @@ bool bleCommTryConnect() {
   }
 
   if (g_speedKnob && g_speedKnob->canWrite()) {
-    static const char* independentMode = "false";
-    g_speedKnob->writeValue((uint8_t*)independentMode, strlen(independentMode), true);
+    configureSpeedKnobAsLimitDisabled();
   }
 
   if (g_state && g_state->canNotify()) {
@@ -641,8 +754,11 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
        appCommand == OFF);
 
   if (isMotionControl) {
+    // Streaming mode accepts set: commands directly — no stroke-engine gate needed.
     // Keep fast path cheap: only run full readiness check when mode/state are not already known-good.
-    if (!(hasFreshState() && g_machineMode == MachineMode::StrokeEngine)) {
+    const bool alreadyReady = hasFreshState() &&
+        (g_machineMode == MachineMode::StrokeEngine || g_machineMode == MachineMode::Streaming);
+    if (!alreadyReady) {
       if (!ensureStrokeEngineReady()) return false;
     }
   }
@@ -657,7 +773,8 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
     return bleCommTryConnect();
   }
 
-  if (appCommand == SPEED && !OSSM_On) {
+  // In streaming mode the OSSM manages its own on/off state — don't swallow speed commands.
+  if (appCommand == SPEED && !OSSM_On && g_machineMode != MachineMode::Streaming) {
     bleStoreUnpauseSpeed(value);
     return true;
   }
@@ -733,4 +850,44 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
   const bool isRealtime = (appCommand == SPEED || appCommand == DEPTH || appCommand == STROKE ||
                            appCommand == SENSATION || appCommand == PATTERN);
   return queueCommand(cmd, !isRealtime);
+}
+
+bool bleCommGoToMenu() {
+  return queueCommand("go:menu", true);
+}
+
+bool bleCommGoToStreaming() {
+  return queueCommand("go:streaming", true);
+}
+
+bool bleCommGoToStrokeEngine() {
+  // Safety net: OSSM ignores go:strokeEngine when in streaming mode.
+  // The ScreenHandler flag system normally ensures go:menu was already sent before
+  // this function is called, but queue it here as a belt-and-suspenders guard.
+  if (hasFreshState() && g_machineMode == MachineMode::Streaming) {
+    LogDebugFormatted("[BLE] bleCommGoToStrokeEngine: OSSM in streaming — sending go:menu first\n");
+    queueCommand("go:menu", true);
+  }
+  return queueCommand("go:strokeEngine", true);
+}
+
+bool bleCommSendStreamCommand(int position, int durationMs) {
+  if (!bleCommTryConnect()) return false;
+
+  // Ensure the mode check uses fresh state whenever possible.
+  if (!hasFreshState()) {
+    bleReadStateOnce();
+  }
+
+  if (!(hasFreshState() && g_machineMode == MachineMode::Streaming)) {
+    LogDebug("Streaming command ignored, not in streaming mode");
+    return false;
+  }
+
+  if (position < 0) position = 0;
+  if (position > 100) position = 100;
+  if (durationMs < 1) durationMs = 1;
+
+  String cmd = String("stream:") + String(position) + String(":") + String(durationMs);
+  return queueCommand(cmd, true);
 }

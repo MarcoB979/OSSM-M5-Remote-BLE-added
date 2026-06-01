@@ -3,8 +3,8 @@
 #include <esp_now.h>
 #include <cstring>
 
-#include "../debug.h"
-#include "../config_ids.h"
+#include "../config/debug.h"
+#include "../config/config_ids.h"
 
 namespace {
 

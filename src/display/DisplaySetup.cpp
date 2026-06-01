@@ -2,10 +2,62 @@
 #include <M5Unified.h>
 #include <lvgl.h>
 #include <esp_timer.h>
-#include "../debug.h"
-#include "../styles.h"
+#include <esp_heap_caps.h>
+#include <cstring>
+#include "../config/debug.h"
+#include "../display/styles.h"
 
 extern bool touch_disabled;  // defined in screens/ScreenHandler.cpp
+
+// ---------------------------------------------------------------------------
+// LVGL custom allocator — routes LVGL object allocations to PSRAM so that
+// DMA-capable internal SRAM is preserved for WiFi / BLE / ESP-NOW buffers.
+// Falls back to internal SRAM if PSRAM is unavailable or exhausted.
+// ---------------------------------------------------------------------------
+extern "C" {
+
+void lv_mem_init(void) { /* PSRAM allocator needs no init */ }
+void lv_mem_deinit(void) { /* nothing */ }
+
+lv_mem_pool_t lv_mem_add_pool(void * mem, size_t bytes)
+{
+    LV_UNUSED(mem); LV_UNUSED(bytes); return nullptr;
+}
+void lv_mem_remove_pool(lv_mem_pool_t pool) { LV_UNUSED(pool); }
+
+void lv_mem_monitor_core(lv_mem_monitor_t * mon_p) { LV_UNUSED(mon_p); }
+
+lv_result_t lv_mem_test_core(void) { return LV_RESULT_OK; }
+
+void * lv_malloc_core(size_t size)
+{
+    // Try PSRAM first; fall back to internal SRAM.
+    void * p = heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!p) p = heap_caps_malloc(size, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    return p;
+}
+
+void lv_free_core(void * p)
+{
+    heap_caps_free(p);
+}
+
+void * lv_realloc_core(void * p, size_t new_size)
+{
+    if (!p)          return lv_malloc_core(new_size);
+    if (!new_size)   { heap_caps_free(p); return nullptr; }
+
+    // Allocate the new block (preferring PSRAM), copy, then free old.
+    // This handles cross-heap moves correctly (old in SRAM, new in PSRAM).
+    void * np = lv_malloc_core(new_size);
+    if (!np) return nullptr;
+    const size_t old_size = heap_caps_get_allocated_size(p);
+    memcpy(np, p, (old_size < new_size) ? old_size : new_size);
+    heap_caps_free(p);
+    return np;
+}
+
+} // extern "C"
 
 static constexpr int32_t HOR_RES = 320;
 static constexpr int32_t VER_RES = 240;

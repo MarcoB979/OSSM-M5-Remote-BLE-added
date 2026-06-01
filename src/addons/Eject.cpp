@@ -2,18 +2,19 @@
 
 #include <Arduino.h>
 #include <esp_now.h>
+#include <esp_wifi.h>
 #include <cstring>
 
 #include "main.h"
 #include "language.h"
-#include "colors.h"
+#include "display/colors.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
-#include "styles.h"
-#include "esp_nowCommunication.h"
+#include "display/styles.h"
+#include "communication/esp_nowCommunication.h"
 #include "buttonhandlers/ButtonHandlers.h"
 #include "screens/ScreenHandler.h"
-#include "debug.h"
+#include "config/debug.h"
 extern "C" const int EJECT_ID = 2;
 
 namespace {
@@ -76,12 +77,35 @@ static uint32_t s_last_pairing_heartbeat_ms = 0;
 static int s_peer_id = EJECT_ID;
 static int s_local_id = M5_ID;
 
+static void lockEspNowChannelIfConfigured(const char *reason)
+{
+  if (ESP_NOW_CHANNEL <= 0) {
+    return;
+  }
+
+  uint8_t current = 0;
+  wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
+  if (esp_wifi_get_channel(&current, &second) != ESP_OK) {
+    return;
+  }
+  if ((int)current == ESP_NOW_CHANNEL) {
+    return;
+  }
+
+  esp_wifi_set_promiscuous(true);
+  esp_err_t setResult = esp_wifi_set_channel(ESP_NOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
+  esp_wifi_set_promiscuous(false);
+  LogDebugFormatted("[EJECT][CHAN] %s current=%d target=%d result=%d\n",
+                    reason ? reason : "set",
+                    (int)current,
+                    ESP_NOW_CHANNEL,
+                    (int)setResult);
+}
+
 static bool ensurePeer(const uint8_t *addr)
 {
-  // Do not add the broadcast address as a peer — allow broadcast sends
-  // without creating a peer entry. This avoids registering FF:FF:FF:FF:FF:FF
-  // which can lead to unexpected esp_now behavior.
-  const bool isBroadcast = (addr[0] == 0xFF && addr[1] == 0xFF && addr[2] == 0xFF && addr[3] == 0xFF && addr[4] == 0xFF && addr[5] == 0xFF);
+  const bool isBroadcast = (addr[0] == 0xFF && addr[1] == 0xFF && addr[2] == 0xFF &&
+                            addr[3] == 0xFF && addr[4] == 0xFF && addr[5] == 0xFF);
   if (isBroadcast) {
     return true;
   }
@@ -100,8 +124,12 @@ static bool ensurePeer(const uint8_t *addr)
 static void clearButtonFlags()
 {
   click2_short_waspressed = false;
+  click2_long_waspressed = false;
   mxclick_short_waspressed = false;
+  mxclick_long_waspressed = false;
   click3_short_waspressed = false;
+  click3_long_waspressed = false;
+  click3_double_waspressed = false;
 }
 
 static void screensaver_check_activity()
@@ -229,9 +257,7 @@ static void sendPairingHeartbeatIfNeeded()
   msg.esp_heartbeat = true;
   msg.esp_target = EJECT_ID;
   msg.esp_sender = M5_ID;
-  Serial.printf("ESP-NOW TX: to=%02X:%02X:%02X:%02X:%02X:%02X target=%d cmd=%d sender=%d hb=%d len=%u\n",
-                BROADCAST_ADDR[0], BROADCAST_ADDR[1], BROADCAST_ADDR[2], BROADCAST_ADDR[3], BROADCAST_ADDR[4], BROADCAST_ADDR[5],
-                msg.esp_target, msg.esp_command, msg.esp_sender, msg.esp_heartbeat ? 1 : 0, (unsigned)sizeof(msg));
+  lockEspNowChannelIfConfigured("pair-heartbeat");
   esp_now_send(BROADCAST_ADDR, reinterpret_cast<uint8_t *>(&msg), sizeof(msg));
 }
 
@@ -248,6 +274,7 @@ static void setPairedAddress(const uint8_t *mac)
   memcpy(s_eject_addr, mac, 6);
   if (ensurePeer(s_eject_addr)) {
     s_is_paired = true;
+    LogDebug("eject.cpp - EJECT Paired.");
     LogDebugFormatted("EJECT paired MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
                       s_eject_addr[0], s_eject_addr[1], s_eject_addr[2],
                       s_eject_addr[3], s_eject_addr[4], s_eject_addr[5]);
@@ -280,7 +307,10 @@ static void ensureUiInitialized()
   }
 
   if (ui_EJECTButtonLText != nullptr) {
-    lv_label_set_text(ui_EJECTButtonLText, T_CUM);
+    lv_label_set_text(ui_EJECTButtonLText, T_HOME);
+  }
+  if (ui_EJECTButtonMText != nullptr) {
+    lv_label_set_text(ui_EJECTButtonMText, T_CUM);
   }
 
   createSliderRow(ui_EJECTSettings, &s_speed_label, &s_speed_slider, &s_speed_value, T_CUM_SPEED, -60, 0, 100, 0);
@@ -288,8 +318,8 @@ static void ensureUiInitialized()
   createSliderRow(ui_EJECTSettings, &s_size_label, &s_size_slider, &s_size_value, T_CUM_Volume, 10, 0, 100, 2);
   createSliderRow(ui_EJECTSettings, &s_accel_label, &s_accel_slider, &s_accel_value, T_CUM_Accel, 45, 0, 100, 3);
 
-  if (ui_EJECTButtonL != nullptr) {
-    lv_obj_add_event_cb(ui_EJECTButtonL, onEjectLeftButtonClicked, LV_EVENT_SHORT_CLICKED, nullptr);
+  if (ui_EJECTButtonM != nullptr) {
+    lv_obj_add_event_cb(ui_EJECTButtonM, onEjectLeftButtonClicked, LV_EVENT_SHORT_CLICKED, nullptr);
   }
 
   s_ui_initialized = true;
@@ -351,8 +381,9 @@ static bool applySliderFromEncoder(ESP32Encoder &encoder,
 
 } // namespace
 
-bool EjectIsPaired()
-{
+
+
+bool EjectIsPaired(){
   return s_addon_enabled && s_is_paired;
 }
 
@@ -398,16 +429,13 @@ bool EjectSendCommand(int command, float value)
   msg.esp_target = s_peer_id;
   msg.esp_sender = s_local_id;
 
-  LogDebugFormatted("TX EJECT send cmd=%d val=%.2f target=%d sender=%d to=%02X:%02X:%02X:%02X:%02X:%02X\n",
-                    command, value, msg.esp_target, msg.esp_sender,
-                    s_eject_addr[0], s_eject_addr[1], s_eject_addr[2], s_eject_addr[3], s_eject_addr[4], s_eject_addr[5]);
-  Serial.printf("ESP-NOW TX: to=%02X:%02X:%02X:%02X:%02X:%02X target=%d cmd=%d sender=%d hb=%d len=%u\n",
-                s_eject_addr[0], s_eject_addr[1], s_eject_addr[2], s_eject_addr[3], s_eject_addr[4], s_eject_addr[5],
-                msg.esp_target, msg.esp_command, msg.esp_sender, msg.esp_heartbeat ? 1 : 0, (unsigned)sizeof(msg));
   esp_err_t result = esp_now_send(s_eject_addr, reinterpret_cast<uint8_t *>(&msg), sizeof(msg));
-  Serial.printf("ESP-NOW TX result=%d\n", (int)result);
-  LogDebugFormatted("TX EJECT result=%s err=%d\n", (result == ESP_OK) ? "OK" : "FAIL", (int)result);
-  return (result == ESP_OK);
+  if (result != ESP_OK) {
+    Serial.printf("[EJECT] TX failed result=%d\n", (int)result);
+    return false;
+  }
+  LogDebugFormatted("TX EJECT cmd=%d val=%.2f\n", command, value);
+  return true;
 }
 
 bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
@@ -462,11 +490,11 @@ void EjectHandleScreen(const ButtonEvents &events)
   }
 
   if (events.leftShort) {
-    LogDebug("EJECT UI: leftShort detected -> toggle action");
-    ejectToggleAction();
+    _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
   } else if (events.mxShort) {
-    _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    LogDebug("EJECT UI: mxShort detected -> toggle action");
+    ejectToggleAction();
     clearButtonFlags();
   } else if (events.rightShort) {
     _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);

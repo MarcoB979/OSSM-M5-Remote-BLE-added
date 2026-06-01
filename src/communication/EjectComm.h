@@ -8,3 +8,4 @@ void ejectCommHandleFrame(const uint8_t* mac, const struct_message& msg);
 bool ejectCommIsConnected();
 const uint8_t* ejectCommGetTxAddress();
 bool ejectCommEnsureTxPeer();
+

@@ -1,0 +1,138 @@
+#include "YourAddon.h"
+
+#include <string.h>
+
+#include "../communication/EspNowComm.h"
+#include "../config/debug.h"
+#include "../ui/ui.h"
+
+extern "C" const int YOUR_ADDON_ID = 4;  // Replace with your real ID.
+
+namespace {
+
+static bool s_enabled = true;
+static bool s_paired = false;
+static uint8_t s_peer_mac[6] = {0};
+static lv_obj_t *s_screen = nullptr;
+
+static bool isZeroMac(const uint8_t *mac) {
+  return mac[0] == 0 && mac[1] == 0 && mac[2] == 0 &&
+         mac[3] == 0 && mac[4] == 0 && mac[5] == 0;
+}
+
+static void ensureScreenCreated() {
+  if (s_screen) return;
+
+  // Build your LVGL screen once.
+  s_screen = lv_obj_create(NULL);
+  lv_obj_t *label = lv_label_create(s_screen);
+  lv_label_set_text(label, "Your Addon");
+  lv_obj_center(label);
+}
+
+static bool ensurePeer() {
+  if (!s_paired) {
+    LogDebug("YourAddon: not paired");
+    return false;
+  }
+
+  esp_now_peer_info_t peer = {};
+  memcpy(peer.peer_addr, s_peer_mac, 6);
+  peer.channel = 1;
+  peer.encrypt = false;
+
+  if (!esp_now_is_peer_exist(s_peer_mac)) {
+    esp_err_t add_result = esp_now_add_peer(&peer);
+    if (add_result != ESP_OK) {
+      LogDebugFormatted("YourAddon: add peer failed: %d", (int)add_result);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+}  // namespace
+
+void YourAddonSetAddonEnabled(bool enabled) {
+  s_enabled = enabled;
+}
+
+bool YourAddonIsPaired() {
+  return s_enabled && s_paired;
+}
+
+void YourAddonPrepareScreen() {
+  if (!s_enabled) return;
+  ensureScreenCreated();
+}
+
+lv_obj_t *YourAddonGetScreen() {
+  ensureScreenCreated();
+  return s_screen;
+}
+
+bool YourAddonSendCommand(int command, float value) {
+  if (!s_enabled) return false;
+  if (!ensurePeer()) return false;
+
+  struct_esp_now_message msg = {};
+  msg.esp_target = YOUR_ADDON_ID;
+  msg.esp_sender = M5_ID;
+  msg.esp_command = command;
+  msg.esp_value = value;
+  msg.esp_connected = true;
+
+  esp_err_t result = esp_now_send(s_peer_mac, (uint8_t *)&msg, sizeof(msg));
+  if (result != ESP_OK) {
+    LogDebugFormatted("YourAddon: send failed: %d", (int)result);
+    return false;
+  }
+  return true;
+}
+
+bool YourAddonHandleIncomingEspNowFrame(const uint8_t *mac,
+                                        int target,
+                                        int sender,
+                                        int command,
+                                        float value,
+                                        bool heartbeat) {
+  (void)target;
+  (void)command;
+  (void)value;
+  (void)heartbeat;
+
+  if (!s_enabled || !mac) return false;
+  if (sender != YOUR_ADDON_ID) return false;
+  if (isZeroMac(mac)) return false;
+
+  // Pair to the first valid sender frame from this addon.
+  memcpy(s_peer_mac, mac, 6);
+  s_paired = true;
+
+  // TODO: Decode incoming commands and update addon UI/state.
+  return true;
+}
+
+void YourAddonHandleScreen(const ButtonEvents &events) {
+  if (!s_enabled) return;
+
+  // TODO: Map physical button actions for your addon.
+  if (events.leftShort) {
+    // Example: send preset command 1.
+    (void)YourAddonSendCommand(1, 0.0f);
+  }
+  if (events.mxShort) {
+    // Example: send preset command 2.
+    (void)YourAddonSendCommand(2, 0.0f);
+  }
+  if (events.rightShort) {
+    // Example: send preset command 3.
+    (void)YourAddonSendCommand(3, 0.0f);
+  }
+}
+
+extern "C" void YourAddonHandleScreen(const struct ButtonEvents *events) {
+  if (!events) return;
+  YourAddonHandleScreen(*events);
+}

@@ -13,8 +13,8 @@
 #include <Arduino.h>
 #include <Preferences.h>
 
-#include "colors.h"
-#include "styles.h"
+#include "display/colors.h"
+#include "display/styles.h"
 #include "language.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
@@ -27,6 +27,11 @@ int g_active_color_scheme = 0;
 // ---------------------------------------------------------------------------
 lv_obj_t   *ui_Colors   = nullptr;
 lv_group_t *ui_g_colors = nullptr;
+
+// Battery widget for colors screen (slot 9 — referenced by ScreenHandler battery arrays)
+lv_obj_t *ui_Batt9      = nullptr;
+lv_obj_t *ui_BattValue9 = nullptr;
+lv_obj_t *ui_Battery9   = nullptr;
 
 static constexpr int VISIBLE_SCHEME_COUNT = 5;
 static lv_obj_t *s_schemeBtn[VISIBLE_SCHEME_COUNT] = {};
@@ -401,6 +406,12 @@ static void ev_backBtn(lv_event_t *e) {
     }
 }
 
+static void ev_selectBtn(lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
+        colorSchemeSelectIndex(s_focus_scheme_index);
+    }
+}
+
 static void ev_colorsScreen(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
         colorSchemeScreenLoaded();
@@ -491,4 +502,46 @@ extern "C" void colors_ui_screen_init() {
     lv_obj_set_align(backLbl, LV_ALIGN_CENTER);
     lv_label_set_text(backLbl, T_BACK);
     lv_obj_add_style(backLbl, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ---- Select button (bottom-right, mirrors back button) ----
+    lv_obj_t *s_selectBtn = lv_btn_create(ui_Colors);
+    lv_obj_set_width (s_selectBtn, 100);
+    lv_obj_set_height(s_selectBtn, 30);
+    lv_obj_set_y(s_selectBtn, 100);
+    lv_obj_set_x(s_selectBtn, lv_pct(33));
+    lv_obj_set_align(s_selectBtn, LV_ALIGN_CENTER);
+    lv_obj_clear_flag(s_selectBtn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_style(s_selectBtn, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_event_cb(s_selectBtn, ev_selectBtn, LV_EVENT_SHORT_CLICKED, NULL);
+
+    lv_obj_t *selectLbl = lv_label_create(s_selectBtn);
+    lv_obj_set_align(selectLbl, LV_ALIGN_CENTER);
+    lv_label_set_text(selectLbl, T_SELECT);
+    lv_obj_add_style(selectLbl, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    // ---- Battery widget (top-right, slot 9) ----
+    ui_Batt9 = lv_label_create(ui_Colors);
+    lv_obj_set_width(ui_Batt9, 85);
+    lv_obj_set_height(ui_Batt9, 30);
+    lv_obj_set_x(ui_Batt9, 115);
+    lv_obj_set_y(ui_Batt9, -103);
+    lv_obj_set_align(ui_Batt9, LV_ALIGN_CENTER);
+    lv_label_set_text(ui_Batt9, T_BATT);
+    lv_obj_add_style(ui_Batt9, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_BattValue9 = lv_label_create(ui_Batt9);
+    lv_obj_set_width(ui_BattValue9, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_BattValue9, LV_SIZE_CONTENT);
+    lv_obj_set_x(ui_BattValue9, 0);
+    lv_obj_set_y(ui_BattValue9, -7);
+    lv_obj_set_align(ui_BattValue9, LV_ALIGN_RIGHT_MID);
+    lv_label_set_text(ui_BattValue9, T_BLANK);
+    lv_obj_add_style(ui_BattValue9, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    ui_Battery9 = lv_bar_create(ui_Batt9);
+    lv_bar_set_range(ui_Battery9, 0, 100);
+    lv_obj_set_size(ui_Battery9, 75, 8);
+    lv_obj_set_align(ui_Battery9, LV_ALIGN_BOTTOM_MID);
+    lv_obj_add_style(ui_Battery9, &style_battery_main, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_Battery9, &style_battery_indicator, LV_PART_INDICATOR | LV_STATE_DEFAULT);
 }

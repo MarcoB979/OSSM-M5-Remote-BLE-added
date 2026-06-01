@@ -10,7 +10,7 @@
 #include "language.h"
 #include "strokeMode.h"
 #include "main.h"
-#include "styles.h"
+#include "display/styles.h"
 #include "communication/EspNowComm.h"
 #include "screens/ScreenHandler.h"
 
@@ -76,7 +76,7 @@ void refreshStrokeStartStopUi() {
         lv_label_set_text(s_ButtonMText, T_STOP);
     } else {
         lv_obj_add_style(s_ButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_label_set_text(s_ButtonMText, T_START);
+        lv_label_set_text(s_ButtonMText, T_RESUME);
     }
 }
 
@@ -167,6 +167,8 @@ void ui_Stroke_screen_init() {
 
     // Widen sensation slider a bit to show symmetrical mode properly
     if (ui_StrokeSensationSlider) lv_obj_set_width(ui_StrokeSensationSlider, 170);
+    // Hide the numeric value label for sensation (not needed in bator mode)
+    if (ui_StrokeSensationValue) lv_obj_add_flag(ui_StrokeSensationValue, LV_OBJ_FLAG_HIDDEN);
 
     // ---- Battery display (top-right, slot 7 — Stroke screen exclusive) ----
     ui_Batt7 = lv_label_create(ui_Stroke);

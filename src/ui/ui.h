@@ -94,6 +94,7 @@ extern lv_obj_t * ui_Streaming;
 extern lv_obj_t * ui_streamingspeedslider;
 extern lv_obj_t * ui_streamingdepthslider;
 extern lv_obj_t * ui_streamingstrokeslider;
+extern lv_obj_t * ui_streamingsensationslider;
 extern lv_obj_t * ui_StreamingButtonL;
 extern lv_obj_t * ui_StreamingButtonM;
 extern lv_obj_t * ui_StreamingButtonR;
@@ -101,6 +102,9 @@ extern lv_obj_t * ui_LogoStreaming;
 extern lv_obj_t * ui_Batt8;
 extern lv_obj_t * ui_BattValue8;
 extern lv_obj_t * ui_Battery8;
+extern lv_obj_t * ui_Batt9;
+extern lv_obj_t * ui_BattValue9;
+extern lv_obj_t * ui_Battery9;
 extern lv_obj_t * ui_Addons;
 extern lv_obj_t * ui_AddonsButtonL;
 extern lv_obj_t * ui_AddonsButtonM;
@@ -125,6 +129,9 @@ extern lv_obj_t * ui_BattValue5;
 extern lv_obj_t * ui_Battery5;
 extern lv_obj_t * ui_Label4;
 extern lv_obj_t * ui_PatternS;
+extern lv_obj_t * ui_PatternBand0;
+extern lv_obj_t * ui_PatternBand1;
+extern lv_obj_t * ui_PatternBand2;
 extern lv_obj_t * ui_Torqe;
 extern lv_obj_t * ui_Logo4;
 extern lv_obj_t * ui_TorqeButtonL;
@@ -179,6 +186,8 @@ extern lv_group_t * ui_g_settings;
 void screenmachine(lv_event_t * e);
 void connectbutton(lv_event_t * e);
 void ejectcreampie(lv_event_t * e);
+void pullOut(lv_event_t * e);
+void emergencyStop(lv_event_t * e);
 void homebuttonmevent(lv_event_t * e);
 void setupDepthInter(lv_event_t * e);
 void setupdepthF(lv_event_t * e);
@@ -194,9 +203,9 @@ void ui_Addons_screen_init(void);
 void addonsMoveSelection(int delta);
 void addonsActivateSelection(void);
 void addonsSyncSelectionVisual(void);
-void addonsHandleEjectScreen(void);
-void addonsHandleFistScreen(void);
 void refreshStrokeStartStopUi(void);
+void RestartM5();
+
 
 LV_IMG_DECLARE(image50x50);    // assets\logo.svg
 

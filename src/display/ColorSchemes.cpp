@@ -1,7 +1,7 @@
 // ColorSchemes.cpp — COLOR_SCHEMES array definition
 // Kept separate from colors.cpp so the large initializer is easy to edit.
 
-#include "colors.h"
+#include "display/colors.h"
 
 const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
     // { name, title_bar, button_l, button_m, button_r,
