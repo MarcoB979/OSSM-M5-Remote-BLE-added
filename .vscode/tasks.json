@@ -324,6 +324,56 @@
 				"$gcc"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Build CYD (esp32dev)",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"esp32dev"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"label": "Build esp32dev cyd-compat-check",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"esp32dev"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build esp32dev cyd-compat-check pass2",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"esp32dev"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build cores3 cyd-compat-regression-check",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"--environment",
+				"m5stack-cores3"
+			],
+			"group": "build"
 		}
 	]
 }
