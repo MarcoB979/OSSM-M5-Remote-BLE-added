@@ -2,6 +2,8 @@
 #include <M5Unified.h>
 #include <lvgl.h>
 #include <esp_timer.h>
+#include <esp_heap_caps.h>
+#include <cstring>
 #include "../config/debug.h"
 #include "../display/styles.h"
 
