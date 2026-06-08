@@ -11,7 +11,9 @@
 #include "addons/FistIT.h"
 #include "communication/EspNowComm.h"
 #include "communication/BleComm.h"
+#include "platform/PlatformCompat.h"
 #include <Preferences.h>
+#include "../config/debug.h"
 
 // Extra globals exposed through ui.h
 lv_obj_t *ui_StreamingButtonM = nullptr;
@@ -28,7 +30,7 @@ static lv_obj_t *s_streaming_speed_val = nullptr;
 static lv_obj_t *s_streaming_depth_val = nullptr;
 static lv_obj_t *s_streaming_stroke_val = nullptr;
 static lv_obj_t *s_streaming_sensation_val = nullptr;
-static bool s_streaming_paused = false;
+static bool s_streaming_paused = true;
 
 static lv_obj_t *s_addons_btn_l_text = nullptr;
 static lv_obj_t *s_addons_btn_m_text = nullptr;
@@ -242,6 +244,21 @@ static void refresh_addons_labels() {
     }
 }
 
+void addonsMoveSelection(int delta) {
+    buildEnabledList();
+    const int count = s_addons_manage_mode ? NUM_ADDONS : s_enabled_count;
+    if (count <= 0 || delta == 0) {
+        addonsSyncSelectionVisual();
+        return;
+    }
+
+    s_addons_selected += delta;
+    if (s_addons_selected < 0) s_addons_selected = 0;
+    if (s_addons_selected >= count) s_addons_selected = count - 1;
+
+    addonsSyncSelectionVisual();
+}
+
 void addonsSyncSelectionVisual(void) {
     buildEnabledList();
     const int count = s_addons_manage_mode ? NUM_ADDONS : s_enabled_count;
@@ -275,215 +292,91 @@ void addonsSyncSelectionVisual(void) {
     refresh_addons_labels();
 }
 
-void addonsMoveSelection(int delta) {
-    if (delta == 0) return;
-    const int count = s_addons_manage_mode ? NUM_ADDONS : s_enabled_count;
-    if (count == 0) return;
-    s_addons_selected += delta;
-    while (s_addons_selected < 0)      s_addons_selected += count;
-    while (s_addons_selected >= count) s_addons_selected -= count;
-    addonsSyncSelectionVisual();
-}
-
-static void fistUpdateValues() {
-    setSliderLabelInt(s_fist_speed_val, s_fist_speed);
-    setSliderLabelInt(s_fist_rot_val, s_fist_rot);
-    setSliderLabelInt(s_fist_pause_val, s_fist_pause);
-    setSliderLabelInt(s_fist_accel_val, s_fist_accel);
-    if (s_fist_btn_l_text) lv_label_set_text(s_fist_btn_l_text, s_fist_on ? T_PAUSE : T_START);
-}
-
-static void ejectUpdateValues() {
-    setSliderLabelInt(s_eject_speed_val, s_eject_speed);
-    setSliderLabelInt(s_eject_time_val, s_eject_time);
-    setSliderLabelInt(s_eject_size_val, s_eject_size);
-    setSliderLabelInt(s_eject_accel_val, s_eject_accel);
-    if (ui_EJECTButtonMText) lv_label_set_text(ui_EJECTButtonMText, s_eject_on ? T_PAUSE : T_CUM);
-}
-
-static void createSliderRow(lv_obj_t *parent,
-                            lv_obj_t **rowLabel,
-                            lv_obj_t **rowSlider,
-                            lv_obj_t **rowValue,
-                            const char *labelText,
-                            int y,
-                            int minValue,
-                            int maxValue,
-                            int slot) {
-    *rowLabel = lv_label_create(parent);
-    lv_obj_set_width(*rowLabel, lv_pct(95));
-    lv_obj_set_height(*rowLabel, LV_SIZE_CONTENT);
-    lv_obj_set_x(*rowLabel, 0);
-    lv_obj_set_y(*rowLabel, y);
-    lv_obj_set_align(*rowLabel, LV_ALIGN_CENTER);
-    lv_label_set_text(*rowLabel, labelText);
-    lv_obj_set_style_text_font(*rowLabel, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_style(*rowLabel, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    *rowSlider = lv_slider_create(*rowLabel);
-    lv_slider_set_range(*rowSlider, minValue, maxValue);
-    lv_slider_set_value(*rowSlider, minValue, LV_ANIM_OFF);
-    lv_obj_set_width(*rowSlider, 130);
-    lv_obj_set_height(*rowSlider, 10);
-    lv_obj_set_x(*rowSlider, -15);
-    lv_obj_set_y(*rowSlider, 0);
-    lv_obj_set_align(*rowSlider, LV_ALIGN_RIGHT_MID);
-    lv_obj_add_style(*rowSlider, &style_slider_track[slot], LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_style(*rowSlider, &style_slider_indicator[slot], LV_PART_INDICATOR | LV_STATE_DEFAULT);
-    lv_obj_add_style(*rowSlider, &style_slider_indicator[slot], LV_PART_KNOB | LV_STATE_DEFAULT);
-
-    *rowValue = lv_label_create(*rowLabel);
-    lv_obj_set_width(*rowValue, LV_SIZE_CONTENT);
-    lv_obj_set_height(*rowValue, LV_SIZE_CONTENT);
-    lv_obj_set_x(*rowValue, 85);
-    lv_obj_set_y(*rowValue, 0);
-    lv_obj_set_align(*rowValue, LV_ALIGN_LEFT_MID);
-    lv_label_set_text(*rowValue, "0");
-    lv_obj_add_style(*rowValue, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(*rowValue, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
-}
-
-static void fistToggle() {
-    ButtonEvents events = { true, false, false };
-    FistITHandleScreen(events);
-}
-
-static void ejectToggle() {
-    ButtonEvents events = { true, false, false };
-    EjectHandleScreen(events);
-}
-
-static lv_timer_t *s_streaming_cmd_timer = NULL;
-static lv_timer_t *s_streaming_init_timer = NULL;
 static bool s_streaming_init_completed = false;
+static bool s_streaming_init_cancelled = false;
 
-enum StreamingInitPhase {
-    STREAM_INIT_IDLE = 0,
-    STREAM_INIT_SEND_DEPTH,
-    STREAM_INIT_SEND_STROKE,
-    STREAM_INIT_SEND_SENSATION,
-    STREAM_INIT_RAMP_SPEED_SLOW,
-    STREAM_INIT_RAMP_SPEED_FAST,
-    STREAM_INIT_SEND_DEPTH_MAX,
-    STREAM_INIT_SEND_STROKE_MAX,
-    STREAM_INIT_SEND_STREAM_MOVE,
-};
-
-static StreamingInitPhase s_streaming_init_phase = STREAM_INIT_IDLE;
-static int s_streaming_ramp_speed = 0;
-
-static void stop_streaming_init_sequence() {
-    if (s_streaming_init_timer) {
-        lv_timer_delete(s_streaming_init_timer);
-        s_streaming_init_timer = NULL;
-    }
-    s_streaming_init_phase = STREAM_INIT_IDLE;
-    s_streaming_ramp_speed = 0;
+static void serviceStreamingWaitSlice() {
+    platformUpdate();
+    lv_task_handler();
+    Button1.tick();
+    Button2.tick();
+    Button3.tick();
+    vTaskDelay(pdMS_TO_TICKS(20));
 }
 
-static void streaming_init_sequence_cb(lv_timer_t *t) {
-    (void)t;
-
-    // Safety: if user already left the streaming screen, stop all pending sends.
-    if (lv_scr_act() != ui_Streaming) {
-        stop_streaming_init_sequence();
-        return;
+static bool waitForStreamingCondition(bool (*predicate)(), uint32_t timeoutMs) {
+    const uint32_t startMs = millis();
+    while ((millis() - startMs) < timeoutMs) {
+        if (s_streaming_init_cancelled) return false;
+        if (lv_scr_act() != ui_Streaming) return false;
+        if (predicate && predicate()) return true;
+        serviceStreamingWaitSlice();
     }
-
-    switch (s_streaming_init_phase) {
-        case STREAM_INIT_SEND_DEPTH:
-            SendCommand(DEPTH, 0.0f, OSSM_ID);
-            s_streaming_init_phase = STREAM_INIT_SEND_STROKE;
-            lv_timer_set_period(s_streaming_init_timer, 200);
-            break;
-
-        case STREAM_INIT_SEND_STROKE:
-            SendCommand(STROKE, 0.0f, OSSM_ID);
-            s_streaming_init_phase = STREAM_INIT_SEND_SENSATION;
-            lv_timer_set_period(s_streaming_init_timer, 200);
-            break;
-
-        case STREAM_INIT_SEND_SENSATION:
-            SendCommand(SENSATION, 50.0f, OSSM_ID);
-            SendCommand(SPEED, 0.0f, OSSM_ID);
-            s_streaming_ramp_speed = 0;
-            s_streaming_init_phase = STREAM_INIT_RAMP_SPEED_FAST;
-            lv_timer_set_period(s_streaming_init_timer, 500);
-            break;
-
-        case STREAM_INIT_RAMP_SPEED_FAST:
-            if (s_streaming_ramp_speed < 25) {
-                s_streaming_ramp_speed = 25;
-            } else {
-                s_streaming_ramp_speed += 25;
-            }
-            if (s_streaming_ramp_speed > 100) s_streaming_ramp_speed = 100;
-            SendCommand(SPEED, (float)s_streaming_ramp_speed, OSSM_ID);
-            if (s_streaming_ramp_speed >= 100) {
-                s_streaming_init_phase = STREAM_INIT_SEND_DEPTH_MAX;
-                lv_timer_set_period(s_streaming_init_timer, 200);
-            }
-            break;
-
-        case STREAM_INIT_SEND_DEPTH_MAX:
-            SendCommand(DEPTH, 100.0f, OSSM_ID);
-            s_streaming_init_phase = STREAM_INIT_SEND_STROKE_MAX;
-            lv_timer_set_period(s_streaming_init_timer, 200);
-            break;
-
-        case STREAM_INIT_SEND_STROKE_MAX:
-            SendCommand(STROKE, 100.0f, OSSM_ID);
-            s_streaming_init_phase = STREAM_INIT_SEND_STREAM_MOVE;
-            lv_timer_set_period(s_streaming_init_timer, 500);
-            break;
-
-        case STREAM_INIT_SEND_STREAM_MOVE:
-            // Move rail to max depth over 5s to finish init sequence.
-            bleCommSendStreamCommand(100, 5000);
-            s_streaming_init_completed = true;
-            stop_streaming_init_sequence();
-            break;
-
-        case STREAM_INIT_IDLE:
-        default:
-            stop_streaming_init_sequence();
-            break;
-    }
-}
-
-static void start_streaming_init_sequence() {
-    stop_streaming_init_sequence();
-    s_streaming_init_completed = false;
-    s_streaming_init_phase = STREAM_INIT_SEND_DEPTH;
-    // Required: wait 500ms after go:streaming before sending values.
-    s_streaming_init_timer = lv_timer_create(streaming_init_sequence_cb, 500, NULL);
-}
-
-static void streaming_goto_streaming_cb(lv_timer_t *t) {
-    (void)t;
-    bleCommGoToStreaming();
-    start_streaming_init_sequence();
-    s_streaming_cmd_timer = NULL;
+    return false;
 }
 
 void streamingBeginInitSequence() {
-    s_streaming_init_completed = false;
-    bleCommGoToMenu();
-    stop_streaming_init_sequence();
-    if (s_streaming_cmd_timer) {
-        lv_timer_delete(s_streaming_cmd_timer);
-        s_streaming_cmd_timer = NULL;
+    if (bleCommIsMenu()) {
+        // If we're already in menu mode, we can skip straight to go:streaming without the intermediate go:menu step, which saves time and avoids an unnecessary screen flash.
+        LogDebug("Already in menu mode, skipping go:menu step");
+    } else {
+        // Ensure we're in menu mode before going to streaming, otherwise the OSSM won't accept the go:streaming command. This also ensures the OSSM is homed and ready to enter streaming mode.
+        LogDebug("Not in menu mode, sending go:menu command first");
+        bleCommGoToMenu();
+        waitForStreamingCondition(bleCommEnsureStrokeEngineReady, 10000);
     }
-    s_streaming_cmd_timer = lv_timer_create(streaming_goto_streaming_cb, 200, NULL);
-    lv_timer_set_repeat_count(s_streaming_cmd_timer, 1);
+    bleCommGoToStreaming();
+    waitForStreamingCondition(bleCommEnsureStrokeEngineReady, 10000);
+    
+    const uint32_t streamingWaitStartMs = millis();
+    while (!s_streaming_init_cancelled && lv_scr_act() == ui_Streaming &&
+           bleCommGetMachineStateName(true) != "streaming") {
+        if ((millis() - streamingWaitStartMs) > 30000U) {
+            LogDebug("Timed out waiting for streaming state");
+            return;
+        }
+        LogDebug("Waiting for streaming state...");
+        waitForStreamingCondition(nullptr, 500);
+    }
+    
+
+
+    SendCommand(ON, 100.0f, OSSM_ID);
+    SendCommand(SPEED, 100.0f, OSSM_ID);
+    SendCommand(DEPTH, 100.0f, OSSM_ID);
+    SendCommand(STROKE, 100.0f, OSSM_ID);
+    SendCommand(SENSATION, 50.0f, OSSM_ID);
+//    for (int rampSpeed = 25; rampSpeed <= 100 && !s_streaming_init_cancelled; rampSpeed += 25) {
+//        SendCommand(SPEED, (float)rampSpeed, OSSM_ID);
+//        if (rampSpeed < 100) {
+//            waitForStreamingCondition(nullptr, 250);
+//        }
+//    }
+
+    //insert code here that if ui_StreamingButtonM is pressed then send event streambuttonm
+
+
+    delay(100);  // Extra delay to ensure OSSM is ready for commands after entering streaming mode
+    if (ui_StreamingButtonM) {
+        lv_obj_send_event(ui_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
+    }    
+//    delay(100);  // Extra delay to ensure OSSM is ready for commands after entering streaming mode
+//    if (ui_StreamingButtonM) {
+//        lv_obj_send_event(ui_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
+//    }    
+//    delay(100);  // Extra delay to ensure OSSM is ready for commands after entering streaming mode
+//    if (ui_StreamingButtonM) {
+//        lv_obj_send_event(ui_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
+//    }    
+//    delay(100);  // Extra delay to ensure OSSM is ready for commands after entering streaming mode
+
+    bleCommSendStreamCommand(100,10000);
+    s_streaming_init_completed = true;  
 }
 
+
 void streamingCancelInitSequence() {
-    if (s_streaming_cmd_timer) {
-        lv_timer_delete(s_streaming_cmd_timer);
-        s_streaming_cmd_timer = NULL;
-    }
-    stop_streaming_init_sequence();
+    s_streaming_init_cancelled = true;
     s_streaming_init_completed = false;
 }
 
@@ -629,7 +522,11 @@ static void event_fist_screen(lv_event_t *e) {
 }
 
 static void event_fist_btn_l(lv_event_t *e) {
-    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) fistToggle();
+    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
+        ButtonEvents events = {};
+        events.leftShort = true;
+        FistITHandleScreen(events);
+    }
 }
 
 static void event_fist_btn_m(lv_event_t *e) {
@@ -645,7 +542,11 @@ static void event_fist_btn_r(lv_event_t *e) {
 }
 
 static void event_eject_btn_l(lv_event_t *e) {
-    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) ejectToggle();
+    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
+        ButtonEvents events = {};
+        events.leftShort = true;
+        EjectHandleScreen(events);
+    }
 }
 
 static void ensureEjectUiInitialized() {

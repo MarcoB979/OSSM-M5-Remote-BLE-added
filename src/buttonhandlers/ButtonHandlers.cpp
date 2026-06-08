@@ -5,10 +5,10 @@
 // ---------------------------------------------------------------------------
 
 #include "ButtonHandlers.h"
-#include <M5Unified.h>
 #include <lvgl.h>
 #include "../ui/ui.h"        // for ui_vibrate
 #include "../config/config_pins.h"  // for ENC_x_CLK/DT pin defines (no object definitions)
+#include "../platform/PlatformCompat.h"
 
 // ---------------------------------------------------------------------------
 // Button press state flags
@@ -27,9 +27,9 @@ bool click3_double_waspressed  = false;
 // ---------------------------------------------------------------------------
 void vibrate(int vbr_Intensity, int vbr_Length) {
     if (lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED) == 1) {
-        M5.Power.setVibration(vbr_Intensity);
+        platformSetVibration((uint8_t)vbr_Intensity);
         vTaskDelay(vbr_Length);
-        M5.Power.setVibration(0);
+        platformSetVibration(0);
     }
 }
 

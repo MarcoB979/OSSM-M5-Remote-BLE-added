@@ -61,12 +61,16 @@ static void ui_event_Stroke(lv_event_t *e) {
     }
 }
 
-static void s_stroke_btn_l_cb(lv_event_t * /*e*/) {
-    _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+static void s_stroke_btn_l_cb(lv_event_t *e) { //} /*e*/) {
+    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
+        _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    }
 }
 
-static void s_stroke_btn_r_cb(lv_event_t * /*e*/) {
-    _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+static void s_stroke_btn_r_cb(lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
+        _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    }
 }
 
 void refreshStrokeStartStopUi() {

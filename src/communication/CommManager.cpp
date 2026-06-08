@@ -172,7 +172,7 @@ void connectbutton(lv_event_t* e) {
   }
   delay(2000);
   LogDebug("Attempting to connect...");
-  if (ui_connect) lv_label_set_text(ui_connect, T_AUTOCONNECTING);
+//  if (ui_connect) lv_label_set_text(ui_connect, T_AUTOCONNECTING);
   if (ui_Welcome) lv_label_set_text(ui_Welcome, T_AUTOCONNECTING);
   lv_refr_now(NULL);  // force immediate render — lv_task_handler() is re-entrant-blocked inside an event callback
 
@@ -181,7 +181,7 @@ void connectbutton(lv_event_t* e) {
 
     g_failedAttempts = 0;
     setMode(COMM_MODE_ESPNOW);
-    if (ui_connect) lv_label_set_text(ui_connect, T_ESPCONNECTED);
+//    if (ui_connect) lv_label_set_text(ui_connect, T_ESPCONNECTED);
     if (ui_Welcome) lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
     lv_refr_now(NULL);
     lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
@@ -191,7 +191,7 @@ void connectbutton(lv_event_t* e) {
 
   // ── Tier 2: BLE fallback ────────────────────────────────────────────────
   LogDebug("ESP-NOW connect failed, trying BLE...");
-  if (ui_connect) lv_label_set_text(ui_connect, T_SEARCHING_BLE);
+//  if (ui_connect) lv_label_set_text(ui_connect, T_SEARCHING_BLE);
   if (ui_Welcome) lv_label_set_text(ui_Welcome, T_SEARCHING_BLE);
   lv_refr_now(NULL);
   // BLE is initialised lazily so the BLE controller is offline during the
@@ -202,7 +202,7 @@ void connectbutton(lv_event_t* e) {
     LogDebug("BLE device found, connecting...");
     setMode(COMM_MODE_BLE);
     LogDebug("BLE connection established");
-    if (ui_connect) lv_label_set_text(ui_connect, T_BLECONNECTED);
+//    if (ui_connect) lv_label_set_text(ui_connect, T_BLECONNECTED);
     if (ui_Welcome) lv_label_set_text(ui_Welcome, T_BLECONNECTED);
     lv_refr_now(NULL);
     LogDebug("Loading ui_Menu...");
@@ -244,7 +244,7 @@ void connectbutton(lv_event_t* e) {
 */  
    else {
     // First failure: prompt the user to try once more before the sweep.
-    if (ui_connect) lv_label_set_text(ui_connect, T_FAILED);
+//    if (ui_connect) lv_label_set_text(ui_connect, T_FAILED);
     if (ui_Welcome) lv_label_set_text(ui_Welcome, T_FAILED);
     lv_refr_now(NULL);
   }

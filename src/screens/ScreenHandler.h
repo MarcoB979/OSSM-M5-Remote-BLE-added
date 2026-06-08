@@ -44,6 +44,7 @@ extern bool  rstate;
 // ---- Lifecycle ----
 void screenInit();     // Load NVS settings and apply to UI; call after ui_init() + buttonInit()
 void handleScreens();  // Battery display + screen state machine + flag clear; call from loop()
+void screenRequestStatusStripRefresh();
 
 // ---- Screensaver / Power management ----
 extern int            g_brightness_value;

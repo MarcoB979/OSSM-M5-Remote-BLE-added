@@ -1,5 +1,4 @@
 #include "ScreenHandler.h"
-#include <M5Unified.h>
 #include <lvgl.h>
 #include <Preferences.h>
 #include <esp_sleep.h>
@@ -24,6 +23,7 @@
 #include "../addons/addonsStreaming.h"
 #include "../icons.h"
 #include "language.h"
+#include <M5Unified.h>
 
 // Screen resolution constants (same as backup firmware main.h)
 #ifndef HOR_RES
@@ -92,6 +92,7 @@ uint32_t       deep_sleep_timeout_ms    = DEEP_SLEEP_TIMEOUT_MS_DEFAULT;
 
 // Notification touch result (set by LVGL button callbacks inside showNotification)
 static volatile int g_notification_touch_result = NOTIFICATION_RESULT_NONE;
+static volatile bool g_status_strip_refresh_requested = true;
 
 static unsigned long nowMs      = 0;
 static int           rampMs     = 0;
@@ -257,10 +258,18 @@ static void updateStatusStrip() {
     if (bleCommIsConnected()) appendToken(LV_SYMBOL_BLUETOOTH);
     if (espNowIsPaired()) appendToken(LV_SYMBOL_WIFI);
     if (bleCommIsHoming()) {
+        LogDebug("BLE is homing - adding direction indicator to status strip");
         int dir = bleCommGetHomingDirection();
         if (dir > 0) appendToken(LV_SYMBOL_UP);
         else if (dir < 0) appendToken(LV_SYMBOL_DOWN);
+//        if (dir > 0) appendToken("H");
+//        else if (dir < 0) appendToken("H");
+//        if (dir > 0) appendToken(LV_SYMBOL_NEXT);
+//        else if (dir < 0) appendToken(LV_SYMBOL_PREV);
+//        if (dir > 0) appendToken(LV_SYMBOL_UPLOAD);
+//        else if (dir < 0) appendToken(LV_SYMBOL_DOWNLOAD);
     }
+
     if (labelText[0] == '\0') {
         snprintf(labelText, sizeof(labelText), " ");
     }
@@ -302,6 +311,10 @@ static void updateStatusStrip() {
             }
         }
     }
+}
+
+void screenRequestStatusStripRefresh() {
+    g_status_strip_refresh_requested = true;
 }
 
 static int rangeFromLimit(float limitValue) {
@@ -527,6 +540,7 @@ int showNotification(const char *title,
 
     lv_obj_t *titleLabel = lv_label_create(titleBar);
     lv_label_set_text(titleLabel, (title != nullptr && title[0] != '\0') ? title : "Notification");
+    lv_obj_set_style_text_align(titleLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(titleLabel, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(titleLabel, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_center(titleLabel);
@@ -535,9 +549,10 @@ int showNotification(const char *title,
     lv_obj_set_width(bodyLabel, lv_pct(90));
     lv_label_set_long_mode(bodyLabel, LV_LABEL_LONG_WRAP);
     lv_label_set_text(bodyLabel, (text != nullptr) ? text : "");
-    lv_obj_set_style_text_color(bodyLabel, lv_color_hex(schemeTextSecondary), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_align(bodyLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_color(bodyLabel, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(bodyLabel, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(bodyLabel, LV_ALIGN_TOP_MID, 0, 48);
+    lv_obj_align(bodyLabel, LV_ALIGN_TOP_MID,0, 38);
 
     if (hasButtons) {
         lv_obj_t *buttonRow = lv_obj_create(panel);
@@ -719,7 +734,7 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
 static bool detectChargingNow()
 {
     auto chargingState = M5.Power.isCharging();
-    if (chargingState == m5::Power_Class::is_charging)    return true;
+    if (chargingState == m5::Power_Class::is_charging) return true;
     if (chargingState == m5::Power_Class::is_discharging) return false;
     // Fallback for unsupported/unknown PMIC charging state.
     return M5.Power.getBatteryCurrent() > 15;
@@ -1274,7 +1289,42 @@ static void checkBleDisconnectError()
 // -------------------------------------------------------
 void handleScreens() {
     checkBleDisconnectError();
-    updateStatusStrip();
+
+    {
+        static bool s_prev_ble_connected = false;
+        static bool s_prev_espnow_paired = false;
+        static bool s_prev_eject_paired = false;
+        static bool s_prev_fist_paired = false;
+        static bool s_prev_homing = false;
+        static int  s_prev_homing_dir = 0;
+
+        const bool bleConnected = bleCommIsConnected();
+        const bool espNowPaired = espNowIsPaired();
+        const bool ejectPaired = espNowIsEjectConnected();
+        const bool fistPaired = espNowIsFistConnected();
+        const bool isHoming = bleCommIsHoming();
+        const int homingDir = isHoming ? bleCommGetHomingDirection() : 0;
+
+        if (bleConnected != s_prev_ble_connected ||
+            espNowPaired != s_prev_espnow_paired ||
+            ejectPaired != s_prev_eject_paired ||
+            fistPaired != s_prev_fist_paired ||
+            isHoming != s_prev_homing ||
+            homingDir != s_prev_homing_dir) {
+            g_status_strip_refresh_requested = true;
+        }
+
+        if (g_status_strip_refresh_requested) {
+            updateStatusStrip();
+            g_status_strip_refresh_requested = false;
+            s_prev_ble_connected = bleConnected;
+            s_prev_espnow_paired = espNowPaired;
+            s_prev_eject_paired = ejectPaired;
+            s_prev_fist_paired = fistPaired;
+            s_prev_homing = isHoming;
+            s_prev_homing_dir = homingDir;
+        }
+    }
 
     // ---- Battery display (icon + percentage, same as backup firmware) ----
     const bool isCharging = getStableChargingState();
@@ -1653,6 +1703,14 @@ void handleScreens() {
             if (ui_streamingstrokeslider) lv_slider_set_value(ui_streamingstrokeslider, 100, LV_ANIM_OFF);
             if (ui_streamingsensationslider) lv_slider_set_value(ui_streamingsensationslider, 50, LV_ANIM_OFF);
             streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+
+                        showNotification(
+                T_STREAMING_CAUTION_TITLE,
+                T_STREAMING_CAUTION_TEXT,
+                0,
+                true, T_DONE,
+                false, nullptr,
+                false);
 
             showNotification(
                 T_STREAMING_ACTIVE_TITLE,

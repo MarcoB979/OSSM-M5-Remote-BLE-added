@@ -1,5 +1,4 @@
 #pragma GCC optimize ("Ofast")
-#include <M5Unified.h>
 #include <ESP32Encoder.h>
 #include <Arduino.h>
 #include <Wire.h>
@@ -17,6 +16,7 @@
 #include "communication/CommManager.h"
 #include "screens/ScreenHandler.h"
 #include "display/DisplaySetup.h"
+#include <M5Unified.h>
 
 // Shared state (defined here, declared extern in main.h)
 bool dark_mode = false;
@@ -34,7 +34,6 @@ ESP32Encoder encoder4;
 void setup(){
   auto cfg = M5.config();
   M5.begin(cfg);
-  
   M5.Power.setChargeCurrent(BATTERY_CHARGE_CURRENT);
   LogDebug("\n Starting");      // Start LogDebug
 

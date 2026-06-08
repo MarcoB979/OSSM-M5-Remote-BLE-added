@@ -232,11 +232,6 @@ static void ui_event_Start(lv_event_t * e)
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_SCREEN_LOADED) {
         screenmachine(e);
-        if (!s_start_auto_connected) {
-            s_start_auto_connected = true;
-            lv_timer_t *t = lv_timer_create(auto_connect_timer_cb, 300, NULL);
-            lv_timer_set_repeat_count(t, 1);
-        }
     }
 }
 static void ui_event_StartButtonL(lv_event_t * e)
@@ -1090,6 +1085,7 @@ void ui_Home_screen_init(void)
 void ui_Menu_screen_init(void)
 {
     ui_Menu = lv_obj_create(NULL);
+
     lv_obj_clear_flag(ui_Menu, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_event_cb(ui_Menu, ui_event_Menu, LV_EVENT_ALL, NULL);
 
@@ -2321,5 +2317,6 @@ void ui_init(void)
     ui_Streaming_screen_init();
     ui_Addons_screen_init();
     colors_ui_screen_init();
+
     lv_disp_load_scr(ui_Start);
 }
