@@ -624,12 +624,15 @@ void FistITHandleScreen(const ButtonEvents &events)
   refreshValueLabels();
 
   if (events.leftShort) {
+    LogDebug("FistIT: Left short click - returning to Home screen");
     _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
   } else if (events.mxShort) {
+    LogDebug("FistIT: Middle short click - toggling on/off");
     toggleOnOff();
     clearButtonFlags();
   } else if (events.rightShort) {
+    LogDebug("FistIT: Right short click - returning to Menu screen");
     _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
   }

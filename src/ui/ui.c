@@ -4,6 +4,7 @@
 #include "ui_helpers.h"
 #include "main.h"
 #include "language.h"
+#include <Arduino.h>
 #include "../display/styles.h"
 #include "../display/colors.h"
 #include "../addons/addonsStreaming.h"
@@ -271,12 +272,14 @@ static void ui_event_HomeButtonL(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_LONG_PRESSED) {
+        printf("HomeButtonL long pressed - ejecting");
         if (addonsIsEjectEnabled()) {
           _ui_screen_change(ui_ejectaddon, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
           ejectcreampie(e);
           screenmachine(e);
         }
     } else if(event == LV_EVENT_CLICKED){
+        printf("HomeButtonL clicked - pulling out");
         pullOut(e);
         screenmachine(e);
     }
@@ -289,6 +292,7 @@ static void ui_event_HomeButtonM(lv_event_t * e)
         emergencyStop(e);
         screenmachine(e);
     } else if(event == LV_EVENT_CLICKED) {
+        printf("HomeButtonM clicked - toggling on/off\n");
         homebuttonmevent(e);
     }
 }
@@ -297,9 +301,11 @@ static void ui_event_HomeButtonR(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
+        printf("HomeButtonR clicked - returning to Home screen\n");
         g_pattern_return_screen = ui_Home;
         _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     } else if(event == LV_EVENT_LONG_PRESSED){
+        printf("HomeButtonR long pressed - checking for FistIT addon\n");
         if (addonsIsFistITEnabled()) {
             _ui_screen_change(ui_FistIT, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
         }
@@ -337,12 +343,12 @@ static void ui_event_MenuButtonMR(lv_event_t * e)
 static void ui_event_MenuButtonL(lv_event_t * e)
 {
     if(lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED)
-        _ui_screen_change(ui_Colors, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); //was ui_home
+        lv_obj_send_event(lv_group_get_focused(ui_g_menu), LV_EVENT_SHORT_CLICKED, NULL);
 }
 static void ui_event_MenuButtonM(lv_event_t * e)
 {
     if(lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED)
-        lv_obj_send_event(lv_group_get_focused(ui_g_menu), LV_EVENT_SHORT_CLICKED, NULL);
+        _ui_screen_change(ui_Colors, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); //was ui_home
 }
 static void ui_event_MenuButtonR(lv_event_t * e)
 {
@@ -464,14 +470,14 @@ static void ui_event_SettingsButtonM(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 90, 0);
+        _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 90, 0);
     }
 }
 static void ui_event_SettingsButtonR(lv_event_t * e)
 {
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_CLICKED) {
+    if(event == LV_EVENT_LONG_PRESSED) {
         _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
@@ -1176,7 +1182,7 @@ void ui_Menu_screen_init(void)
 
     ui_MenuButtonLText = lv_label_create(ui_MenuButtonL);
     lv_obj_set_align(ui_MenuButtonLText, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_MenuButtonLText, T_SCREEN_COLORS);
+    lv_label_set_text(ui_MenuButtonLText, T_SELECT);
     applyTextPrimaryStyle(ui_MenuButtonLText);
 
     ui_MenuButtonM = lv_btn_create(ui_Menu);
@@ -1191,7 +1197,7 @@ void ui_Menu_screen_init(void)
 
     ui_MenuButtonMText = lv_label_create(ui_MenuButtonM);
     lv_obj_set_align(ui_MenuButtonMText, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_MenuButtonMText, T_SELECT);
+    lv_label_set_text(ui_MenuButtonMText, T_SCREEN_COLORS);
     applyTextPrimaryStyle(ui_MenuButtonMText);
 
     ui_MenuButtonR = lv_btn_create(ui_Menu);
@@ -1244,8 +1250,6 @@ void ui_Menu_screen_init(void)
     lv_group_add_obj(ui_g_menu, ui_MenuButtonML);
     lv_group_add_obj(ui_g_menu, ui_MenuButtonMR);
 }
-
-
 void ui_Pattern_screen_init(void)
 {
 
@@ -2077,7 +2081,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_SettingsButtonMText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SettingsButtonMText, T_HOME);
+    lv_label_set_text(ui_SettingsButtonMText, T_MENU);
     applyTextPrimaryStyle(ui_SettingsButtonMText);
 
     // ui_SettingsButtonR
@@ -2110,7 +2114,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_SettingsButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SettingsButtonRText, T_MENU);
+    lv_label_set_text(ui_SettingsButtonRText, T_SELECT " / " T_MENU);
     applyTextPrimaryStyle(ui_SettingsButtonRText);
 
     // ui_Batt1

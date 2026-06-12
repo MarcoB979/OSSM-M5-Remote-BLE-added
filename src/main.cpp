@@ -20,6 +20,7 @@
 
 // Shared state (defined here, declared extern in main.h)
 bool dark_mode = false;
+bool AtStartup = true;
 
 // Shared numeric limits (defined here, declared extern in main.h)
 float maxdepthinmm = 400.0f;

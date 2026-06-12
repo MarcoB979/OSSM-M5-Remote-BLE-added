@@ -1159,6 +1159,16 @@ void emergencyStop(lv_event_t * e) {
 }
 
 void ejectcreampie(lv_event_t * e) {
+    if (!EjectIsPaired) {
+        showNotification(
+            "Eject Addon Not Paired",
+            "Please pair the Eject Addon in the Addons menu before using this function.",
+            3000,
+            false, nullptr,
+            false, nullptr,
+            false);
+        return;
+    }
     if (EJECT_On == true) {
         lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
         SendCommand(ON, 0.0, EJECT_ID);    
@@ -1187,16 +1197,16 @@ void savepattern(lv_event_t * e) {
 }
 
 void homebuttonmevent(lv_event_t * e) {
-    LogDebug("HomeButton");
+    LogDebug("HomeButtonMevent");
     if (OSSM_On == false) {
-        lv_label_set_text(ui_HomeButtonMText, T_STOP);
-        lv_obj_add_style(ui_HomeButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+//        lv_label_set_text(ui_HomeButtonMText, T_STOP);
+//        lv_obj_add_style(ui_HomeButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+//        lv_obj_add_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
         SendCommand(ON, 0.0, OSSM_ID);
     } else {
-        lv_label_set_text(ui_HomeButtonMText, T_RESUME);
-        lv_obj_add_style(ui_HomeButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+//        lv_label_set_text(ui_HomeButtonMText, T_RESUME);
+//        lv_obj_add_style(ui_HomeButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+//        lv_obj_add_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
         SendCommand(OFF, 0.0, OSSM_ID);
     }
 }
@@ -1346,6 +1356,10 @@ void handleScreens() {
         } else if (click3_short_waspressed) {
             lv_obj_send_event(ui_StartButtonR, LV_EVENT_CLICKED, NULL);
         }
+        if (AtStartup) {
+            connectbutton(nullptr);
+             AtStartup = false;
+        }
     }
     break;
 
@@ -1396,7 +1410,7 @@ void handleScreens() {
                 changed = true; speed -= rampValue;
                 encoder1.setCount(0); rampMs = millis(); encId = 1;
             }
-            if (speed < 0)          { changed = true; speed = 0; }
+            if (speed < 0)          { changed = true; speed = 0; OSSM_On = false; }
             if (speed > speedlimit) { changed = true; speed = speedlimit; }
             if (changed) { SendCommand(SPEED, speed, OSSM_ID); }
         } else if (lv_slider_get_value(ui_homespeedslider) != speed) {
@@ -1422,7 +1436,7 @@ void handleScreens() {
                 }
                 encoder2.setCount(0); rampMs = millis(); encId = 2;
             }
-            if (depth < 0)            { changed = true; depth = 0; }
+            if (depth < 0)            { changed = true; depth = 0; OSSM_On = false; }
             if (depth > maxdepthinmm) { changed = true; depth = maxdepthinmm; }
             if (changed) {
                 SendCommand(DEPTH,  depth,  OSSM_ID);
@@ -1449,7 +1463,7 @@ void handleScreens() {
                 changed = true; stroke += invertStroke ? -rampValue : rampValue;
                 encoder3.setCount(0); rampMs = millis(); encId = 3;
             }
-            if (stroke < 0)            { changed = true; stroke = 0; }
+            if (stroke < 0)            { changed = true; stroke = 0; OSSM_On = false; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
             if (changed) {
                 SendCommand(STROKE, stroke, OSSM_ID);
@@ -1484,6 +1498,16 @@ void handleScreens() {
             sensation = lv_slider_get_value(ui_homesensationslider);
             SendCommand(SENSATION, sensation, OSSM_ID);
         }
+        if (OSSM_On == false) {
+            lv_label_set_text(ui_HomeButtonMText, T_RESUME);
+            lv_obj_add_style(ui_HomeButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_add_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+        } else {
+            lv_label_set_text(ui_HomeButtonMText, T_STOP);
+            lv_obj_add_style(ui_HomeButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_add_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+        }
+
         if (click2_short_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);}
         if (click2_long_waspressed) {
@@ -1613,14 +1637,14 @@ void handleScreens() {
             if (changed) {
                 char sv[7]; dtostrf(stroke, 6, 0, sv);
                 if (ui_StrokeStrokeValue) lv_label_set_text(ui_StrokeStrokeValue, sv);
-                depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
+                depth = (maxdepthinmm / 2.0f) + (stroke / 2.0f);
                 if (depth < 0.0f) depth = 0.0f;
                 SendCommand(STROKE, stroke, OSSM_ID);
                 SendCommand(DEPTH,  depth,  OSSM_ID);
             }
         } else if (ui_StrokeStrokeSlider && lv_slider_get_value(ui_StrokeStrokeSlider) != (int)stroke) {
             stroke = lv_slider_get_value(ui_StrokeStrokeSlider);
-            depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
+            depth = (maxdepthinmm / 2.0f) + (stroke / 2.0f);
             if (depth < 0.0f) depth = 0.0f;
             SendCommand(STROKE, stroke, OSSM_ID);
             SendCommand(DEPTH,  depth,  OSSM_ID);
@@ -1647,6 +1671,18 @@ void handleScreens() {
         } else if (ui_StrokeSensationSlider && lv_slider_get_value(ui_StrokeSensationSlider) != (int)sensation) {
             sensation = lv_slider_get_value(ui_StrokeSensationSlider);
             SendCommand(SENSATION, sensation, OSSM_ID);
+        }
+
+        if ((speed == 0 || stroke == 0 || depth == 0) and changed) {
+            lv_label_set_text(ui_HomeButtonMText, T_RESUME);
+            lv_obj_add_style(ui_HomeButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_add_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+//            OSSM_On = false;
+        } else {
+            lv_label_set_text(ui_HomeButtonMText, T_STOP);
+            lv_obj_add_style(ui_HomeButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_add_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+//            OSSM_On = true;
         }
 
         if (click2_short_waspressed) {

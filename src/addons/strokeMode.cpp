@@ -75,13 +75,16 @@ static void s_stroke_btn_r_cb(lv_event_t *e) {
 
 void refreshStrokeStartStopUi() {
     if (!s_ButtonM || !s_ButtonMText) return;
-    if (OSSM_On) {
-        lv_obj_add_style(s_ButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (OSSM_On == false) {
         lv_label_set_text(s_ButtonMText, T_STOP);
+        lv_obj_add_style(s_ButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(s_ButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
     } else {
-        lv_obj_add_style(s_ButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_label_set_text(s_ButtonMText, T_RESUME);
+        lv_obj_add_style(s_ButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(s_ButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
     }
+
 }
 
 // ---------------------------------------------------------------------------

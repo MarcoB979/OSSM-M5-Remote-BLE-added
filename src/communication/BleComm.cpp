@@ -13,7 +13,7 @@
 #include "../main.h"
 #include "../screens/ScreenHandler.h"
 
-bool showBlePollSerial = false;
+bool showBlePollSerial = true;  // Set to true to enable serial output of BLE state polls (for debugging);
 
 namespace {
 
@@ -200,6 +200,9 @@ static void updateCachedMachineState(const String& stateRaw) {
   maxdepthinmm = 100.0f;
   speedlimit = 100.0f;
   g_lastStateUpdateMs = millis();
+
+  // Defer LVGL work to the UI loop; this only sets the refresh request flag.
+  screenRequestStatusStripRefresh();
 }
 
 static bool hasFreshState() {
@@ -612,7 +615,9 @@ bool bleCommIsEnabled() {
 }
 
 bool bleCommIsHoming() {
-  return hasFreshState() && g_machineMode == MachineMode::Homing;
+
+  //return hasFreshState() && g_machineMode == MachineMode::Homing;
+  return g_machineMode == MachineMode::Homing;
 }
 
 int bleCommGetHomingDirection() {
