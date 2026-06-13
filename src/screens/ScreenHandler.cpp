@@ -104,9 +104,11 @@ static int           encId      = 0;
 static int           activeEncId = 0;
 
 static constexpr int EJECT_ICON_W = 20;
-static constexpr int EJECT_ICON_H = 21;
+static constexpr int EJECT_ICON_H = 22;
 static constexpr int FIST_ICON_W = 18;
-static constexpr int FIST_ICON_H = 23;
+static constexpr int FIST_ICON_H = 22;
+static constexpr int HOME_ICON_W = 18;
+static constexpr int HOME_ICON_H = 22;
 
 static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
   "....................",
@@ -115,6 +117,7 @@ static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
   ".####..######..####.",
   "..###...####...###..",
   "....#.....#.....#...",
+  "....................",
   "....................",
   "........#####.......",
   "......##..#..##.....",
@@ -155,9 +158,32 @@ static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
   "..##........##....",
   "...##.......##....",
   "....#########.....",
-  "..................",
 };
 
+static const char* const HOME_ICON_MASK[HOME_ICON_H] = {
+  "........##........",
+  "......######......",
+  "....###....###....",
+  "..###...##...###..",
+  "###...######...###",
+  "....###....###....",
+  "..###........###..",
+  "###............###",
+  ".......####.......",
+  ".......####.......",
+  ".......####.......",
+  ".......####.......",
+  ".......####.......",
+  ".......####.......",
+  "###............###",
+  "..###........###..",
+  "....###....###....",
+  "###...######...###",
+  "..###...##...###..",
+  "....###....###....",
+  "......######......",
+  "........##........",
+};
 
 
 static lv_obj_t* createStatusIconBase(lv_obj_t* parent, int width, int height) {
@@ -192,10 +218,21 @@ static lv_obj_t* createStatusFistIcon(lv_obj_t* parent) {
     return icon;
 }
 
+static lv_obj_t* createStatusHomeIcon(lv_obj_t* parent) {
+    static uint8_t iconBuffer[LV_CANVAS_BUF_SIZE(32, 32, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+    static bool iconReady = false;
+    lv_obj_t* icon = createStatusIconBase(parent, HOME_ICON_W, HOME_ICON_H);
+    if (!icon) return nullptr;
+    icons_render_mask_canvas(icon, iconBuffer, iconReady, HOME_ICON_MASK, HOME_ICON_W, HOME_ICON_H,
+                             getActiveBackgroundColor(), getActiveTextPrimaryColor());
+    return icon;
+}
+
 static void updateStatusStrip() {
     static lv_obj_t* statusLabels[12] = { nullptr };
     static lv_obj_t* statusEjectIcons[12] = { nullptr };
     static lv_obj_t* statusFistIcons[12] = { nullptr };
+    static lv_obj_t* statusHomeIcons[12] = { nullptr };
     lv_obj_t* statusScreens[12] = {
         ui_Start,
         ui_Home,
@@ -236,6 +273,9 @@ static void updateStatusStrip() {
         if (statusFistIcons[i] == nullptr) {
             statusFistIcons[i] = createStatusFistIcon(statusScreens[i]);
         }
+        if (statusHomeIcons[i] == nullptr) {
+            statusHomeIcons[i] = createStatusHomeIcon(statusScreens[i]);
+        }
     }
 
     char labelText[48];
@@ -257,7 +297,7 @@ static void updateStatusStrip() {
 
     if (bleCommIsConnected()) appendToken(LV_SYMBOL_BLUETOOTH);
     if (espNowIsPaired()) appendToken(LV_SYMBOL_WIFI);
-    if (bleCommIsHoming()) {
+/*    if (bleCommIsHoming()) {
         LogDebug("BLE is homing - adding direction indicator to status strip");
         int dir = bleCommGetHomingDirection();
         if (dir > 0) appendToken(LV_SYMBOL_UP);
@@ -269,7 +309,7 @@ static void updateStatusStrip() {
 //        if (dir > 0) appendToken(LV_SYMBOL_UPLOAD);
 //        else if (dir < 0) appendToken(LV_SYMBOL_DOWNLOAD);
     }
-
+*/
     if (labelText[0] == '\0') {
         snprintf(labelText, sizeof(labelText), " ");
     }
@@ -288,6 +328,17 @@ static void updateStatusStrip() {
 
         int iconX = 10 + lv_obj_get_width(label) + 4;
 
+        if (statusFistIcons[i] != nullptr) {
+            lv_obj_set_align(statusFistIcons[i], LV_ALIGN_LEFT_MID);
+            lv_obj_set_x(statusFistIcons[i], iconX);
+            lv_obj_set_y(statusFistIcons[i], -102);
+            if (fistPaired) {
+                lv_obj_clear_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
+            } else {
+                lv_obj_add_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+ 
         if (statusEjectIcons[i] != nullptr) {
             lv_obj_set_align(statusEjectIcons[i], LV_ALIGN_LEFT_MID);
             lv_obj_set_x(statusEjectIcons[i], iconX);
@@ -300,14 +351,14 @@ static void updateStatusStrip() {
             }
         }
 
-        if (statusFistIcons[i] != nullptr) {
-            lv_obj_set_align(statusFistIcons[i], LV_ALIGN_LEFT_MID);
-            lv_obj_set_x(statusFistIcons[i], iconX);
-            lv_obj_set_y(statusFistIcons[i], -102);
-            if (fistPaired) {
-                lv_obj_clear_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
+        if (statusHomeIcons[i] != nullptr) {
+            lv_obj_set_align(statusHomeIcons[i], LV_ALIGN_LEFT_MID);
+            lv_obj_set_x(statusHomeIcons[i], iconX);
+            lv_obj_set_y(statusHomeIcons[i], -102);
+            if (bleCommIsHoming()) {
+                lv_obj_clear_flag(statusHomeIcons[i], LV_OBJ_FLAG_HIDDEN);
             } else {
-                lv_obj_add_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(statusHomeIcons[i], LV_OBJ_FLAG_HIDDEN);
             }
         }
     }
@@ -1159,16 +1210,6 @@ void emergencyStop(lv_event_t * e) {
 }
 
 void ejectcreampie(lv_event_t * e) {
-    if (!EjectIsPaired) {
-        showNotification(
-            "Eject Addon Not Paired",
-            "Please pair the Eject Addon in the Addons menu before using this function.",
-            3000,
-            false, nullptr,
-            false, nullptr,
-            false);
-        return;
-    }
     if (EJECT_On == true) {
         lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
         SendCommand(ON, 0.0, EJECT_ID);    
@@ -1197,16 +1238,16 @@ void savepattern(lv_event_t * e) {
 }
 
 void homebuttonmevent(lv_event_t * e) {
-    LogDebug("HomeButtonMevent");
+    LogDebug("HomeButton");
     if (OSSM_On == false) {
-//        lv_label_set_text(ui_HomeButtonMText, T_STOP);
-//        lv_obj_add_style(ui_HomeButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
-//        lv_obj_add_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_label_set_text(ui_HomeButtonMText, T_STOP);
+        lv_obj_add_style(ui_HomeButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
         SendCommand(ON, 0.0, OSSM_ID);
     } else {
-//        lv_label_set_text(ui_HomeButtonMText, T_RESUME);
-//        lv_obj_add_style(ui_HomeButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-//        lv_obj_add_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_label_set_text(ui_HomeButtonMText, T_RESUME);
+        lv_obj_add_style(ui_HomeButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
         SendCommand(OFF, 0.0, OSSM_ID);
     }
 }
@@ -1356,9 +1397,9 @@ void handleScreens() {
         } else if (click3_short_waspressed) {
             lv_obj_send_event(ui_StartButtonR, LV_EVENT_CLICKED, NULL);
         }
-        if (AtStartup) {
+        if (AtStartup){
             connectbutton(nullptr);
-             AtStartup = false;
+            AtStartup = false;
         }
     }
     break;
@@ -1410,7 +1451,7 @@ void handleScreens() {
                 changed = true; speed -= rampValue;
                 encoder1.setCount(0); rampMs = millis(); encId = 1;
             }
-            if (speed < 0)          { changed = true; speed = 0; OSSM_On = false; }
+            if (speed < 0)          { changed = true; speed = 0; }
             if (speed > speedlimit) { changed = true; speed = speedlimit; }
             if (changed) { SendCommand(SPEED, speed, OSSM_ID); }
         } else if (lv_slider_get_value(ui_homespeedslider) != speed) {
@@ -1436,7 +1477,7 @@ void handleScreens() {
                 }
                 encoder2.setCount(0); rampMs = millis(); encId = 2;
             }
-            if (depth < 0)            { changed = true; depth = 0; OSSM_On = false; }
+            if (depth < 0)            { changed = true; depth = 0; }
             if (depth > maxdepthinmm) { changed = true; depth = maxdepthinmm; }
             if (changed) {
                 SendCommand(DEPTH,  depth,  OSSM_ID);
@@ -1463,7 +1504,7 @@ void handleScreens() {
                 changed = true; stroke += invertStroke ? -rampValue : rampValue;
                 encoder3.setCount(0); rampMs = millis(); encId = 3;
             }
-            if (stroke < 0)            { changed = true; stroke = 0; OSSM_On = false; }
+            if (stroke < 0)            { changed = true; stroke = 0; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
             if (changed) {
                 SendCommand(STROKE, stroke, OSSM_ID);
@@ -1498,16 +1539,6 @@ void handleScreens() {
             sensation = lv_slider_get_value(ui_homesensationslider);
             SendCommand(SENSATION, sensation, OSSM_ID);
         }
-        if (OSSM_On == false) {
-            lv_label_set_text(ui_HomeButtonMText, T_RESUME);
-            lv_obj_add_style(ui_HomeButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_add_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-        } else {
-            lv_label_set_text(ui_HomeButtonMText, T_STOP);
-            lv_obj_add_style(ui_HomeButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_add_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
-        }
-
         if (click2_short_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);}
         if (click2_long_waspressed) {
@@ -1540,6 +1571,9 @@ void handleScreens() {
                 dynamicStroke = false;
             }
             if (stroke >= depth) stroke = depth;
+        }
+        if(speed > 0 and stroke > 0 and depth > 0 and changed) {
+           lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
         }
     }
     break;
@@ -1637,14 +1671,14 @@ void handleScreens() {
             if (changed) {
                 char sv[7]; dtostrf(stroke, 6, 0, sv);
                 if (ui_StrokeStrokeValue) lv_label_set_text(ui_StrokeStrokeValue, sv);
-                depth = (maxdepthinmm / 2.0f) + (stroke / 2.0f);
+                depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
                 if (depth < 0.0f) depth = 0.0f;
                 SendCommand(STROKE, stroke, OSSM_ID);
                 SendCommand(DEPTH,  depth,  OSSM_ID);
             }
         } else if (ui_StrokeStrokeSlider && lv_slider_get_value(ui_StrokeStrokeSlider) != (int)stroke) {
             stroke = lv_slider_get_value(ui_StrokeStrokeSlider);
-            depth = (maxdepthinmm / 2.0f) + (stroke / 2.0f);
+            depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
             if (depth < 0.0f) depth = 0.0f;
             SendCommand(STROKE, stroke, OSSM_ID);
             SendCommand(DEPTH,  depth,  OSSM_ID);
@@ -1671,18 +1705,6 @@ void handleScreens() {
         } else if (ui_StrokeSensationSlider && lv_slider_get_value(ui_StrokeSensationSlider) != (int)sensation) {
             sensation = lv_slider_get_value(ui_StrokeSensationSlider);
             SendCommand(SENSATION, sensation, OSSM_ID);
-        }
-
-        if ((speed == 0 || stroke == 0 || depth == 0) and changed) {
-            lv_label_set_text(ui_HomeButtonMText, T_RESUME);
-            lv_obj_add_style(ui_HomeButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_add_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-//            OSSM_On = false;
-        } else {
-            lv_label_set_text(ui_HomeButtonMText, T_STOP);
-            lv_obj_add_style(ui_HomeButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_add_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
-//            OSSM_On = true;
         }
 
         if (click2_short_waspressed) {
@@ -1734,10 +1756,10 @@ void handleScreens() {
             streamingResetPause();
             s_was_paused = false;
             paused = false;
-            if (ui_streamingspeedslider)  lv_slider_set_value(ui_streamingspeedslider,  100, LV_ANIM_OFF);
-            if (ui_streamingdepthslider)  lv_slider_set_value(ui_streamingdepthslider,  100, LV_ANIM_OFF);
-            if (ui_streamingstrokeslider) lv_slider_set_value(ui_streamingstrokeslider, 100, LV_ANIM_OFF);
-            if (ui_streamingsensationslider) lv_slider_set_value(ui_streamingsensationslider, 50, LV_ANIM_OFF);
+            if (ui_streamingspeedslider)  lv_slider_set_value(ui_streamingspeedslider,  s_str_speed, LV_ANIM_OFF);
+            if (ui_streamingdepthslider)  lv_slider_set_value(ui_streamingdepthslider,  s_str_depth, LV_ANIM_OFF);
+            if (ui_streamingstrokeslider) lv_slider_set_value(ui_streamingstrokeslider, s_str_stroke, LV_ANIM_OFF);
+            if (ui_streamingsensationslider) lv_slider_set_value(ui_streamingsensationslider, s_str_sensation, LV_ANIM_OFF);
             streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
 
                         showNotification(
@@ -1748,6 +1770,8 @@ void handleScreens() {
                 false, nullptr,
                 false);
 
+
+            streamingBeginInitSequence();
             showNotification(
                 T_STREAMING_ACTIVE_TITLE,
                 T_STREAMING_ACTIVE_TEXT,
@@ -1755,8 +1779,6 @@ void handleScreens() {
                 true, T_CONFIRM,
                 false, nullptr,
                 false);
-
-            streamingBeginInitSequence();
             s_waiting_for_running_notice = true;
         }
 
@@ -1787,14 +1809,14 @@ void handleScreens() {
             if (ch) {
                 lv_slider_set_value(ui_streamingspeedslider, (int)s_str_speed, LV_ANIM_OFF);
                 streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(SPEED*-1, s_str_speed, OSSM_ID);
+                if (!paused) SendCommand(SPEED, s_str_speed, OSSM_ID);
             }
         } else if (ui_streamingspeedslider) {
             int sv = lv_slider_get_value(ui_streamingspeedslider);
             if (sv != (int)s_str_speed) {
                 s_str_speed = sv;
                 streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(SPEED*-1, s_str_speed, OSSM_ID);
+                if (!paused) SendCommand(SPEED, s_str_speed, OSSM_ID);
             }
         }
 
@@ -1866,11 +1888,18 @@ void handleScreens() {
 
         // Pause/resume transition: send SPEED=0 on pause, resend all values on resume
         if (!s_was_paused && paused) {
+            streamingRememberResumeSpeed(s_str_speed);
+            LogDebug("Streaming paused, did not send speed");
             SendCommand(SPEED, 0.0f, OSSM_ID);
         } else if (s_was_paused && !paused) {
-            SendCommand(SPEED,  s_str_speed,  OSSM_ID);
-            SendCommand(DEPTH,  s_str_depth,  OSSM_ID);
-            SendCommand(STROKE, s_str_stroke, OSSM_ID);
+            const float resumeSpeed = streamingGetResumeSpeed();
+            if (resumeSpeed > 0.0f) {
+                s_str_speed = resumeSpeed;
+            }
+            SendCommand(ON,      resumeSpeed, OSSM_ID);
+            SendCommand(SPEED,   resumeSpeed, OSSM_ID);
+            SendCommand(DEPTH,   s_str_depth,  OSSM_ID);
+            SendCommand(STROKE,  s_str_stroke,  OSSM_ID);
             SendCommand(SENSATION, s_str_sensation, OSSM_ID);
         }
         s_was_paused = paused;

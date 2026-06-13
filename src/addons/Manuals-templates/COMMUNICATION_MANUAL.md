@@ -224,7 +224,7 @@ Side effects from state updates:
 - `OSSM_On` is derived from parsed speed (> 0.5 means on).
 - BLE control ranges are normalized to percent scale (`maxdepthinmm=100`, `speedlimit=100`).
 
-## 8.5 Motion-command gate (`ensureStrokeEngineReady`)
+## 8.5 Motion-command gate (`ensureStrokeEngineOrStreamingReady`)
 
 Before motion commands, BLE path verifies OSSM is ready.
 
@@ -236,7 +236,7 @@ Behavior:
 4. If setting `ble_force_homeing` is enabled and mode is not menu/homing:
    - send `go:menu`
    - wait up to 2 s to reach menu/homing.
-5. If currently homing, wait for completion (`waitForStrokeEngineReady`, up to 6 s).
+5. If currently homing, wait for completion (`waitForStrokeEngineOrStreamingReady`, up to 6 s).
 6. Send `go:strokeEngine` (retry once on transient fail).
 7. Wait up to 10 s for confirmed `StrokeEngine`.
 
@@ -401,7 +401,7 @@ BLE disconnect guard (`checkBleDisconnectError`):
 - Confirmation wait path reduces blind-fire command behavior.
 
 ### BLE motion safety
-- Motion commands gated by `ensureStrokeEngineReady()`.
+- Motion commands gated by `ensureStrokeEngineOrStreamingReady()`.
 - Fresh-state requirement before mode decisions.
 - Optional force-homing path when `ble_force_homeing` is enabled.
 - Stroke zero/non-zero transitions preserve resume-speed intent safely.

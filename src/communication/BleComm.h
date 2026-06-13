@@ -26,7 +26,7 @@ bool bleCommIsMenu();
 bool bleCommGoToMenu();
 bool bleCommGoToStreaming();
 bool bleCommGoToStrokeEngine();
-bool bleCommEnsureStrokeEngineReady();
+bool bleCommEnsureStrokeEngineOrStreamingReady();
 String bleCommGetMachineStateName(bool lowerCase);
 
 // Unified BLE streaming command bridge.

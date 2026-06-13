@@ -13,7 +13,8 @@ void addonsActivateSelection(void);
 void addonsSyncSelectionVisual(void);
 bool addonsIsFistITEnabled(void);
 bool addonsIsEjectEnabled(void);
-
+bool ejectPaired(void);
+bool FistITPaired(void);
 #ifdef __cplusplus
 }
 #endif
@@ -24,6 +25,8 @@ void streamingUpdateValueLabels(float spd, float dep, float str, float sen);
 // Pause state — managed by addonsStreaming.cpp, polled by ScreenHandler
 bool streamingIsPaused();
 void streamingResetPause();
+void streamingRememberResumeSpeed(float speed);
+float streamingGetResumeSpeed();
 // Start/cancel the streaming BLE init sequence and consume completion signal.
 void streamingBeginInitSequence();
 void streamingCancelInitSequence();

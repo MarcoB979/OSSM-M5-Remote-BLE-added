@@ -31,6 +31,8 @@ static lv_obj_t *s_streaming_depth_val = nullptr;
 static lv_obj_t *s_streaming_stroke_val = nullptr;
 static lv_obj_t *s_streaming_sensation_val = nullptr;
 static bool s_streaming_paused = true;
+static float s_streaming_resume_speed = 100.0f;
+static uint32_t s_streaming_last_toggle_ms = 0;
 
 static lv_obj_t *s_addons_btn_l_text = nullptr;
 static lv_obj_t *s_addons_btn_m_text = nullptr;
@@ -200,6 +202,14 @@ bool addonsIsEjectEnabled(void) {
 }
 
 
+bool ejectPaired(void) {
+    return espNowIsEjectConnected();
+}
+
+bool FistITPaired(void) {
+    return espNowIsFistConnected();
+}
+
 // ── Manage-mode enter / exit ──────────────────────────────────────────────────
 static void enterManageMode() {
     s_addons_manage_mode = true;
@@ -315,63 +325,83 @@ static bool waitForStreamingCondition(bool (*predicate)(), uint32_t timeoutMs) {
     return false;
 }
 
+static bool streamingStateIsMenuOrHoming() {
+    const String state = bleCommGetMachineStateName(true);
+    return state.startsWith("menu") || state.startsWith("homing");
+}
+
+static bool streamingStateIsHoming() {
+    return bleCommGetMachineStateName(true).startsWith("homing");
+}
+
+static bool streamingStateIsHomingOrStrokeEngineOrStreaming() {
+    const String state = bleCommGetMachineStateName(true);
+    return state.startsWith("homing") || state.startsWith("strokeengine") || state.startsWith("streaming");
+}
+
+static bool streamingStateIsStrokeEngineOrStreaming() {
+    const String state = bleCommGetMachineStateName(true);
+    return state.startsWith("strokeengine") || state.startsWith("streaming");
+}
+
+static bool streamingStateIsStreaming() {
+    return bleCommGetMachineStateName(true).startsWith("streaming");
+}
+
 void streamingBeginInitSequence() {
+    s_streaming_init_cancelled = false;
+    s_streaming_init_completed = false;
+
     if (bleCommIsMenu()) {
-        // If we're already in menu mode, we can skip straight to go:streaming without the intermediate go:menu step, which saves time and avoids an unnecessary screen flash.
         LogDebug("Already in menu mode, skipping go:menu step");
     } else {
-        // Ensure we're in menu mode before going to streaming, otherwise the OSSM won't accept the go:streaming command. This also ensures the OSSM is homed and ready to enter streaming mode.
         LogDebug("Not in menu mode, sending go:menu command first");
-        bleCommGoToMenu();
-        waitForStreamingCondition(bleCommEnsureStrokeEngineReady, 10000);
-    }
-    bleCommGoToStreaming();
-    waitForStreamingCondition(bleCommEnsureStrokeEngineReady, 10000);
-    
-    const uint32_t streamingWaitStartMs = millis();
-    while (!s_streaming_init_cancelled && lv_scr_act() == ui_Streaming &&
-           bleCommGetMachineStateName(true) != "streaming") {
-        if ((millis() - streamingWaitStartMs) > 30000U) {
-            LogDebug("Timed out waiting for streaming state");
+        if (!bleCommGoToMenu()) {
+            LogDebug("Failed to queue go:menu command");
             return;
         }
-        LogDebug("Waiting for streaming state...");
-        waitForStreamingCondition(nullptr, 500);
+        if (!waitForStreamingCondition(streamingStateIsMenuOrHoming, 4000)) {
+            LogDebug("Timed out waiting for menu/homing after go:menu");
+            return;
+        }
     }
-    
 
+    LogDebug("Sending go:streaming command");
+    if (!bleCommGoToStreaming()) {
+        LogDebug("Failed to queue go:streaming command");
+        return;
+    }
 
-    SendCommand(ON, 100.0f, OSSM_ID);
-    SendCommand(SPEED, 100.0f, OSSM_ID);
+    if (!waitForStreamingCondition(streamingStateIsHomingOrStrokeEngineOrStreaming, 12000)) {
+        LogDebug("Timed out waiting for streaming transition to start");
+        return;
+    }
+
+    if (streamingStateIsHoming()) {
+        LogDebug("Streaming init entered homing; waiting for post-homing handoff");
+        if (!waitForStreamingCondition(streamingStateIsStrokeEngineOrStreaming, 20000)) {
+            LogDebug("Timed out waiting for homing to complete");
+            return;
+        }
+    }
+
+    if (!streamingStateIsStreaming()) {
+        LogDebug("Post-homing state is not streaming yet; re-sending go:streaming");
+        if (!bleCommGoToStreaming()) {
+            LogDebug("Failed to re-queue go:streaming command");
+            return;
+        }
+        waitForStreamingCondition(streamingStateIsStreaming, 1500);
+        waitForStreamingCondition(nullptr, 200);
+    }
+
     SendCommand(DEPTH, 100.0f, OSSM_ID);
     SendCommand(STROKE, 100.0f, OSSM_ID);
     SendCommand(SENSATION, 50.0f, OSSM_ID);
-//    for (int rampSpeed = 25; rampSpeed <= 100 && !s_streaming_init_cancelled; rampSpeed += 25) {
-//        SendCommand(SPEED, (float)rampSpeed, OSSM_ID);
-//        if (rampSpeed < 100) {
-//            waitForStreamingCondition(nullptr, 250);
-//        }
-//    }
-
-    //insert code here that if ui_StreamingButtonM is pressed then send event streambuttonm
-
-
-    delay(100);  // Extra delay to ensure OSSM is ready for commands after entering streaming mode
-    if (ui_StreamingButtonM) {
-        lv_obj_send_event(ui_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
-    }    
-//    delay(100);  // Extra delay to ensure OSSM is ready for commands after entering streaming mode
-//    if (ui_StreamingButtonM) {
-//        lv_obj_send_event(ui_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
-//    }    
-//    delay(100);  // Extra delay to ensure OSSM is ready for commands after entering streaming mode
-//    if (ui_StreamingButtonM) {
-//        lv_obj_send_event(ui_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
-//    }    
-//    delay(100);  // Extra delay to ensure OSSM is ready for commands after entering streaming mode
-
-    bleCommSendStreamCommand(100,10000);
-    s_streaming_init_completed = true;  
+    SendCommand(SPEED, 100.0f, OSSM_ID);
+    SendCommand(ON, 100.0f, OSSM_ID);
+    bleCommSendStreamCommand(100, 10000);
+    s_streaming_init_completed = true;
 }
 
 
@@ -412,8 +442,17 @@ void streamingUpdateValueLabels(float spd, float dep, float str, float sen) {
 
 bool streamingIsPaused() { return s_streaming_paused; }
 
+void streamingRememberResumeSpeed(float speed) {
+    s_streaming_resume_speed = speed;
+}
+
+float streamingGetResumeSpeed() {
+    return s_streaming_resume_speed;
+}
+
 void streamingResetPause() {
     s_streaming_paused = false;
+    s_streaming_resume_speed = 100.0f;
     if (s_streaming_btn_m_text)
         lv_label_set_text(s_streaming_btn_m_text, T_STOP);
 }
@@ -425,7 +464,15 @@ static void event_streaming_btn_l(lv_event_t *e) {
 }
 
 static void event_streaming_btn_m(lv_event_t *e) {
+    LogDebug("Streaming pause/resume button event activated");
     if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
+        LogDebug("Button is really clicked, processing pause/resume toggle");
+        const uint32_t nowMs = millis();
+        if ((nowMs - s_streaming_last_toggle_ms) < 250U) {
+            LogDebug("Button toggle ignored due to debounce");
+            return;
+        }
+        s_streaming_last_toggle_ms = nowMs;
         s_streaming_paused = !s_streaming_paused;
         if (s_streaming_btn_m_text)
             lv_label_set_text(s_streaming_btn_m_text, s_streaming_paused ? T_START : T_STOP);

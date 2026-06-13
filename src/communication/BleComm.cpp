@@ -200,9 +200,6 @@ static void updateCachedMachineState(const String& stateRaw) {
   maxdepthinmm = 100.0f;
   speedlimit = 100.0f;
   g_lastStateUpdateMs = millis();
-
-  // Defer LVGL work to the UI loop; this only sets the refresh request flag.
-  screenRequestStatusStripRefresh();
 }
 
 static bool hasFreshState() {
@@ -248,13 +245,13 @@ static bool bleReadCommandResponse(String* out) {
   return true;
 }
 
-static bool bleSendCommandWithResponse(const String& cmd) {
+bool bleSendCommandWithResponse(const String& cmd) {
   if (!bleWriteCommand(cmd)) return false;
   String response;
   return bleReadCommandResponse(&response);
 }
 
-static bool waitForStrokeEngineReady(uint32_t timeoutMs) {
+static bool waitForStrokeEngineOrStreamingReady(uint32_t timeoutMs) {
   uint32_t start = millis();
   while ((millis() - start) < timeoutMs) {
     bleReadStateOnce();
@@ -264,11 +261,13 @@ static bool waitForStrokeEngineReady(uint32_t timeoutMs) {
   return false;
 }
 
-static bool ensureStrokeEngineReady() {
+static bool ensureStrokeEngineOrStreamingReady() {
   if (!bleCommTryConnect()) return false;
 
   bleReadStateOnce();
   if (hasFreshState() && g_machineMode == MachineMode::StrokeEngine) return true;
+  //also if in streaming mode in fresh state, return ok, since we need to be able to alter max
+  if (hasFreshState() && g_machineMode == MachineMode::Streaming) return true;
 
   // Mandatory gating: if state is stale, force a refresh loop before deciding transitions.
   if (!hasFreshState()) {
@@ -294,7 +293,7 @@ static bool ensureStrokeEngineReady() {
 
   // If currently homing, wait a bit for completion before forcing a mode change.
   if (g_machineMode == MachineMode::Homing) {
-    if (waitForStrokeEngineReady(6000)) return true;
+    if (waitForStrokeEngineOrStreamingReady(6000)) return true;
   }
 
   // OSSM safety model: movement commands are ignored in menu state.
@@ -304,7 +303,7 @@ static bool ensureStrokeEngineReady() {
     if (!bleSendCommandWithResponse("go:strokeEngine")) return false;
   }
 
-  return waitForStrokeEngineReady(10000);
+  return waitForStrokeEngineOrStreamingReady(10000);
 }
 
 static bool isRealtimeSetCommand(const String& cmd, String* outType = nullptr) {
@@ -615,9 +614,7 @@ bool bleCommIsEnabled() {
 }
 
 bool bleCommIsHoming() {
-
-  //return hasFreshState() && g_machineMode == MachineMode::Homing;
-  return g_machineMode == MachineMode::Homing;
+  return hasFreshState() && g_machineMode == MachineMode::Homing;
 }
 
 int bleCommGetHomingDirection() {
@@ -647,8 +644,8 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
 
   if (isMotionControl) {
     // Keep fast path cheap: only run full readiness check when mode/state are not already known-good.
-    if (!(hasFreshState() && g_machineMode == MachineMode::StrokeEngine)) {
-      if (!ensureStrokeEngineReady()) return false;
+    if (!(hasFreshState() && (g_machineMode == MachineMode::StrokeEngine || g_machineMode == MachineMode::Streaming))) {
+      if (!ensureStrokeEngineOrStreamingReady()) return false;
     }
   }
 
@@ -756,11 +753,11 @@ bool bleCommGoToStreaming() {
 }
 
 bool bleCommGoToStrokeEngine() {
-  return bleCommEnsureStrokeEngineReady();
+  return bleCommEnsureStrokeEngineOrStreamingReady();
 }
 
-bool bleCommEnsureStrokeEngineReady() {
-  return ensureStrokeEngineReady();
+bool bleCommEnsureStrokeEngineOrStreamingReady() {
+  return ensureStrokeEngineOrStreamingReady();
 }
 
 String bleCommGetMachineStateName(bool lowerCase) {

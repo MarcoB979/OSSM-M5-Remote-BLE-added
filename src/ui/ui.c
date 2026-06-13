@@ -274,9 +274,13 @@ static void ui_event_HomeButtonL(lv_event_t * e)
     if(event == LV_EVENT_LONG_PRESSED) {
         printf("HomeButtonL long pressed - ejecting");
         if (addonsIsEjectEnabled()) {
-          _ui_screen_change(ui_ejectaddon, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-          ejectcreampie(e);
-          screenmachine(e);
+            //check if eject is paired before showing the screen
+          if(ejectPaired()) {
+            printf("Eject addon is paired - opening Eject screen\n"); 
+            _ui_screen_change(ui_ejectaddon, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+            ejectcreampie(e);
+            screenmachine(e);
+          }  
         }
     } else if(event == LV_EVENT_CLICKED){
         printf("HomeButtonL clicked - pulling out");
@@ -307,7 +311,11 @@ static void ui_event_HomeButtonR(lv_event_t * e)
     } else if(event == LV_EVENT_LONG_PRESSED){
         printf("HomeButtonR long pressed - checking for FistIT addon\n");
         if (addonsIsFistITEnabled()) {
-            _ui_screen_change(ui_FistIT, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+            if(FistITPaired()) {
+                printf("Fist-IT addon is paired - opening Fist-IT screen\n"); 
+                _ui_screen_change(ui_FistIT, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+//                screenmachine(e);
+            }
         }
     }
 }
@@ -343,7 +351,7 @@ static void ui_event_MenuButtonMR(lv_event_t * e)
 static void ui_event_MenuButtonL(lv_event_t * e)
 {
     if(lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED)
-        lv_obj_send_event(lv_group_get_focused(ui_g_menu), LV_EVENT_SHORT_CLICKED, NULL);
+        menuRestartAction();
 }
 static void ui_event_MenuButtonM(lv_event_t * e)
 {
@@ -353,7 +361,7 @@ static void ui_event_MenuButtonM(lv_event_t * e)
 static void ui_event_MenuButtonR(lv_event_t * e)
 {
     if(lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED)
-        menuRestartAction();
+        lv_obj_send_event(lv_group_get_focused(ui_g_menu), LV_EVENT_SHORT_CLICKED, NULL);
 
 }
 static void ui_event_Pattern(lv_event_t * e)
@@ -759,7 +767,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomeButtonLText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_HomeButtonLText, T_CREAMPIE);
+    lv_label_set_text(ui_HomeButtonLText, T_HOMEL);
     applyTextPrimaryStyle(ui_HomeButtonLText);
 
     // ui_HomeButtonM
@@ -1182,7 +1190,7 @@ void ui_Menu_screen_init(void)
 
     ui_MenuButtonLText = lv_label_create(ui_MenuButtonL);
     lv_obj_set_align(ui_MenuButtonLText, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_MenuButtonLText, T_SELECT);
+    lv_label_set_text(ui_MenuButtonLText, T_RESTART);
     applyTextPrimaryStyle(ui_MenuButtonLText);
 
     ui_MenuButtonM = lv_btn_create(ui_Menu);
@@ -1212,7 +1220,7 @@ void ui_Menu_screen_init(void)
 
     ui_MenuButtonRText = lv_label_create(ui_MenuButtonR);
     lv_obj_set_align(ui_MenuButtonRText, LV_ALIGN_CENTER);
-    lv_label_set_text(ui_MenuButtonRText, T_RESTART);
+    lv_label_set_text(ui_MenuButtonRText, T_SELECT);
     applyTextPrimaryStyle(ui_MenuButtonRText);
 
     // ---- Battery display ----
