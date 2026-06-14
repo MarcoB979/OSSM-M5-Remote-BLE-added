@@ -64,6 +64,7 @@ long encoder4_enc = 0;
 int  pattern = 2;
 char patternstr[20];
 lv_obj_t *g_pattern_return_screen = nullptr;
+lv_obj_t *g_addon_return_screen = nullptr;
 static int  s_prev_st_screens = -1;
 // Set when menu entry sends go:menu (from streaming exit or ble_force_homeing).
 // Home/stroke screen checks this flag before sending go:strokeEngine, so that
@@ -111,28 +112,28 @@ static constexpr int HOME_ICON_W = 18;
 static constexpr int HOME_ICON_H = 22;
 
 static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
-  "....................",
-  "...#.....###.....#..",
-  "..###..#####....###.",
-  ".####..######..####.",
-  "..###...####...###..",
-  "....#.....#.....#...",
-  "....................",
-  "....................",
-  "........#####.......",
-  "......##..#..##.....",
-  ".....##.......##....",
-  ".....##.......##....",
-  "......###...###.....",
-  "......##.....#.#....",
-  "......##.....#.#....",
-  "......##.....#.#....",
-  "......##.....#.#....",
-  "......##.....#.#....",
-  "......##.....#.#....",
-  "......##########....",
-  "........#####.......",
-  "....................",
+  "................",
+  "........##......",
+  "..##..####...##.",
+  ".###..#####.###.",
+  "..##...###..##..",
+  "........#.......",
+  "................",
+  "................",
+  "......####......",
+  "....##.##.##....",
+  "...##......##...",
+  "...##......##...",
+  ".....###.###....",
+  "....###...###...",
+  "....###...###...",
+  "....###...###...",
+  "....###...###...",
+  "....###...###...",
+  "....###...###...",
+  ".....#######....",
+  "......####......",
+  "................",
 };
 
 static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
@@ -145,44 +146,44 @@ static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
   ".##............##.",
   ".###.##........##.",
   "..#######......##.",
-  ".###....##.....##.",
-  "##.##....##...##..",
-  "##..##....##..##..",
-  "##...##....##.##..",
-  "##....##....#.##..",
-  "##.....##.....##..",
-  "##......##....##..",
-  "##.......##..###..",
-  "##........######..",
-  ".##.........###...",
-  "..##........##....",
-  "...##.......##....",
-  "....#########.....",
+  "......####.....##.",
+  "......###.#...##..",
+  "......##..##..##..",
+  "......##....##.##..",
+  "......##....#.##..",
+  "......###.....##..",
+  "......###.....##..",
+  "......##.##..###..",
+  "......##..######..",
+  ".......##...###...",
+  "........##..##....",
+  ".........##.##....",
+  ".........#####.....",
 };
 
 static const char* const HOME_ICON_MASK[HOME_ICON_H] = {
-  "........##........",
-  "......######......",
-  "....###....###....",
-  "..###...##...###..",
-  "###...######...###",
-  "....###....###....",
-  "..###........###..",
-  "###............###",
-  ".......####.......",
-  ".......####.......",
-  ".......####.......",
-  ".......####.......",
-  ".......####.......",
-  ".......####.......",
-  "###............###",
-  "..###........###..",
-  "....###....###....",
-  "###...######...###",
-  "..###...##...###..",
-  "....###....###....",
-  "......######......",
-  "........##........",
+  "......####.......",
+  "....########.....",
+  "..####....####...",
+  "####........####.",
+  ".................",
+  ".................",
+  ".................",
+  "......###........",
+  "......###........",
+  "......###........",
+  "......###........",
+  "......###........",
+  "......###........",
+  "......###........",
+  "......###........",
+  ".................",
+  ".................",
+  ".................",
+  "####........####.",
+  "..####....####...",
+  "....########.....",
+  "......####.......",
 };
 
 
@@ -295,9 +296,13 @@ static void updateStatusStrip() {
         }
     };
 
-    if (bleCommIsConnected()) appendToken(LV_SYMBOL_BLUETOOTH);
-    if (espNowIsPaired()) appendToken(LV_SYMBOL_WIFI);
-/*    if (bleCommIsHoming()) {
+    if (bleCommIsConnected()) {
+        appendToken(LV_SYMBOL_BLUETOOTH);
+    } else if (espNowIsPaired()) {
+        appendToken(LV_SYMBOL_WIFI);
+    }
+
+    /*    if (bleCommIsHoming()) {
         LogDebug("BLE is homing - adding direction indicator to status strip");
         int dir = bleCommGetHomingDirection();
         if (dir > 0) appendToken(LV_SYMBOL_UP);
@@ -334,6 +339,7 @@ static void updateStatusStrip() {
             lv_obj_set_y(statusFistIcons[i], -102);
             if (fistPaired) {
                 lv_obj_clear_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
+                iconX += lv_obj_get_width(statusFistIcons[i]) + 2;
             } else {
                 lv_obj_add_flag(statusFistIcons[i], LV_OBJ_FLAG_HIDDEN);
             }
@@ -357,6 +363,7 @@ static void updateStatusStrip() {
             lv_obj_set_y(statusHomeIcons[i], -102);
             if (bleCommIsHoming()) {
                 lv_obj_clear_flag(statusHomeIcons[i], LV_OBJ_FLAG_HIDDEN);
+                iconX += lv_obj_get_width(statusHomeIcons[i]) + 2;
             } else {
                 lv_obj_add_flag(statusHomeIcons[i], LV_OBJ_FLAG_HIDDEN);
             }
@@ -366,6 +373,12 @@ static void updateStatusStrip() {
 
 void screenRequestStatusStripRefresh() {
     g_status_strip_refresh_requested = true;
+}
+
+void screenForceStatusStripRefreshNow() {
+    g_status_strip_refresh_requested = true;
+    updateStatusStrip();
+    g_status_strip_refresh_requested = false;
 }
 
 static int rangeFromLimit(float limitValue) {
@@ -996,6 +1009,18 @@ extern "C" void menuRestartAction(void)
         esp_restart();
     }
 }
+/*
+void ResetButtons()
+{
+  click2_short_waspressed = false;
+  click2_long_waspressed = false;
+  mxclick_short_waspressed = false;
+  mxclick_long_waspressed = false;
+  click3_short_waspressed = false;
+  click3_long_waspressed = false;
+  click3_double_waspressed = false;
+}
+*/
 
 // -------------------------------------------------------
 // screenInit() — load NVS settings and apply to UI
@@ -1069,6 +1094,16 @@ void brightness_slider_event_cb(lv_event_t *e)
 // -------------------------------------------------------
 
 void screenmachine(lv_event_t * e) {
+    // Clear any lingering LVGL touch-press tracking from the previous screen.
+    // Without this, a button tap that causes a screen transition can leak into
+    // the new screen if a button there occupies the same pixel coordinates
+    // (e.g. PatternButtonM and HomeButtonM are both at lv_pct(0) / y=100).
+    lv_indev_t *_indev = lv_indev_get_next(NULL);
+    while (_indev) {
+        lv_indev_reset(_indev, NULL);
+        _indev = lv_indev_get_next(_indev);
+    }
+
     if (lv_scr_act() == ui_Start) {
         st_screens = ST_UI_START;
     } else if (lv_scr_act() == ui_Home) {
@@ -1237,17 +1272,34 @@ void savepattern(lv_event_t * e) {
     SendCommand(PATTERN, patterns, OSSM_ID);
 }
 
+static void applyHomeButtonMState(const char* text, lv_style_t* defaultStyle, lv_style_t* pressedStyle) {
+    if (!ui_HomeButtonM || !ui_HomeButtonMText) return;
+
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_running_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_stopped_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+
+    lv_obj_add_style(ui_HomeButtonM, defaultStyle, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_HomeButtonM, pressedStyle, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_add_style(ui_HomeButtonM, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+    lv_label_set_text(ui_HomeButtonMText, text);
+    lv_obj_refresh_style(ui_HomeButtonM, LV_PART_MAIN, LV_STYLE_PROP_ANY);
+    lv_obj_invalidate(ui_HomeButtonM);
+}
+
 void homebuttonmevent(lv_event_t * e) {
     LogDebug("HomeButton");
     if (OSSM_On == false) {
-        lv_label_set_text(ui_HomeButtonMText, T_STOP);
-        lv_obj_add_style(ui_HomeButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+        LogDebug("Starting OSSM");
+        applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
         SendCommand(ON, 0.0, OSSM_ID);
     } else {
-        lv_label_set_text(ui_HomeButtonMText, T_RESUME);
-        lv_obj_add_style(ui_HomeButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+        LogDebug("Stopping OSSM");
+        applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
         SendCommand(OFF, 0.0, OSSM_ID);
     }
 }
@@ -1410,6 +1462,8 @@ void handleScreens() {
             touch_disabled = true;
         }
 
+        const bool wasMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
+
         // On first entry from a non-strokeEngine screen, tell OSSM to switch to strokeEngine.
         // Only re-home when we know it is needed:
         //   - initial connect (from start screen)
@@ -1539,10 +1593,12 @@ void handleScreens() {
             sensation = lv_slider_get_value(ui_homesensationslider);
             SendCommand(SENSATION, sensation, OSSM_ID);
         }
-        if (click2_short_waspressed) {
-            lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);}
         if (click2_long_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_LONG_PRESSED, NULL);
+        } else if (click2_double_waspressed) {
+            lv_obj_send_event(ui_HomeButtonL, LV_EVENT_DOUBLE_CLICKED, NULL);
+        } else if (click2_short_waspressed) {
+            lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {
             lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
         } else if (mxclick_long_waspressed) {
@@ -1558,22 +1614,33 @@ void handleScreens() {
             bleCommGoToMenu();
             _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
             st_screens = ST_UI_MENU;
-        } else if (click3_short_waspressed) {
-            lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
         } else if (click3_long_waspressed) {
-            lv_obj_send_event(ui_HomeButtonR, LV_EVENT_LONG_PRESSED, NULL);
+            LogDebug("HomeButtonR long pressed - checking for FistIT addon");
+            if (addonsIsFistITEnabled() && FistITPaired()) {
+                LogDebug("Fist-IT addon is paired - opening Fist-IT screen");
+                g_addon_return_screen = lv_scr_act();
+                FistITPrepareScreen();
+                _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+            }
             sensation = 0;
         } else if (click3_double_waspressed) {
-            // Original code used if/else instead of ! operator to avoid a reported M5 crash
-            if (dynamicStroke == false) {
-                dynamicStroke = true;
-            } else {
-                dynamicStroke = false;
+            if (addonsIsFistITEnabled() && FistITPaired()) {
+                FistITSendCommand(ON, 0.0f);
             }
-            if (stroke >= depth) stroke = depth;
+        } else if (click3_short_waspressed) {
+            lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
         }
-        if(speed > 0 and stroke > 0 and depth > 0 and changed) {
+        const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
+        if (!wasMotionReady && isMotionReady && changed && !OSSM_On) {
            lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
+        }
+
+        if (FistITPaired()) {
+            lv_label_set_text(ui_HomeButtonRText, T_PATTERN_Button "   F");
+        }
+
+        if (EjectIsPaired()) {
+            lv_label_set_text(ui_HomeButtonLText, T_HOMEL "       E");
         }
     }
     break;
@@ -1762,14 +1829,19 @@ void handleScreens() {
             if (ui_streamingsensationslider) lv_slider_set_value(ui_streamingsensationslider, s_str_sensation, LV_ANIM_OFF);
             streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
 
-                        showNotification(
+            const int result = showNotification(
                 T_STREAMING_CAUTION_TITLE,
                 T_STREAMING_CAUTION_TEXT,
                 0,
                 true, T_DONE,
-                false, nullptr,
+                true, T_CANCEL,
                 false);
-
+            if (result == NOTIFICATION_RESULT_RIGHT) {
+                bleCommGoToMenu();
+                _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+                st_screens = ST_UI_MENU;
+                return;
+            }    
 
             streamingBeginInitSequence();
             showNotification(
@@ -2104,6 +2176,8 @@ void handleScreens() {
     mxclick_long_waspressed  = false;
     mxclick_short_waspressed = false;
     click2_short_waspressed  = false;
+    click2_long_waspressed   = false;
+    click2_double_waspressed = false;
     click3_short_waspressed  = false;
     click3_long_waspressed   = false;
     click3_double_waspressed = false;

@@ -125,6 +125,7 @@ static void clearButtonFlags()
 {
   click2_short_waspressed = false;
   click2_long_waspressed = false;
+  click2_double_waspressed = false;
   mxclick_short_waspressed = false;
   mxclick_long_waspressed = false;
   click3_short_waspressed = false;
@@ -307,7 +308,7 @@ static void ensureUiInitialized()
   }
 
   if (ui_EJECTButtonLText != nullptr) {
-    lv_label_set_text(ui_EJECTButtonLText, T_HOME);
+    lv_label_set_text(ui_EJECTButtonLText, T_BACK); //was T_HOME
   }
   if (ui_EJECTButtonMText != nullptr) {
     lv_label_set_text(ui_EJECTButtonMText, T_CUM);
@@ -490,7 +491,9 @@ void EjectHandleScreen(const ButtonEvents &events)
   }
 
   if (events.leftShort) {
-    _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    lv_obj_t *dest = g_addon_return_screen ? g_addon_return_screen : ui_Home;
+    _ui_screen_change(dest, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    g_addon_return_screen = nullptr;
     clearButtonFlags();
   } else if (events.mxShort) {
     LogDebug("EJECT UI: mxShort detected -> toggle action");

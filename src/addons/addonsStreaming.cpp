@@ -51,10 +51,12 @@ struct AddonDef {
     void        (*activate)();
 };
 
+extern lv_obj_t *g_addon_return_screen;
+
 
 //for new addons: add a line here with the code what screen to activate when the addon is selected in the menu, and a default enabled/disabled state. The screen activation code should be a function that prepares the screen (e.g. updates slider values from current addon state) and then calls _ui_screen_change() to switch to it.
-static void activateEject()     { _ui_screen_change(ui_EJECTSettings,  LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
-static void activateFistIT()    { FistITPrepareScreen(); _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
+static void activateEject()     { g_addon_return_screen = lv_scr_act(); _ui_screen_change(ui_EJECTSettings,  LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
+static void activateFistIT()    { g_addon_return_screen = lv_scr_act(); FistITPrepareScreen(); _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateStreaming() { _ui_screen_change(ui_Streaming,       LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 
 //new addons should be defined here with their screen activation function, and the function should be implemented above. The screen they activate should also be added to ui.h and ui.c, and implemented in a new .cpp file in the addons folder. See Eject and FistIT for examples.
@@ -450,11 +452,35 @@ float streamingGetResumeSpeed() {
     return s_streaming_resume_speed;
 }
 
+static void applyStreamingButtonMState(bool paused) {
+    if (!ui_StreamingButtonM || !s_streaming_btn_m_text) return;
+
+    lv_obj_remove_style(ui_StreamingButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(ui_StreamingButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(ui_StreamingButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(ui_StreamingButtonM, &style_button_running_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(ui_StreamingButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(ui_StreamingButtonM, &style_button_stopped_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+
+    if (paused) {
+        lv_obj_add_style(ui_StreamingButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(ui_StreamingButtonM, &style_button_stopped_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_label_set_text(s_streaming_btn_m_text, T_START);
+    } else {
+        lv_obj_add_style(ui_StreamingButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_add_style(ui_StreamingButtonM, &style_button_running_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+        lv_label_set_text(s_streaming_btn_m_text, T_STOP);
+    }
+
+    lv_obj_add_style(ui_StreamingButtonM, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+    lv_obj_refresh_style(ui_StreamingButtonM, LV_PART_MAIN, LV_STYLE_PROP_ANY);
+    lv_obj_invalidate(ui_StreamingButtonM);
+}
+
 void streamingResetPause() {
     s_streaming_paused = false;
     s_streaming_resume_speed = 100.0f;
-    if (s_streaming_btn_m_text)
-        lv_label_set_text(s_streaming_btn_m_text, T_STOP);
+    applyStreamingButtonMState(false);
 }
 
 static void event_streaming_btn_l(lv_event_t *e) {
@@ -474,8 +500,7 @@ static void event_streaming_btn_m(lv_event_t *e) {
         }
         s_streaming_last_toggle_ms = nowMs;
         s_streaming_paused = !s_streaming_paused;
-        if (s_streaming_btn_m_text)
-            lv_label_set_text(s_streaming_btn_m_text, s_streaming_paused ? T_START : T_STOP);
+        applyStreamingButtonMState(s_streaming_paused);
     }
 }
 

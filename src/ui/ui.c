@@ -277,11 +277,16 @@ static void ui_event_HomeButtonL(lv_event_t * e)
             //check if eject is paired before showing the screen
           if(ejectPaired()) {
             printf("Eject addon is paired - opening Eject screen\n"); 
-            _ui_screen_change(ui_ejectaddon, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-            ejectcreampie(e);
-            screenmachine(e);
+                        g_addon_return_screen = lv_scr_act();
+                        _ui_screen_change(ui_EJECTSettings, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+            //ejectcreampie(e);
+            //screenmachine(e);
+            //ResetButtons();
           }  
         }
+    } else if(event == LV_EVENT_DOUBLE_CLICKED) {
+        printf("HomeButtonL double clicked - Ejecting");
+        ejectcreampie(e);
     } else if(event == LV_EVENT_CLICKED){
         printf("HomeButtonL clicked - pulling out");
         pullOut(e);
@@ -305,7 +310,7 @@ static void ui_event_HomeButtonR(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
-        printf("HomeButtonR clicked - returning to Home screen\n");
+        printf("HomeButtonR clicked - opening Pattern screen\n");
         g_pattern_return_screen = ui_Home;
         _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     } else if(event == LV_EVENT_LONG_PRESSED){
@@ -313,6 +318,7 @@ static void ui_event_HomeButtonR(lv_event_t * e)
         if (addonsIsFistITEnabled()) {
             if(FistITPaired()) {
                 printf("Fist-IT addon is paired - opening Fist-IT screen\n"); 
+                g_addon_return_screen = lv_scr_act();
                 _ui_screen_change(ui_FistIT, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
 //                screenmachine(e);
             }

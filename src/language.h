@@ -1,6 +1,6 @@
 //EN
 // Language
-#define T_HEADER            "OSSM Remote"
+#define T_HEADER            "M5 Remote"
 #define T_BLANK             ""
 #define T_MENU              "Menu"
 #define T_DEMO              "Demo"
@@ -96,8 +96,8 @@
 #define T_CONFIRM           "Confirm"
 #define T_NEXT              "Next"
 #define T_SHUTDOWN          "Shutdown"
-#define T_CANCEL            "Cancel"
-#define T_DONE              "Done, start home"
+#define T_CANCEL            "Cancel/back"
+#define T_DONE              "Ok-start home"
 #define T_STREAMING_CAUTION_TITLE "Connect your OSSM"
 #define T_STREAMING_CAUTION_TEXT  "Connect your OSSM to the streaming service now.\nThe OSSM will then start a homing procedure\nMove away from the OSSM for your safety"
 #define T_STREAMING_ACTIVE_TITLE  "OSSM in Streaming mode"

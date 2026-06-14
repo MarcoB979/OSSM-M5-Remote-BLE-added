@@ -13,7 +13,7 @@
 #include "../main.h"
 #include "../screens/ScreenHandler.h"
 
-bool showBlePollSerial = true;  // Set to true to enable serial output of BLE state polls (for debugging);
+bool showBlePollSerial = false;  // Set to true to enable serial output of BLE state polls (for debugging);
 
 namespace {
 
@@ -83,6 +83,12 @@ enum ParamIdx { P_SPEED = 0, P_DEPTH = 1, P_STROKE = 2, P_SENSATION = 3, P_PATTE
 
 // Forward declaration (definition is below)
 static bool bleReadStateOnce();
+
+static void pumpUiDuringModeWait() {
+  // Keep status icons and screen rendering responsive while mode gating loops.
+  screenForceStatusStripRefreshNow();
+  lv_task_handler();
+}
 
 static void bleResetClient() {
   g_cmd = nullptr;
@@ -255,6 +261,7 @@ static bool waitForStrokeEngineOrStreamingReady(uint32_t timeoutMs) {
   uint32_t start = millis();
   while ((millis() - start) < timeoutMs) {
     bleReadStateOnce();
+    pumpUiDuringModeWait();
     if (hasFreshState() && g_machineMode == MachineMode::StrokeEngine) return true;
     vTaskDelay(pdMS_TO_TICKS(80));
   }
@@ -265,6 +272,7 @@ static bool ensureStrokeEngineOrStreamingReady() {
   if (!bleCommTryConnect()) return false;
 
   bleReadStateOnce();
+  pumpUiDuringModeWait();
   if (hasFreshState() && g_machineMode == MachineMode::StrokeEngine) return true;
   //also if in streaming mode in fresh state, return ok, since we need to be able to alter max
   if (hasFreshState() && g_machineMode == MachineMode::Streaming) return true;
@@ -274,6 +282,7 @@ static bool ensureStrokeEngineOrStreamingReady() {
     uint32_t start = millis();
     while ((millis() - start) < 2000 && !hasFreshState()) {
       bleReadStateOnce();
+      pumpUiDuringModeWait();
       vTaskDelay(pdMS_TO_TICKS(60));
     }
   }
@@ -283,9 +292,11 @@ static bool ensureStrokeEngineOrStreamingReady() {
   // before entering stroke engine.
   if (ble_force_homeing && g_machineMode != MachineMode::Menu && g_machineMode != MachineMode::Homing) {
     bleSendCommandWithResponse("go:menu");
+    pumpUiDuringModeWait();
     uint32_t menuStart = millis();
     while ((millis() - menuStart) < 2000) {
       bleReadStateOnce();
+      pumpUiDuringModeWait();
       if (hasFreshState() && (g_machineMode == MachineMode::Menu || g_machineMode == MachineMode::Homing)) break;
       vTaskDelay(pdMS_TO_TICKS(60));
     }
@@ -299,9 +310,12 @@ static bool ensureStrokeEngineOrStreamingReady() {
   // OSSM safety model: movement commands are ignored in menu state.
   if (!bleSendCommandWithResponse("go:strokeEngine")) {
     // Retry once in case we got a transient state-dependent fail.
+    pumpUiDuringModeWait();
     vTaskDelay(pdMS_TO_TICKS(120));
     if (!bleSendCommandWithResponse("go:strokeEngine")) return false;
   }
+
+  pumpUiDuringModeWait();
 
   return waitForStrokeEngineOrStreamingReady(10000);
 }

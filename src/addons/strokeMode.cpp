@@ -73,16 +73,31 @@ static void s_stroke_btn_r_cb(lv_event_t *e) {
     }
 }
 
+static void applyStrokeButtonMState(const char* text, lv_style_t* defaultStyle, lv_style_t* pressedStyle) {
+    if (!s_ButtonM || !s_ButtonMText) return;
+
+    lv_obj_remove_style(s_ButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(s_ButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(s_ButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(s_ButtonM, &style_button_running_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(s_ButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(s_ButtonM, &style_button_stopped_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+
+    lv_obj_add_style(s_ButtonM, defaultStyle, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(s_ButtonM, pressedStyle, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_add_style(s_ButtonM, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+    lv_label_set_text(s_ButtonMText, text);
+    lv_obj_refresh_style(s_ButtonM, LV_PART_MAIN, LV_STYLE_PROP_ANY);
+    lv_obj_invalidate(s_ButtonM);
+}
+
 void refreshStrokeStartStopUi() {
     if (!s_ButtonM || !s_ButtonMText) return;
     if (OSSM_On == false) {
-        lv_label_set_text(s_ButtonMText, T_STOP);
-        lv_obj_add_style(s_ButtonMText, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_style(s_ButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+        applyStrokeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
     } else {
-        lv_label_set_text(s_ButtonMText, T_RESUME);
-        lv_obj_add_style(s_ButtonMText, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_add_style(s_ButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+        applyStrokeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
     }
 
 }

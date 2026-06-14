@@ -137,6 +137,7 @@ static void clearButtonFlags()
 {
   click2_short_waspressed = false;
   click2_long_waspressed = false;
+  click2_double_waspressed = false;
   mxclick_short_waspressed = false;
   mxclick_long_waspressed = false;
   click3_short_waspressed = false;
@@ -250,7 +251,7 @@ static void createScreenIfNeeded()
   lv_obj_add_style(s_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
   s_button_left_text = lv_label_create(s_button_left);
   lv_obj_set_align(s_button_left_text, LV_ALIGN_CENTER);
-  lv_label_set_text(s_button_left_text, T_HOME);
+  lv_label_set_text(s_button_left_text, T_BACK); //was T_HOME
 
   s_button_mid = lv_btn_create(s_screen);
   lv_obj_set_width(s_button_mid, 100);
@@ -624,8 +625,10 @@ void FistITHandleScreen(const ButtonEvents &events)
   refreshValueLabels();
 
   if (events.leftShort) {
-    LogDebug("FistIT: Left short click - returning to Home screen");
-    _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    LogDebug("FistIT: Left short click - returning to previous screen");
+    lv_obj_t *dest = g_addon_return_screen ? g_addon_return_screen : ui_Home;
+    _ui_screen_change(dest, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    g_addon_return_screen = nullptr;
     clearButtonFlags();
   } else if (events.mxShort) {
     LogDebug("FistIT: Middle short click - toggling on/off");

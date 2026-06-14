@@ -31,6 +31,7 @@ extern float torqe_f, torqe_r;
 extern int   pattern;
 extern char  patternstr[20];
 extern lv_obj_t *g_pattern_return_screen;
+extern lv_obj_t *g_addon_return_screen;
 extern bool  dynamicStroke;
 extern bool  eject_status;
 extern bool  vibrate_mode;
@@ -45,6 +46,7 @@ extern bool  rstate;
 void screenInit();     // Load NVS settings and apply to UI; call after ui_init() + buttonInit()
 void handleScreens();  // Battery display + screen state machine + flag clear; call from loop()
 void screenRequestStatusStripRefresh();
+void screenForceStatusStripRefreshNow();
 
 // ---- Screensaver / Power management ----
 extern int            g_brightness_value;
@@ -59,7 +61,7 @@ void screensaver_check_activity();
 bool canEnterDeepSleep();
 void enterDeepSleep();
 void screen_power_tick();
-
+void ResetButtons();
 // ---- Notification overlay ----
 #ifdef __cplusplus
 int showNotification(const char *title,
