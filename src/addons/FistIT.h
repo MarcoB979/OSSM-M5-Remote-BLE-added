@@ -42,6 +42,7 @@ bool FistITHandleIncomingEspNowFrame(const uint8_t *mac,
                                      bool heartbeat);
 
 bool FistITSendCommand(int command, float value);
+void FistITToggle();        // Toggle on/off (uses internal state)
 bool FistITIsPaired();
 void FistITSetAddonEnabled(bool enabled);
 lv_obj_t *FistITGetBatteryTitleLabel();

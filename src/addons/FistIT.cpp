@@ -518,6 +518,13 @@ lv_obj_t *FistITGetBatteryValueLabel()
   return s_batt_value;
 }
 
+void FistITToggle()
+{
+  if (s_addon_enabled && s_is_paired) {
+    toggleOnOff();
+  }
+}
+
 bool FistITIsPaired()
 {
   return s_addon_enabled && s_is_paired;
