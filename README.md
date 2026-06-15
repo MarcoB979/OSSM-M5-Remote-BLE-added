@@ -69,7 +69,7 @@ When pressing the left button, the OSSM will only do the pullout movement as des
 To change a pattern, click the right button to goto the Pattern selection screen.
 
 ## Bator Mode
-![Final Addon](image/Bator.png?raw=true "Bator" )
+![Final Addon](image/Bator-mode.jpg?raw=true "Bator" )
 Bator mode has the same functionality as the OSSM ho.e screen. However, the OSSM movement is now suitable for strokers. the OSSM will now move with the middle of the rail as starting point. Only speed, stroke and sensation can be set. When stroke is changed, the OSSM will move from middle to the size of stroke. If stroke is set to 20% as example, the OSSM will move from middle of the rail (50%) to 10 %on the left (40%) and then to 60% of the rail lengte (making it a 20% stroke move)
 
 Clicking the right button brings you in the pattern selection menu. Clicking the left encoder return to the menu screen.
@@ -77,6 +77,19 @@ The middle square button has the same start/stop behaviour as the OSSM home scre
 
 ## Settings
 ![Final Addon](image/Settings.jpg?raw=true "Settings" )
+In settings you can change the following settings:
+Vibrate: should the M5 Remote vibrate after button presses to give haptic feedback. 
+Touch Disabled: if you do not want to be able to use the touchscreen, then check this option.
+Stroke inverted: change the bravoure of the encoder where you change the stroke values in the OSSM Ho.e screen (rotating right games stoke go up, or down.
+Force re-home: if we switch to the Menu screen and then back to screens where you can control the OSSM, this can force a homeing procedure. This is a safety measure, but sometimes this might be not totally necessary if you use the 57AIM Gold Motor. In that case you can choose to disable to force re-homes on occasions where this is not absolutely necessary. PLEASE NOTE: it is recommended to have this selected. EXTRA CAUTION: if you own the IHSV57 motor, you MUST keep this option activated for safety reasons!
+
+You can also change the screen brightness to fit your needs and save on battery life. To do this, rotate the 3rd rotary encoder (seen from the left). Changes are applied immediately.
+
+By pressing the left encoder, you save the settings in memory. The M5 Remote will use these saved settings at next start-up.
+Rotating the right encoder will scroll through the options. Pressing it will select or de-select the active option
+
+By pressing the middle button, you return to the menu screen. Do not forget to save first.
+
 ## Addons
 ![Final Addon](image/Addons.jpg?raw=true "Addons" )
 # Addons - Streaming mode
