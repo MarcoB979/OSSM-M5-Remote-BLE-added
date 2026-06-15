@@ -11,7 +11,7 @@ https://github.com/KinkyMakers/OSSM-hardware
 To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
 
 ## M5 Remote now works with the official OSSM BLE firmware. ##
-If you still have the 'old' ESP firmware (used for previous M5 remote firmwares), then this Branch is needed: https://github.com/ortlof/OSSM-Stroke
+If you still have the 'old' ESP firmware (used for previous M5 remote firmwares), then this Branch is needed: https://github.com/ortlof/OSSM-Stroke. Communication via ESP_NOW still is possible, but some extra functionality will be limited (no streaming mode for example). If you use the newer V2 OSSM controller boards, please update your OSSM Firmware.
 
 The Cable remote is obsolete with this firmware. If you want to go back you need to flash the OSSM orginal firmware back.
 
