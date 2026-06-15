@@ -1,7 +1,7 @@
 # Project OSSM M5 REMOTE
 ## Overview of the OSSM-M5-Remote
 
-A Remote Control Platform for all ESP Controlled Sex Toys,with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and related toys.
+A Remote Control Platform for with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and other related ESP Controlled Sex Toys (like Eject cumpump and Fist-IT).
 
 ![Final Addon](image/remote.png?raw=true "Remote" )
 
@@ -10,20 +10,67 @@ https://github.com/KinkyMakers/OSSM-hardware
 
 To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
 
-## !!! It does not Work with the Official OSSM Firmware !!!
-This Branch is needed: https://github.com/ortlof/OSSM-Stroke
+## M5 Remote now works with the official OSSM BLE firmware. ##
+If you still have the 'old' ESP firmware (used for previous M5 remote firmwares), then this Branch is needed: https://github.com/ortlof/OSSM-Stroke
 
 The Cable remote is obsolete with this firmware. If you want to go back you need to flash the OSSM orginal firmware back.
-
-You can Easy flash the OSSM Mainboard with this [Online Flasher](https://openlust.org/lust-remote/lustremote-firmware/).
 
 
 ## Supported in this version of the M5 remote:
 | OSSM Machine | https://github.com/KinkyMakers/OSSM-hardware |
 
-## Not Supported sex toys in this version
+## Additional toy support:
 
-| EJECT | https://github.com/ortlof/EJECT-cum-tube-project | [A Work in Progress]
+| EJECT | https://github.com/MarcoB979/EJECT-Cumpump | [A Work in Progress]
+| FIST-IT | https://github.com/MarcoB979/Fist-IT | [A Work in Progress]
+
+For information on how to build and source your materials, see below or see the official M5 remote page here:
+https://github.com/ortlof/OSSM-M5-Remote
+
+## Operation, functionality and screens:
+Steps to initialize start-up:
+1. Power on the OSSM and let it home.
+2. Power on the OSSM M5 Remote.
+3. M5 remote will try an auto connect first. If the OSSM was not ready and connection is unsuccesfull you can try an other time by pressing the left encoder to select 'Connect' and try to connect manually.
+4. After successfull connection, the menu screen will show.
+
+## Menu screen:
+in the menu screen you can select the various options and go to the respective screens:
+- Home (OSSM Control)
+- Bator Mode (OSSM control for strokers)
+- Settings (to change the different settings)
+- Addons (to open and/or activate (show/hide) the available addons.
+    - Available addons are now: Eject, Fist-IT and Streaming mode
+
+* make your selection by rotating the right encoder.
+
+* Pressing the left encoder button makes the M5 remote restart (after you confirmed the notification)
+* Pressing the middle (MX/square) button, you can change the colors used in the screen (ui themes are built in)
+* Pressing the right encoder button selects the actively selected menu option
+
+
+## (OSSM) Home screen
+
+## Bator Mode
+
+## Settings
+
+## Addons
+
+
+
+
+
+
+## Operation, or how do I use it?
+
+1. Power on the OSSM and let it home.
+2. Power on the OSSM M5 Remote.
+3. Press the left encoder to select 'Connect'
+4. You can verify it is connected by looking in the top left corner, it should say 'connected'.
+5. You can now begin use. You'll need to set the speed, depth and stroke to more than 0 and press the middle key to start. Start the speed out slow. 
+
+
 
 
 
@@ -72,11 +119,3 @@ PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder if you want to 
 | 4x | M5_Remote_Knob_Customizable.scad | If you go for the 3d Printed knobs |
 
 Filament - A good quality PLA works well. While there are no threads it is recommended that your printer is well calibrated.  
-
-## Operation, or how do I use it?
-
-1. Power on the OSSM and let it home.
-2. Power on the OSSM M5 Remote.
-3. Press the left encoder to select 'Connect'
-4. You can verify it is connected by looking in the top left corner, it should say 'connected'.
-5. You can now begin use. You'll need to set the speed, depth and stroke to more than 0 and press the middle key to start. Start the speed out slow. 
