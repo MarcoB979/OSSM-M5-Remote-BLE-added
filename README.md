@@ -101,16 +101,21 @@ The middle square button has the same start/stop behaviour as the OSSM home scre
 ## Settings
 <img src="image/Settings.jpg?raw=true" alt="settings" title="Settings" width="200">
 In settings you can change the following settings:
+
 -Vibrate: should the M5 Remote vibrate after button presses to give haptic feedback. 
+
 -Touch Disabled: if you do not want to be able to use the touchscreen, then check this option.
+
 -Stroke inverted: change the bravoure of the encoder where you change the stroke values in the OSSM Ho.e screen (rotating right games stoke go up, or down.
+
 -Force re-home: if we switch to the Menu screen and then back to screens where you can control the OSSM, this can force a homeing procedure. This is a safety measure, but sometimes this might be not totally necessary if you use the 57AIM Gold Motor. In that case you can choose to disable to force re-homes on occasions where this is not absolutely necessary. 
 
 > [!WARNING]
-PLEASE NOTE: it is recommended to have this selected. EXTRA CAUTION: if you own the IHSV57 motor, you MUST keep this option activated for safety reasons!
+PLEASE NOTE: it is recommended to have force re-home selected. **EXTRA CAUTION:** if you own the IHSV57 motor, you MUST keep this option activated for safety reasons!
 
 
 You can also change the screen brightness to fit your needs and save on battery life. To do this, rotate the 3rd rotary encoder (seen from the left). Changes are applied immediately.
+
 
 As a standard, the M5 remote has a screensaver functionality.  if not using the remote, the screen will be dimmed, after a longer time of not using, the remote will go into deep sleep. This will disconnect all connections too.
 
