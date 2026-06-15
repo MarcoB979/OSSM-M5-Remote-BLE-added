@@ -17,11 +17,13 @@ The Cable remote is obsolete with this firmware.
 
 ## Supported in this version of the M5 remote:
 [OSSM latest firmware (BLE)](https://github.com/KinkyMakers/OSSM-hardware)  
-[OSSM StrokeEngine branch for older OSSM](https://github.com/KinkyMakers/OSSM-hardware)
+[OSSM StrokeEngine branch for older (esp_now) OSSM](https://github.com/KinkyMakers/OSSM-hardware)
 
 ## Additional toy support:
 
 [EJECT Cumpump](https://github.com/MarcoB979/EJECT-Cumpump)  [A Work in Progress]
+
+
 [FIST-IT](https://github.com/MarcoB979/Fist-IT) | [A Work in Progress]
 
 For information on how to build and source your materials, see the bottom of the page or see the official M5 remote page here:
