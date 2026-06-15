@@ -148,20 +148,21 @@ Your choice will be stored in memory so you only have to do this once.
 The latest OSSM Firmware has a streaming mode. For example: by using streaming mode, you are able to use funscripts or the xtoys application (position mode).
 
 
-Xtoys is however not completely compatible/functional yet (there is no starting speed values sent by xtoys after position/streaming mode is made active). By using the M5 Remote, this is performer correctly, or you can manage this yourself. 
+Xtoys is however not completely compatible/functional yet (there is no starting speed values sent by xtoys after position/streaming mode is made active). By using the M5 Remote, this is correctly done automatically. You also have an override option to control this yourself. 
 
 
-Ater you start the M5 Streaming mode, the M5 will send the task to go streaming to the OSSM, make sure it will do a homeing procedure when necessary and then slowly push out the rail to the maximum. this way you can position yourself safely.
+Ater you start the M5 Streaming mode, the M5 will send the task to go to streaming to the OSSM, make sure it will do a homeing procedure when necessary and then slowly push out the rail to the maximum. This way you can position yourself safely before use.
+
 This is done in a few steps. Notifications on screen will help/guide you.
 
 
 Some of these notifications show safety warnings, since the OSSM Streaming mode still is an experimental feature. So is the addon available in the M5 Remote. **PLEASE BE CAUTIOUS**  when using streaming mode. Ensure patterns, (fun)scripts and others are tested and found safe by you before use. **You alone are responsible for your own safety!**
 
 
-Normally, when the streaming setup is finished, you can safely shut down the M5 remote. There is a possibility to override settings. This way you can change the maximum speed, depth or stroke the OSSM will accept and you can start or stop movement. Changing max speed (or other values) will not make changes to the settings of the online streaming service. So if in the streaming service (xtoys as example) the speed is set at 80 and on your M5 max speed is set at 50 (%) the OSSM will set the actual speed at 40 (50% of the set 80). This works similar to stroke, depth and sensation.
+Normally, when the streaming setup is finished, you can safely shut down the M5 remote. There is however a possibility to override settings. This way you can change the maximum speed, depth or stroke the OSSM will accept and you can start or stop movement. Changing max speed (or other values) will not make changes to the settings of the online streaming service. So if in the streaming service (xtoys as example) the speed is set at 80 and on your M5 max speed is set at 50 (%) the OSSM will apply an actual speed of 40 (50% of the sent 80 by the streaming service). This works similar to stroke, depth and sensation.
 
 > [!WARNING]
-> Overriding can give you more control, but also can pose a safety hazard if done pourly. **ONLY** use this functionality if you understand the hazards and know what you do. Again: ONLY YOU are responsible for your safety.
+> Overriding can give you more control, but also can pose a safety hazard if handled pourly. **ONLY** use this functionality if you understand the hazards and know what you do. Again: ONLY YOU are responsible for your safety.
 
 
 # Addons - EJECT cumpump
