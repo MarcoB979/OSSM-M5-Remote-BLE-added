@@ -13,7 +13,7 @@ To help with development and design join the KinkyMakers Discord: https://discor
 ## M5 Remote now works with the official OSSM BLE firmware. ##
 If you still have the 'old' ESP firmware (used for previous M5 remote firmwares), then this Branch is needed: https://github.com/ortlof/OSSM-Stroke. Communication via ESP_NOW still is possible, but some extra functionality will be limited (no streaming mode for example). If you use the newer V2 OSSM controller boards, please update your OSSM Firmware.
 
-The Cable remote is obsolete with this firmware. If you want to go back you need to flash the OSSM orginal firmware back.
+The Cable remote is obsolete with this firmware.
 
 ## Supported in this version of the M5 remote:
 | OSSM Machine | https://github.com/KinkyMakers/OSSM-hardware |
@@ -34,7 +34,7 @@ Steps to initialize start-up:
 4. After successfull connection, the menu screen will show.
 
 ## Menu screen:
-![Final Addon](image/Menu.jpg?raw=true "Menu" )
+<img src="image/Menu.jpg?raw=true" alt="Final Addon" title="Menu" width="200">
 in the menu screen you can select the various options and go to the respective screens:
 - Home (OSSM Control)
 - Bator Mode (OSSM control for strokers)
@@ -49,7 +49,7 @@ in the menu screen you can select the various options and go to the respective s
 * Pressing the right encoder button selects the actively selected menu option
 
 ## (OSSM) Home screen
-![Final Addon](image/OSSM-home.jpg?raw=true "Home" )
+<img src="image/OSSM-home.jpg?raw=true" alt="home" title="Home" width="200">
 This is the home screen where you can control your OSSM after successfull connection. the OSSM is controlled in 'Stroke Engine' mode.
 By rotating the left encoder you control speed
 By rotating the second encoder you change depth
@@ -69,19 +69,26 @@ When pressing the left button, the OSSM will only do the pullout movement as des
 To change a pattern, click the right button to goto the Pattern selection screen.
 
 ## Bator Mode
-![Final Addon](image/Bator-mode.jpg?raw=true "Bator" )
-Bator mode has the same functionality as the OSSM ho.e screen. However, the OSSM movement is now suitable for strokers. the OSSM will now move with the middle of the rail as starting point. Only speed, stroke and sensation can be set. When stroke is changed, the OSSM will move from middle to the size of stroke. If stroke is set to 20% as example, the OSSM will move from middle of the rail (50%) to 10 %on the left (40%) and then to 60% of the rail lengte (making it a 20% stroke move)
+<img src="image/Bator-mode.jpg?raw=true" alt="bator" title="Bator mode" width="200">
+Bator mode has the same functionality as the OSSM ho.e screen. However, the OSSM movement is now suitable for strokers. The OSSM will now move with the middle of the rail as starting point. 
+
+Only speed, stroke and sensation can be set. When stroke is changed, the OSSM will move from middle to the size of stroke. If stroke is set to 20% as example, the OSSM will move from middle of the rail (50%) to 10 %on the left (40%) and then to 60% of the rail lengte (making it a 20% stroke move)
 
 Clicking the right button brings you in the pattern selection menu. Clicking the left encoder return to the menu screen.
 The middle square button has the same start/stop behaviour as the OSSM home screen, including the long press emergency stop.
 
 ## Settings
 ![Final Addon](image/Settings.jpg?raw=true "Settings" )
+<img src="image/Settings.jpg?raw=true" alt="settings" title="Settings" width="200">
 In settings you can change the following settings:
 Vibrate: should the M5 Remote vibrate after button presses to give haptic feedback. 
-Touch Disabled: if you do not want to be able to use the touchscreen, then check this option.
-Stroke inverted: change the bravoure of the encoder where you change the stroke values in the OSSM Ho.e screen (rotating right games stoke go up, or down.
-Force re-home: if we switch to the Menu screen and then back to screens where you can control the OSSM, this can force a homeing procedure. This is a safety measure, but sometimes this might be not totally necessary if you use the 57AIM Gold Motor. In that case you can choose to disable to force re-homes on occasions where this is not absolutely necessary. PLEASE NOTE: it is recommended to have this selected. EXTRA CAUTION: if you own the IHSV57 motor, you MUST keep this option activated for safety reasons!
+-Touch Disabled: if you do not want to be able to use the touchscreen, then check this option.
+-Stroke inverted: change the bravoure of the encoder where you change the stroke values in the OSSM Ho.e screen (rotating right games stoke go up, or down.
+-Force re-home: if we switch to the Menu screen and then back to screens where you can control the OSSM, this can force a homeing procedure. This is a safety measure, but sometimes this might be not totally necessary if you use the 57AIM Gold Motor. In that case you can choose to disable to force re-homes on occasions where this is not absolutely necessary. 
+
+
+> [!WARNING]
+PLEASE NOTE: it is recommended to have this selected. EXTRA CAUTION: if you own the IHSV57 motor, you MUST keep this option activated for safety reasons!
 
 You can also change the screen brightness to fit your needs and save on battery life. To do this, rotate the 3rd rotary encoder (seen from the left). Changes are applied immediately.
 
@@ -90,8 +97,8 @@ Rotating the right encoder will scroll through the options. Pressing it will sel
 
 By pressing the middle button, you return to the menu screen. Do not forget to save first.
 
-## Addons
-![Final Addon](image/Addons.jpg?raw=true "Addons" )
+## Addons screen
+<img src="image/Addons.jpg?raw=true" alt="Addons" title="Addons" width="200">
 The M5 Remote reimagined has several addons available, which you can start in the Addons screen. 
 
 To select (open) an addon, navigatie to it and select/run by pressing the right encoder button. 
@@ -102,18 +109,20 @@ After you press the middle button (show/hide) you can deactivate (hide) or activ
 Your choice will be stored in memory so you only have to do this once.
 
 # Addons - Streaming mode
-![Final Addon](image/Streaming.jpg?raw=true "Streaming" )
+<img src="image/Streaming.jpg?raw=true" alt="Streaming" title="Streaming" width="200">
 The latest OSSM Firmware has a streaming mode. By using streaming mode, you are able to use funscripts or the xtoys application (position mode).
 
 Xtoys is however not completely compatible/functional yet (there is no storting speed values sent by xtoys after position/streaming mode is made active. By using the M5 Remote, you can manage this yourself. 
 
 Ater you start the M5 Streaming mode, the M5 will send the task to go streaming to the OSSM, make sure it will do a homeing procedure when necessary and then slowly push out the rail to the maximum. this way you can position yourself safely.
 This is done in a few steps. Notifications on screen will help/guide you.
+
 Some of these notifications show safety warnings, since the OSSM Streaming mode still is an experimental feature. So is the addon available in the M5 Remote. PLEASE BE CAUTIOUS  when using streaming mode. Ensure patterns, (fun)scripts are tested and found safe by you. You alone are responsible for your own safety!
 
 Normally, when the streaming setup is finished, you can safely shut down the M5 remote. There is a possibility to override settings. This way you can change the maximum speed, depth or stroke the OSSM will accept and you can start or stop movement. Changing max speed will not make changes to the settings of the online streaming service. So if in the streaming service (xtoys as example) the speed is set at 80 and on your M5 max speed is set at 50 (%) the OSSM will set the actual speed at 40 (50% of the set 80). This works similar to stroke, depth and sensation.
 
-Overriding can give you more control, but also can pose a safety hazard it done pourly. ONLY use this functionality if you understand the hazards and know what you do. Again: ONLY YOU are responsible for your safety.
+> [!WARNING]
+> Overriding can give you more control, but also can pose a safety hazard it done pourly. ONLY use this functionality if you understand the hazards and know what you do. Again: ONLY YOU are responsible for your safety.
 
 # Addons - EJECT cumpump
 ![Final Addon](image/Fist-IT.jpg?raw=true "Eject" )
