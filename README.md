@@ -15,7 +15,6 @@ If you still have the 'old' ESP firmware (used for previous M5 remote firmwares)
 
 The Cable remote is obsolete with this firmware. If you want to go back you need to flash the OSSM orginal firmware back.
 
-
 ## Supported in this version of the M5 remote:
 | OSSM Machine | https://github.com/KinkyMakers/OSSM-hardware |
 
@@ -35,6 +34,7 @@ Steps to initialize start-up:
 4. After successfull connection, the menu screen will show.
 
 ## Menu screen:
+![Final Addon](image/Menu.jpg?raw=true "Menu" )
 in the menu screen you can select the various options and go to the respective screens:
 - Home (OSSM Control)
 - Bator Mode (OSSM control for strokers)
@@ -48,14 +48,44 @@ in the menu screen you can select the various options and go to the respective s
 * Pressing the middle (MX/square) button, you can change the colors used in the screen (ui themes are built in)
 * Pressing the right encoder button selects the actively selected menu option
 
-
 ## (OSSM) Home screen
+![Final Addon](image/OSSM-home.jpg?raw=true "Home" )
+This is the home screen where you can control your OSSM after successfull connection. the OSSM is controlled in 'Stroke Engine' mode.
+By rotating the left encoder you control speed
+By rotating the second encoder you change depth
+By rotating the third encoder you change stroke (notice the slider shows the stroke depth relative to the depth)
+By rotating the fourth (right) encoder you can change sensation (influences pattern behaviour)
+
+Rotating an encoder to the right increases (+) the values, to the left the values decreases (-) the values. If in settings you selected to invert the stroke, rotating the slider increases when rotating to the right, if unchecked the values will decrease.
+
+If stroke, speed and depth are positive values the OSSM will start automatically. if one of the values is set to 0, the OSSM will stop.
+
+You can also press the middle button to start and stop.
+
+When long pressing the middle button, you activate the emergency stop: the OSSM will slowly retract itself and go back to the menu screen. The OSSM MUST be re-homed before you can start to play again.
+
+When pressing the left button, the OSSM will only do the pullout movement as described, but not trigger an emergency stop or go back to the menu.
+
+To change a pattern, click the right button to goto the Pattern selection screen.
 
 ## Bator Mode
+![Final Addon](image/Bator.png?raw=true "Bator" )
+Bator mode has the same functionality as the OSSM ho.e screen. However, the OSSM movement is now suitable for strokers. the OSSM will now move with the middle of the rail as starting point. Only speed, stroke and sensation can be set. When stroke is changed, the OSSM will move from middle to the size of stroke. If stroke is set to 20% as example, the OSSM will move from middle of the rail (50%) to 10 %on the left (40%) and then to 60% of the rail lengte (making it a 20% stroke move)
+
+Clicking the right button brings you in the pattern selection menu. Clicking the left encoder return to the menu screen.
+The middle square button has the same start/stop behaviour as the OSSM home screen, including the long press emergency stop.
 
 ## Settings
-
+![Final Addon](image/Settings.jpg?raw=true "Settings" )
 ## Addons
+![Final Addon](image/Addons.jpg?raw=true "Addons" )
+# Addons - Streaming mode
+![Final Addon](image/Streaming.jpg?raw=true "Streaming" )
+# Addons - EJECT cumpump
+![Final Addon](image/Fist-IT.jpg?raw=true "Eject" )
+# Addons - Fist-IT
+![Final Addon](image/Eject.jpg?raw=true "Fist-IT" )
+
 
 
 
