@@ -24,6 +24,7 @@
 #include "../icons.h"
 #include "language.h"
 #include <M5Unified.h>
+#include <string>
 
 // Screen resolution constants (same as backup firmware main.h)
 #ifndef HOR_RES
@@ -785,8 +786,9 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
                 lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_set_align(label, LV_ALIGN_RIGHT_MID);
                 lv_obj_set_y(label, 0);
-                lv_obj_set_x(label, -34);
-                lv_obj_set_style_text_font(label, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+                lv_obj_set_x(label, 0);  //was -34
+                lv_obj_set_style_text_color(label, lv_color_hex(getActiveTextSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+                lv_obj_set_style_text_font(label, &lv_font_montserrat_8, LV_PART_MAIN | LV_STATE_DEFAULT);
             }
         }
         for (lv_obj_t *bar : batteryBars) {
@@ -1247,9 +1249,19 @@ void pullOut(lv_event_t * e) {
     }
     SendCommand(DEPTH, 0, OSSM_ID);
     SendCommand(STROKE, 0.1, OSSM_ID); // set a tiny stroke to ensure we exit the stroke pattern if active
-    lv_slider_set_value(ui_homespeedslider, 0, LV_ANIM_OFF);
-    lv_slider_set_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
-    lv_slider_set_value(ui_homedepthslider, 0, LV_ANIM_OFF);
+    speed = 0;
+    stroke = 0;
+    depth = 0;
+    lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
+    lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
+    lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
+    std::string speedStr = std::to_string(speed);
+    lv_label_set_text(ui_homespeedvalue, speedStr.c_str());
+    std::string strokeStr = std::to_string(stroke);
+    lv_label_set_text(ui_homestrokevalue, strokeStr.c_str());
+    std::string depthStr = std::to_string(depth);
+    lv_label_set_text(ui_homedepthvalue, depthStr.c_str());
+
     lv_refr_now(NULL);  // force immediate render — lv_task_handler() is re-entrant-blocked inside an event callback
     delay(5000);
     SendCommand(SPEED, 0, OSSM_ID);

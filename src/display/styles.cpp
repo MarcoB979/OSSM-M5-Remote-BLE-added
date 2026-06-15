@@ -168,7 +168,7 @@ void styles_apply_scheme(int index) {
 
     // Roller
     lv_style_set_bg_color(&style_roller, lv_color_hex(COLOR_SCHEMES[index].roller));
-    lv_style_set_bg_opa(&style_roller, 255);
+    lv_style_set_bg_opa(&style_roller, LV_OPA_30); //255);
 
     lv_style_set_bg_color(&style_roller_main, mix_with_white(COLOR_SCHEMES[index].roller, 160));
     lv_style_set_bg_opa(&style_roller_main, 255);
@@ -188,7 +188,8 @@ void styles_apply_scheme(int index) {
     lv_style_set_text_color(&style_text_primary, primary_text);
     lv_style_set_text_opa(&style_text_primary, 255);
 
-    lv_style_set_text_color(&style_text_secondary, primary_text);
+    lv_color_t secondary_text = (lum < 128.0f) ? lv_color_black() : lv_color_white();
+    lv_style_set_text_color(&style_text_secondary, secondary_text);
     lv_style_set_text_opa(&style_text_secondary, 255);
 
     lv_style_set_border_color(&style_checkbox_indicator, lv_color_hex(COLOR_SCHEMES[index].battery_indicator));

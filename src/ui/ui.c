@@ -391,7 +391,8 @@ static void ui_event_PatternButtonM(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        lv_obj_t *dest = g_pattern_return_screen ? g_pattern_return_screen : ui_Home;
+        _ui_screen_change(dest, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
 static void ui_event_PatternButtonR(lv_event_t * e)
@@ -1355,7 +1356,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_PatternButtonMText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_PatternButtonMText, T_HOME);
+    lv_label_set_text(ui_PatternButtonMText, T_BACK);
     applyTextPrimaryStyle(ui_PatternButtonMText);
 
     // ui_PatternButtonR
@@ -1388,7 +1389,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_PatternButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_PatternButtonRText, T_SAVE);
+    lv_label_set_text(ui_PatternButtonRText, T_SELECT);
     applyTextPrimaryStyle(ui_PatternButtonRText);
 
     // ui_Batt5
@@ -1466,7 +1467,7 @@ void ui_Pattern_screen_init(void)
     lv_obj_set_align(ui_PatternBand1, LV_ALIGN_CENTER);
     lv_obj_set_y(ui_PatternBand1, 15);
     lv_obj_clear_flag(ui_PatternBand1, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_style(ui_PatternBand1, &style_slider_indicator[1], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_PatternBand1, &style_slider_indicator[2], LV_PART_MAIN | LV_STATE_DEFAULT);
 
     ui_PatternBand2 = lv_obj_create(ui_Pattern);
     lv_obj_set_width(ui_PatternBand2, lv_pct(95));
@@ -1474,7 +1475,7 @@ void ui_Pattern_screen_init(void)
     lv_obj_set_align(ui_PatternBand2, LV_ALIGN_CENTER);
     lv_obj_set_y(ui_PatternBand2, 54);
     lv_obj_clear_flag(ui_PatternBand2, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_add_style(ui_PatternBand2, &style_slider_indicator[2], LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_PatternBand2, &style_slider_indicator[1], LV_PART_MAIN | LV_STATE_DEFAULT);
 
 // ui_PatternS
 
@@ -1493,6 +1494,10 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_add_style(ui_PatternS, &style_roller_main, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(ui_PatternS, &style_roller, LV_PART_SELECTED | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_PatternS, &style_text_secondary, LV_PART_MAIN | LV_STATE_DEFAULT); //show other slider text as black
+    lv_obj_add_style(ui_PatternS, &style_text_primary, LV_PART_SELECTED | LV_STATE_DEFAULT); //show selected slider text as white
+    lv_obj_set_style_text_line_space(ui_PatternS, 21, LV_PART_MAIN | LV_STATE_DEFAULT); //room between first and third slider option with second in the middle
+    lv_obj_set_style_text_line_space(ui_PatternS, 21, LV_PART_SELECTED | LV_STATE_DEFAULT); //room between first and third slider option with second in the middle
     lv_obj_set_style_bg_opa(ui_PatternS, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(ui_PatternS, LV_OPA_TRANSP, LV_PART_SELECTED | LV_STATE_DEFAULT);
 

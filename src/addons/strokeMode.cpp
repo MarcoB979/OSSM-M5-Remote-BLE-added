@@ -70,6 +70,7 @@ static void s_stroke_btn_l_cb(lv_event_t *e) { //} /*e*/) {
 static void s_stroke_btn_r_cb(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
         resetEncoderCounts();
+        g_pattern_return_screen = ui_Stroke;
         _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
