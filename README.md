@@ -5,8 +5,8 @@ A Remote Control Platform for with a focus on the [OSSM](https://github.com/Kink
 
 ![Final Addon](image/remote.png?raw=true "Remote" )
 
-Intially developed for the OSSM Project by Ortlof, this new firmware has received a complete re-do.
-https://github.com/KinkyMakers/OSSM-hardware
+Intially developed for the [OSSM Project](https://github.com/KinkyMakers/OSSM-hardware) by Ortlof, this new firmware has received a complete re-do.
+
 
 To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
 
