@@ -62,6 +62,7 @@ bool canEnterDeepSleep();
 void enterDeepSleep();
 void screen_power_tick();
 void ResetButtons();
+void resetEncoderCounts();
 // ---- Notification overlay ----
 #ifdef __cplusplus
 int showNotification(const char *title,

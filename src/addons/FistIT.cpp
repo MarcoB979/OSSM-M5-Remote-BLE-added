@@ -143,6 +143,7 @@ static void clearButtonFlags()
   click3_short_waspressed = false;
   click3_long_waspressed = false;
   click3_double_waspressed = false;
+  resetEncoderCounts();
 }
 
 static void screensaver_check_activity()
@@ -643,6 +644,7 @@ void FistITHandleScreen(const ButtonEvents &events)
     clearButtonFlags();
   } else if (events.rightShort) {
     LogDebug("FistIT: Right short click - returning to Menu screen");
+    resetEncoderCounts();
     _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
   }

@@ -500,6 +500,7 @@ void EjectHandleScreen(const ButtonEvents &events)
     ejectToggleAction();
     clearButtonFlags();
   } else if (events.rightShort) {
+    resetEncoderCounts();
     _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
   }

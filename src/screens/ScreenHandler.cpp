@@ -1347,6 +1347,12 @@ void setupdepthF(lv_event_t * e) {
     SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
 }
 
+void resetEncoderCounts() {
+    encoder1.setCount(0);
+    encoder2.setCount(0);
+    encoder3.setCount(0);
+    encoder4.setCount(0);
+}
 // -------------------------------------------------------
 // checkBleDisconnectError() — show a fatal notification if BLE drops
 // and does not recover within 3 seconds.
@@ -2060,8 +2066,10 @@ void handleScreens() {
         if (click2_short_waspressed) {
             lv_obj_send_event(ui_PatternButtonL, LV_EVENT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {
+            resetEncoderCounts();
             lv_obj_send_event(ui_PatternButtonM, LV_EVENT_CLICKED, NULL);
         } else if (click3_short_waspressed) {
+            resetEncoderCounts();
             lv_obj_send_event(ui_PatternButtonR, LV_EVENT_CLICKED, NULL);
         }
     }
