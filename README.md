@@ -5,13 +5,13 @@ A Remote Control Platform for with a focus on the [OSSM](https://github.com/Kink
 
 ![Final Addon](image/remote.png?raw=true "Remote" )
 
-Intially developed for the OSSM Project: 
+Intially developed for the OSSM Project by Ortlof, this new firmware has received a complete re-do.
 https://github.com/KinkyMakers/OSSM-hardware
 
 To help with development and design join the KinkyMakers Discord: https://discord.gg/MmpT9xE . Be sure to say hello in the #m5-remote channel. 
 
 ## M5 Remote now works with the official OSSM BLE firmware. ##
-If you still have the 'old' ESP firmware (used for previous M5 remote firmwares), then this Branch is needed: [esp-now](https://github.com/ortlof/OSSM-Stroke). Communication via ESP_NOW still is possible, but some extra functionality will be limited (no streaming mode for example). If you use the newer V2 OSSM controller boards, please update your OSSM Firmware.
+If you still have the 'old' ESP_NOW firmware on your OSSM (used for previous M5 remote firmwares), from the [esp-now branch](https://github.com/ortlof/OSSM-Stroke), this new M5 remote firmware will still work. Communication via ESP_NOW still is possible, but some extra functionality will be limited (no streaming mode for example). If you use the newer V2 OSSM controller boards, please update your OSSM Firmware.
 
 The Cable remote is obsolete with this firmware.
 
