@@ -1,6 +1,7 @@
 //EN
 // Language
 #define T_HEADER            "M5 Remote"
+#define T_OSSM              "OSSM"
 #define T_BLANK             ""
 #define T_MENU              "Menu"
 #define T_DEMO              "Demo"
@@ -18,7 +19,7 @@
 #define T_SETTINGS          "Settings"
 #define T_MOTD              "Welcome to OSSM M5 Remote"
 #define T_BATT              "Battery"
-#define T_HOMEL          "Pullout"
+#define T_HOMEL             "Pullout"
 #define T_START             "Start/Stop"
 #define T_CLICK_RESUME      "Click to Home/resume"
 #define T_RESUME            "Resume"
@@ -46,7 +47,7 @@
 #define T_OUT_TORQE         "Outward Torque:"
 #define T_IN_TORQE          "Inward Torque:"
 #define T_EJECT_SETTINGS    "EJECT Settings"
-#define T_EJECT             "EJECT"
+#define T_EJECT             "EJECT cumpump"
 #define T_SELECT            "Select"
 #define T_OPEN              "Open"
 #define T_SAVE              "Save"
@@ -114,10 +115,10 @@
 #define T_SCREEN_STREAMING        "Streaming"
 #define T_SCREEN_SETTINGS         "Settings"
 #define T_SCREEN_ADDONS           "Addons"
-#define T_SCREEN_COLORS           "Colors"
-#define T_SCREEN_PATTERN          "Pattern"
+#define T_SCREEN_COLORS           "Color Themes"
+#define T_SCREEN_PATTERN          "Pattern selection"
 #define T_SCREEN_TORQUE           "Torque"
-#define T_SCREEN_EJECT            "CUM pump"
+#define T_SCREEN_EJECT            "EJECT Cum Pump"
 
 // Addons screen
 #define T_ADDONS_HINT             "Click addon to assign: Left -> Right -> Off"

@@ -737,7 +737,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_Logo2, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo2, T_HEADER);
+    lv_label_set_text(ui_Logo2, T_SCREEN_STROKE_ENGINE);
 
     lv_obj_set_style_text_font(ui_Logo2, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyTitleBarStyle(ui_Logo2);
@@ -1288,7 +1288,7 @@ void ui_Pattern_screen_init(void)
 
     lv_obj_set_align(ui_Logo5, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo5, T_HEADER);
+    lv_label_set_text(ui_Logo5, T_SCREEN_PATTERN);
 
     lv_obj_set_style_text_font(ui_Logo5, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyTitleBarStyle(ui_Logo5);
@@ -1860,7 +1860,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_set_align(ui_Logo6, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo6, T_HEADER);
+    lv_label_set_text(ui_Logo6, T_SCREEN_EJECT);
 
     lv_obj_set_style_text_font(ui_Logo6, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyTitleBarStyle(ui_Logo6);
@@ -2032,7 +2032,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_Logo1, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_Logo1, T_HEADER);
+    lv_label_set_text(ui_Logo1, T_SCREEN_SETTINGS);
 
     lv_obj_set_style_text_font(ui_Logo1, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyTitleBarStyle(ui_Logo1);
