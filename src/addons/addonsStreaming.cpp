@@ -217,14 +217,16 @@ static void enterManageMode() {
     s_addons_manage_mode = true;
     s_addons_selected    = 0;
     s_addons_offset      = 0;
-    if (s_addons_btn_r_text) lv_label_set_text(s_addons_btn_r_text, "Show All");
+    if (s_addons_btn_m_text) lv_label_set_text(s_addons_btn_m_text, T_BACK "/" T_SAVE);
+    if (s_addons_btn_r_text) lv_label_set_text(s_addons_btn_r_text, T_ENABLEDISABLE);
 }
 
 static void exitManageMode() {
     s_addons_manage_mode = false;
     s_addons_selected    = 0;
     s_addons_offset      = 0;
-    if (s_addons_btn_r_text) lv_label_set_text(s_addons_btn_r_text, "Enable/Disable");
+    if (s_addons_btn_m_text) lv_label_set_text(s_addons_btn_m_text, T_ENABLEDISABLE);
+    if (s_addons_btn_r_text) lv_label_set_text(s_addons_btn_r_text, T_SELECT);
 }
 static void refresh_addons_labels() {
     lv_obj_t *rows[3]  = { ui_AddonsItem0, ui_AddonsItem1, ui_AddonsItem2 };
@@ -517,7 +519,7 @@ static void event_addons_screen(lv_event_t *e) {
         s_addons_manage_mode = false;
         s_addons_selected    = 0;
         s_addons_offset      = 0;
-        if (s_addons_btn_r_text) lv_label_set_text(s_addons_btn_r_text, "Enable/Disable");
+        if (s_addons_btn_m_text) lv_label_set_text(s_addons_btn_m_text, T_ENABLEDISABLE);
         addonsSyncSelectionVisual();
         screenmachine(e);
     }
@@ -547,6 +549,10 @@ void addonsActivateSelection(void) {
         // Launch the selected enabled addon
         if (s_addons_selected < 0 || s_addons_selected >= s_enabled_count) return;
         int ai = s_enabled_indices[s_addons_selected];
+        encoder1.setCount(0);
+        encoder2.setCount(0);
+        encoder3.setCount(0);
+        encoder4.setCount(0);
         if (s_addon_defs[ai].activate) s_addon_defs[ai].activate();
     }
 }
@@ -869,11 +875,11 @@ void ui_Addons_screen_init(void) {
     lv_obj_set_align(ui_AddonsButtonM, LV_ALIGN_BOTTOM_MID);
     lv_obj_set_y(ui_AddonsButtonM, -8);
     applyButtonStylesLocal(ui_AddonsButtonM, &style_button_m, &style_button_m_focused);
-    lv_obj_add_event_cb(ui_AddonsButtonM, event_addons_open, LV_EVENT_SHORT_CLICKED, NULL);
+    lv_obj_add_event_cb(ui_AddonsButtonM, event_addons_enable, LV_EVENT_SHORT_CLICKED, NULL);
 
     s_addons_btn_m_text = lv_label_create(ui_AddonsButtonM);
     lv_obj_center(s_addons_btn_m_text);
-    lv_label_set_text(s_addons_btn_m_text, T_SELECT);
+    lv_label_set_text(s_addons_btn_m_text, T_ENABLEDISABLE); //was T_SELECT
 
     ui_AddonsButtonR = lv_btn_create(ui_Addons);
     lv_obj_set_size(ui_AddonsButtonR, 100, 30);
@@ -881,12 +887,11 @@ void ui_Addons_screen_init(void) {
     lv_obj_set_x(ui_AddonsButtonR, -8);
     lv_obj_set_y(ui_AddonsButtonR, -8);
     applyButtonStylesLocal(ui_AddonsButtonR, &style_button_r, &style_button_r_focused);
-    lv_obj_add_event_cb(ui_AddonsButtonR, event_addons_enable, LV_EVENT_SHORT_CLICKED, NULL);
+    lv_obj_add_event_cb(ui_AddonsButtonR, event_addons_open, LV_EVENT_SHORT_CLICKED, NULL);
 
     s_addons_btn_r_text = lv_label_create(ui_AddonsButtonR);
     lv_obj_center(s_addons_btn_r_text);
-    lv_label_set_text(s_addons_btn_r_text, "Enable/Disable");
-
+    lv_label_set_text(s_addons_btn_r_text, T_SELECT);
     ui_g_addons = lv_group_create();
     lv_group_add_obj(ui_g_addons, ui_AddonsItem0);
     lv_group_add_obj(ui_g_addons, ui_AddonsItem1);

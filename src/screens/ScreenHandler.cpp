@@ -1685,10 +1685,10 @@ void handleScreens() {
         if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
             touch_disabled = true;
         }
-        if (encoder4.getCount() > encoder4_enc + 2) {
+        if (encoder4.getCount() > encoder4_enc + 1) {
             lv_group_focus_next(ui_g_menu);
             encoder4_enc = encoder4.getCount();
-        } else if (encoder4.getCount() < encoder4_enc - 2) {
+        } else if (encoder4.getCount() < encoder4_enc - 1) {
             lv_group_focus_prev(ui_g_menu);
             encoder4_enc = encoder4.getCount();
         }

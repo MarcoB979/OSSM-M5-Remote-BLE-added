@@ -126,6 +126,7 @@
 #define T_ADDONS_SLOT_OFF         "Off"
 #define T_BACK                    "Back"
 #define T_ENABLEDISABLE           "Show/Hide"
+#define T_SHOWALL                 "Show All"
 
 // disconnect warnings
 #define T_BLE_COMM_ERROR_TITLE   "BLE COMMUNICATION ERROR"
