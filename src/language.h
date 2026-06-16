@@ -22,7 +22,7 @@
 #define T_HOMEL             "Pullout"
 #define T_START             "Start/Stop"
 #define T_CLICK_RESUME      "Click to Home/resume"
-#define T_RESUME            "Resume"
+#define T_RESUME            "Start"
 #define T_RUNNING           "Running"
 #define T_PAUSE             "Pause"
 #define T_STOP              "STOP"
@@ -75,6 +75,8 @@
 #define T_StrokeNibbler     "Stroke Nibbler"
 #define T_Knot              "Knot"
 
+#define T_PULLING_OUT       "Pullout active"
+#define T_PULLING_OUT_TEXT  "A pullout has been activated. The OSSM will now safely retract and stop all movement."
 #define T_CUM_SPEED         "Speed"
 #define T_CUM_TIME          "Shots"
 #define T_CUM_Volume        "Volume"

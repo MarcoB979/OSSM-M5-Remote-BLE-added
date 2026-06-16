@@ -785,8 +785,8 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
             if (label != nullptr) {
                 lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_set_align(label, LV_ALIGN_RIGHT_MID);
-                lv_obj_set_y(label, 0);
-                lv_obj_set_x(label, 0);  //was -34
+                lv_obj_set_y(label, -5);
+                lv_obj_set_x(label, -20);  //was -34
                 lv_obj_set_style_text_color(label, lv_color_hex(getActiveTextSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
                 lv_obj_set_style_text_font(label, &lv_font_montserrat_8, LV_PART_MAIN | LV_STATE_DEFAULT);
             }
@@ -1255,15 +1255,14 @@ void pullOut(lv_event_t * e) {
     lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
     lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
     lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
-    std::string speedStr = std::to_string(speed);
-    lv_label_set_text(ui_homespeedvalue, speedStr.c_str());
-    std::string strokeStr = std::to_string(stroke);
-    lv_label_set_text(ui_homestrokevalue, strokeStr.c_str());
-    std::string depthStr = std::to_string(depth);
-    lv_label_set_text(ui_homedepthvalue, depthStr.c_str());
-
+    //std::string speedStr = std::to_string(speed);
+    lv_label_set_text(ui_homespeedvalue, "0");
+    //std::string strokeStr = std::to_string(stroke);
+    lv_label_set_text(ui_homestrokevalue, "0");
+    //std::string depthStr = std::to_string(depth);
+    lv_label_set_text(ui_homedepthvalue, "0");
+    showNotification(T_PULLING_OUT, T_PULLING_OUT_TEXT, 10000, false, nullptr, false, nullptr, false);
     lv_refr_now(NULL);  // force immediate render — lv_task_handler() is re-entrant-blocked inside an event callback
-    delay(5000);
     SendCommand(SPEED, 0, OSSM_ID);
     SendCommand(STROKE, 0, OSSM_ID);
     screenmachine(e);
@@ -1336,6 +1335,16 @@ static void applyHomeButtonMState(const char* text, lv_style_t* defaultStyle, lv
     lv_label_set_text(ui_HomeButtonMText, text);
     lv_obj_refresh_style(ui_HomeButtonM, LV_PART_MAIN, LV_STYLE_PROP_ANY);
     lv_obj_invalidate(ui_HomeButtonM);
+}
+
+static void updateHomeButtonMState() {
+    bool isMoving = speed > 0 and stroke > 0 and depth > 0;
+
+    if (isMoving) {
+        applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
+    } else {
+        applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
+    }
 }
 
 void homebuttonmevent(lv_event_t * e) {
@@ -1548,6 +1557,7 @@ void handleScreens() {
 
         // Encoder 1 — Speed
         bool changed = false;
+        bool updateMXbutton = false;
         if (lv_slider_is_dragged(ui_homespeedslider) == false) {
             changed = false;
             lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
@@ -1558,12 +1568,13 @@ void handleScreens() {
                 changed = true; speed -= rampValue;
                 encoder1.setCount(0); rampMs = millis(); encId = 1;
             }
-            if (speed < 0)          { changed = true; speed = 0; }
+            if (speed <= 0)          { changed = true; speed = 0; }
             if (speed > speedlimit) { changed = true; speed = speedlimit; }
             if (changed) { SendCommand(SPEED, speed, OSSM_ID); }
         } else if (lv_slider_get_value(ui_homespeedslider) != speed) {
             speed = lv_slider_get_value(ui_homespeedslider);
             SendCommand(SPEED, speed, OSSM_ID);
+            updateMXbutton=true;
         }
         char speed_v[7]; dtostrf(speed, 6, 0, speed_v);
         lv_label_set_text(ui_homespeedvalue, speed_v);
@@ -1584,7 +1595,7 @@ void handleScreens() {
                 }
                 encoder2.setCount(0); rampMs = millis(); encId = 2;
             }
-            if (depth < 0)            { changed = true; depth = 0; }
+            if (depth <= 0)            { changed = true; depth = 0; stroke = 0; }
             if (depth > maxdepthinmm) { changed = true; depth = maxdepthinmm; }
             if (changed) {
                 SendCommand(DEPTH,  depth,  OSSM_ID);
@@ -1611,7 +1622,7 @@ void handleScreens() {
                 changed = true; stroke += invertStroke ? -rampValue : rampValue;
                 encoder3.setCount(0); rampMs = millis(); encId = 3;
             }
-            if (stroke < 0)            { changed = true; stroke = 0; }
+            if (stroke <= 0)            { changed = true; stroke = 0; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
             if (changed) {
                 SendCommand(STROKE, stroke, OSSM_ID);
@@ -1685,8 +1696,11 @@ void handleScreens() {
         }
         const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         if (!wasMotionReady && isMotionReady && changed && !OSSM_On) {
-           lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
+          LogDebug("Auto pressed HomeButtonM to start OSSM because speed, stroke, and depth are all > 0");
+          lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
         }
+
+        updateHomeButtonMState();
 
         if (FistITPaired()) {
             lv_label_set_text(ui_HomeButtonRText, T_PATTERN_Button "   F");
@@ -1786,20 +1800,20 @@ void handleScreens() {
                 changed = true; stroke -= 1;
                 encoder2.setCount(0);
             }
-            if (stroke < 0)            { changed = true; stroke = 0; }
+            if (stroke <= 0.5)            { changed = true; stroke = 0; depth = 0; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
             if (changed) {
                 char sv[7]; dtostrf(stroke, 6, 0, sv);
                 if (ui_StrokeStrokeValue) lv_label_set_text(ui_StrokeStrokeValue, sv);
                 depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
-                if (depth < 0.0f) depth = 0.0f;
+                if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
                 SendCommand(STROKE, stroke, OSSM_ID);
                 SendCommand(DEPTH,  depth,  OSSM_ID);
             }
         } else if (ui_StrokeStrokeSlider && lv_slider_get_value(ui_StrokeStrokeSlider) != (int)stroke) {
             stroke = lv_slider_get_value(ui_StrokeStrokeSlider);
             depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
-            if (depth < 0.0f) depth = 0.0f;
+            if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
             SendCommand(STROKE, stroke, OSSM_ID);
             SendCommand(DEPTH,  depth,  OSSM_ID);
         }

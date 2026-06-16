@@ -41,6 +41,18 @@ void buttonInit() {
     encoder2.attachHalfQuad(ENC_2_CLK, ENC_2_DT);
     encoder3.attachHalfQuad(ENC_3_CLK, ENC_3_DT);
     encoder4.attachHalfQuad(ENC_4_CLK, ENC_4_DT);
+
+    // Tune click timing for encoder push-buttons:
+    // - Shorter click window makes double-click recognition feel snappier.
+    // - Keep long-press threshold unchanged.
+    // - Slightly lower debounce keeps fast clicks reliable without phantom presses.
+    Button2.setDebounceMs(30);
+    Button3.setDebounceMs(30);
+    Button2.setClickMs(200);
+    Button3.setClickMs(200);
+    Button2.setPressMs(800);
+    Button3.setPressMs(800);
+
     Button1.attachClick(mxclick);
     Button1.attachLongPressStart(mxlong);
     Button2.attachClick(click2);

@@ -2133,7 +2133,7 @@ void ui_Settings_screen_init(void)
 
     lv_obj_set_align(ui_SettingsButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_SettingsButtonRText, T_SELECT " / " T_MENU);
+    lv_label_set_text(ui_SettingsButtonRText, T_SELECT);
     applyTextPrimaryStyle(ui_SettingsButtonRText);
 
     // ui_Batt1
