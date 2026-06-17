@@ -1350,6 +1350,7 @@ static void updateHomeButtonMState() {
 void homebuttonmevent(lv_event_t * e) {
     LogDebug("HomeButton");
     if (OSSM_On == false) {
+        if (speed == 0 || stroke == 0 || depth == 0) return;
         LogDebug("Starting OSSM");
         applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
         SendCommand(ON, 0.0, OSSM_ID);
