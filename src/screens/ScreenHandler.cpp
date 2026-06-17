@@ -1318,7 +1318,7 @@ void savepattern(lv_event_t * e) {
     SendCommand(PATTERN, patterns, OSSM_ID);
 }
 
-static void applyHomeButtonMState(const char* text, lv_style_t* defaultStyle, lv_style_t* pressedStyle) {
+static void applyHomeButtonMState(const char* text, lv_style_t* defaultStyle, lv_style_t* pressedStyle, bool forceFocused = false) {
     if (!ui_HomeButtonM || !ui_HomeButtonMText) return;
 
     lv_obj_remove_style(ui_HomeButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1338,8 +1338,8 @@ static void applyHomeButtonMState(const char* text, lv_style_t* defaultStyle, lv
 }
 
 static void updateHomeButtonMState() {
-    bool isMoving = speed > 0 and stroke > 0 and depth > 0;
-
+    bool isMoving = speed > 0 and stroke > 0 and depth > 0 and OSSM_On;
+    
     if (isMoving) {
         applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
     } else {
