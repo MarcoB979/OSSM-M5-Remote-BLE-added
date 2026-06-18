@@ -2,6 +2,7 @@ import shutil
 import re
 import os
 import hashlib
+# pyright: reportUndefinedVariable=false
 
 Import("env")
 
@@ -54,22 +55,21 @@ def bin_copy(source, target, env):
 
     merged_bin = env.subst(MERGED_BIN)
 
-    if not os.path.isfile(merged_bin):
-        print("ERROR: merged firmware not found: " + merged_bin)
-        print("Make sure mergeb_bin.py runs before rename_fw.py")
-        env.Exit(1)
+    if os.path.isfile(merged_bin):
+        print("Copying merged firmware to " + bin_file)
 
-    print("Copying merged firmware to " + bin_file)
+        shutil.copy(merged_bin, bin_file)
 
-    shutil.copy(merged_bin, bin_file)
+        with open(bin_file, "rb") as f:
+            result = hashlib.md5(f.read()).hexdigest()
 
-    with open(bin_file, "rb") as f:
-        result = hashlib.md5(f.read()).hexdigest()
+        print("Calculating MD5: " + result)
 
-    print("Calculating MD5: " + result)
-
-    with open(md5_file, "w") as file1:
-        file1.write(result)
+        with open(md5_file, "w") as file1:
+            file1.write(result)
+    else:
+        print("WARNING: merged firmware not found: " + merged_bin)
+        print("Skipping build/firmware merged copy and MD5 for this run")
 
     firmware_copy_names = {
         "m5stack-core2": "firmware_core2.bin",
@@ -93,3 +93,5 @@ def bin_copy(source, target, env):
 
 
 env.AddPostAction(MERGED_BIN, bin_copy)
+env.AddPostAction("buildprog", bin_copy)
+env.AddPostAction("checkprogsize", bin_copy)

@@ -336,6 +336,84 @@ static bool queueCommand(const String& cmd, bool requireConfirm = true) {
   if (cmd.length() == 0) return false;
   if (!g_bleMutex) return false;
 
+  auto parseValidatedSetCommand = [](const String& input, String* outType) -> bool {
+    if (!outType) return false;
+    *outType = "";
+
+    String s = input;
+    s.trim();
+    if (!s.startsWith("set:")) return false;
+
+    int colon1 = s.indexOf(':');
+    int colon2 = s.indexOf(':', colon1 + 1);
+    if (colon1 < 0 || colon2 < 0) return false;
+    if (s.indexOf(':', colon2 + 1) >= 0) return false;
+
+    String type = s.substring(colon1 + 1, colon2);
+    if (!(type == "depth" || type == "sensation" || type == "pattern" ||
+          type == "speed" || type == "stroke")) {
+      return false;
+    }
+
+    String valuePart = s.substring(colon2 + 1);
+    int valueLen = valuePart.length();
+    if (valueLen < 1 || valueLen > 3) return false;
+
+    for (int i = 0; i < valueLen; ++i) {
+      char c = valuePart.charAt(i);
+      if (c < '0' || c > '9') return false;
+    }
+
+    int value = valuePart.toInt();
+    if (value < 0 || value > 100) return false;
+
+    *outType = type;
+    return true;
+  };
+
+  String normalized = cmd;
+  normalized.trim();
+
+  String type;
+  bool dedupeType = false;
+  if (normalized.startsWith("set:")) {
+    if (!parseValidatedSetCommand(normalized, &type)) {
+      LogDebugFormatted("Invalid set command format: %s\n", normalized.c_str());
+      return false;
+    }
+    dedupeType = true;
+  }
+
+  xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  if (dedupeType) {
+    std::queue<TxQueueItem> temp;
+    while (!g_txQueue.empty()) {
+      TxQueueItem existing = g_txQueue.front();
+      g_txQueue.pop();
+      String existingType;
+      if (parseValidatedSetCommand(existing.cmd, &existingType) && existingType == type) {
+        continue;
+      }
+      temp.push(existing);
+    }
+    g_txQueue = temp;
+  }
+  TxQueueItem item;
+  item.cmd = normalized;
+  item.requireConfirm = requireConfirm;
+  item.isRealtime = dedupeType;
+  g_txQueue.push(item);
+  xSemaphoreGive(g_bleMutex);
+
+  if (g_txSem) xSemaphoreGive(g_txSem);
+  return true;
+}
+
+/*
+static bool queueCommandOLD(const String& cmd, bool requireConfirm = true) {
+  if (cmd.length() == 0) return false;
+  if (!g_bleMutex) return false;
+
   String type;
   bool dedupeType = isRealtimeSetCommand(cmd, &type);
 
@@ -363,6 +441,7 @@ static bool queueCommand(const String& cmd, bool requireConfirm = true) {
   if (g_txSem) xSemaphoreGive(g_txSem);
   return true;
 }
+*/
 
 static bool bleReadStateOnce() {
   if (!g_state || !g_client || !g_client->isConnected() || !g_state->canRead()) return false;
@@ -715,31 +794,31 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
   String cmd;
   switch (appCommand) {
     case SPEED:
-      cmd = String("set:speed:") + String(clampPercent(value));
+      cmd = String("set:speed:") + String(clampPercent(value)) + "\n";
       if (value > 0.5f) g_lastRunSpeed = value;
       break;
     case DEPTH:
-      cmd = String("set:depth:") + String(clampPercent(value));
+      cmd = String("set:depth:") + String(clampPercent(value)) + "\n";
       break;
     case STROKE:
-      cmd = String("set:stroke:") + String(clampPercent(value));
+      cmd = String("set:stroke:") + String(clampPercent(value)) + "\n";
       break;
     case SENSATION:
-      cmd = String("set:sensation:") + String(mapSensationToBlePercent(value));
+      cmd = String("set:sensation:") + String(mapSensationToBlePercent(value)) + "\n";
       break;
     case PATTERN: {
       int idx = (int)(value + 0.5f);
       if (idx < 0) idx = 0;
       if (idx > 6) idx = 6;
-      cmd = String("set:pattern:") + String(idx);
+      cmd = String("set:pattern:") + String(idx) + "\n";
       break;
     }
     case OFF:
-      cmd = "set:speed:0";
+      cmd = "set:speed:0\n";
       break;
     case ON: {
       int resume = clampPercent(speedParam > 0.001f ? speedParam : currentSpeed);
-      cmd = String("set:speed:") + String(resume);
+      cmd = String("set:speed:") + String(resume) + "\n";
       break;
     }
     default:
@@ -785,6 +864,6 @@ bool bleCommSendStreamCommand(int position, int durationMs) {
   if (durationMs < 0) durationMs = 0;
   if (position < 0) position = 0;
   if (position > 100) position = 100;
-  String cmd = String("stream:") + String(position) + String(":") + String(durationMs);
+  String cmd = String("stream:") + String(position) + String(":") + String(durationMs) + "\n";
   return queueCommand(cmd, true);
 }
