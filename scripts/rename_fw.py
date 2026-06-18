@@ -38,16 +38,15 @@ def bin_copy(source, target, env):
 
     firmware_dir = "{}firmware".format(OUTPUT_DIR)
 
-    if not os.path.isdir(OUTPUT_DIR):
-        os.mkdir(OUTPUT_DIR)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(firmware_dir, exist_ok=True)
 
-    if not os.path.isdir(firmware_dir):
-        os.mkdir(firmware_dir)
-
+    root_bin_file = "{}{}{}.bin".format(OUTPUT_DIR, os.path.sep, variant)
+    root_md5_file = "{}{}{}.md5".format(OUTPUT_DIR, os.path.sep, variant)
     bin_file = "{}{}{}.bin".format(firmware_dir, os.path.sep, variant)
     md5_file = "{}{}{}.md5".format(firmware_dir, os.path.sep, variant)
 
-    for f in [bin_file, md5_file]:
+    for f in [root_bin_file, root_md5_file, bin_file, md5_file]:
         if os.path.isfile(f):
             os.remove(f)
 
@@ -61,6 +60,8 @@ def bin_copy(source, target, env):
     print("Copying merged firmware to " + bin_file)
 
     shutil.copy(merged_bin, bin_file)
+    print("Copying merged firmware to " + root_bin_file)
+    shutil.copy(merged_bin, root_bin_file)
 
     with open(bin_file, "rb") as f:
         result = hashlib.md5(f.read()).hexdigest()
@@ -70,5 +71,9 @@ def bin_copy(source, target, env):
     with open(md5_file, "w") as file1:
         file1.write(result)
 
+    with open(root_md5_file, "w") as file1:
+        file1.write(result)
+
 
 env.AddPostAction(MERGED_BIN, bin_copy)
+env.AddPostAction("upload", bin_copy)
