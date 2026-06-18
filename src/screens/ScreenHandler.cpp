@@ -871,6 +871,8 @@ static bool getStableChargingState()
 
 static void maybeShowChargingWarning(bool isCharging)
 {
+    return; // Disable warning for now since the PMIC behavior seems stable and the warning can be confusing if it shows up due to a single noisy reading.
+    
     static bool shownForCurrentChargeSession = false;
 
     if (!isCharging) {
@@ -883,7 +885,7 @@ static void maybeShowChargingWarning(bool isCharging)
     showNotification(
         T_CHARGING_WARNING_TITLE,
         T_CHARGING_WARNING_TEXT,
-        8000,
+        5000,
         false, nullptr,
         false, nullptr,
         false);
@@ -1261,7 +1263,7 @@ void pullOut(lv_event_t * e) {
     lv_label_set_text(ui_homestrokevalue, "0");
     //std::string depthStr = std::to_string(depth);
     lv_label_set_text(ui_homedepthvalue, "0");
-    showNotification(T_PULLING_OUT, T_PULLING_OUT_TEXT, 10000, false, nullptr, false, nullptr, false);
+    showNotification(T_PULLING_OUT, T_PULLING_OUT_TEXT, 3000, false, nullptr, false, nullptr, false);
     lv_refr_now(NULL);  // force immediate render — lv_task_handler() is re-entrant-blocked inside an event callback
     SendCommand(SPEED, 0, OSSM_ID);
     SendCommand(STROKE, 0, OSSM_ID);

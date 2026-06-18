@@ -29,6 +29,7 @@ def bin_copy(source, target, env):
     app_version = readFlag("APP_VERSION") or "unknown"
     app_name = readFlag("APP_NAME") or "firmware"
     build_target = env.get("PIOENV") or "unknown"
+    app_bin = env.subst(APP_BIN)
 
     print("App Version: " + app_version)
     print("App Name: " + app_name)
@@ -38,15 +39,16 @@ def bin_copy(source, target, env):
 
     firmware_dir = "{}firmware".format(OUTPUT_DIR)
 
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    os.makedirs(firmware_dir, exist_ok=True)
+    if not os.path.isdir(OUTPUT_DIR):
+        os.mkdir(OUTPUT_DIR)
 
-    root_bin_file = "{}{}{}.bin".format(OUTPUT_DIR, os.path.sep, variant)
-    root_md5_file = "{}{}{}.md5".format(OUTPUT_DIR, os.path.sep, variant)
+    if not os.path.isdir(firmware_dir):
+        os.mkdir(firmware_dir)
+
     bin_file = "{}{}{}.bin".format(firmware_dir, os.path.sep, variant)
     md5_file = "{}{}{}.md5".format(firmware_dir, os.path.sep, variant)
 
-    for f in [root_bin_file, root_md5_file, bin_file, md5_file]:
+    for f in [bin_file, md5_file]:
         if os.path.isfile(f):
             os.remove(f)
 
@@ -60,8 +62,6 @@ def bin_copy(source, target, env):
     print("Copying merged firmware to " + bin_file)
 
     shutil.copy(merged_bin, bin_file)
-    print("Copying merged firmware to " + root_bin_file)
-    shutil.copy(merged_bin, root_bin_file)
 
     with open(bin_file, "rb") as f:
         result = hashlib.md5(f.read()).hexdigest()
@@ -71,9 +71,25 @@ def bin_copy(source, target, env):
     with open(md5_file, "w") as file1:
         file1.write(result)
 
-    with open(root_md5_file, "w") as file1:
-        file1.write(result)
+    firmware_copy_names = {
+        "m5stack-core2": "firmware_core2.bin",
+        "m5stack-cores3": "firmware_cores3.bin",
+    }
+
+    env_copy_name = firmware_copy_names.get(build_target)
+
+    if env_copy_name:
+        env_copy_target = "{}{}{}".format(OUTPUT_DIR, os.path.sep, env_copy_name)
+
+        if not os.path.isfile(app_bin):
+            print("ERROR: app firmware not found: " + app_bin)
+            env.Exit(1)
+
+        if os.path.isfile(env_copy_target):
+            os.remove(env_copy_target)
+
+        print("Copying app firmware to " + env_copy_target)
+        shutil.copy(app_bin, env_copy_target)
 
 
 env.AddPostAction(MERGED_BIN, bin_copy)
-env.AddPostAction("upload", bin_copy)
