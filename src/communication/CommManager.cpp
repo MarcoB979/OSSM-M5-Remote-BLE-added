@@ -208,6 +208,7 @@ void connectbutton(lv_event_t* e) {
     LogDebug("Loading ui_Menu...");
     lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
     LogDebug("Connected via BLE");
+
     return;
   }
 /*
@@ -243,6 +244,8 @@ void connectbutton(lv_event_t* e) {
   }
 */  
    else {
+    lv_obj_clear_flag(ui_StartButtonM, LV_OBJ_FLAG_HIDDEN); // Show the middle button
+    lv_obj_clear_flag(ui_StartButtonR, LV_OBJ_FLAG_HIDDEN); // Show the right button
     // First failure: prompt the user to try once more before the sweep.
 //    if (ui_connect) lv_label_set_text(ui_connect, T_FAILED);
     if (ui_Welcome) lv_label_set_text(ui_Welcome, T_FAILED);

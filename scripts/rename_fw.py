@@ -30,7 +30,6 @@ def bin_copy(source, target, env):
     app_version = readFlag("APP_VERSION") or "unknown"
     app_name = readFlag("APP_NAME") or "firmware"
     build_target = env.get("PIOENV") or "unknown"
-    app_bin = env.subst(APP_BIN)
 
     print("App Version: " + app_version)
     print("App Name: " + app_name)
@@ -70,26 +69,6 @@ def bin_copy(source, target, env):
     else:
         print("WARNING: merged firmware not found: " + merged_bin)
         print("Skipping build/firmware merged copy and MD5 for this run")
-
-    firmware_copy_names = {
-        "m5stack-core2": "firmware_core2.bin",
-        "m5stack-cores3": "firmware_cores3.bin",
-    }
-
-    env_copy_name = firmware_copy_names.get(build_target)
-
-    if env_copy_name:
-        env_copy_target = "{}{}{}".format(OUTPUT_DIR, os.path.sep, env_copy_name)
-
-        if not os.path.isfile(app_bin):
-            print("ERROR: app firmware not found: " + app_bin)
-            env.Exit(1)
-
-        if os.path.isfile(env_copy_target):
-            os.remove(env_copy_target)
-
-        print("Copying app firmware to " + env_copy_target)
-        shutil.copy(app_bin, env_copy_target)
 
 
 env.AddPostAction(MERGED_BIN, bin_copy)

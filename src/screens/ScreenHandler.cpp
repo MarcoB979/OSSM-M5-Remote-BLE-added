@@ -1059,8 +1059,8 @@ void screenInit() {
     eject_status = prefs.getBool("ejectAddon", false);
     vibrate_mode = prefs.getBool("Vibrate",    true);
     touch_home   = prefs.getBool("Lefty",      false);
-    strokeinvert_mode = prefs.getBool("StrokeInvert", false);
-    ble_force_homeing = prefs.getBool("BleForceHomeing", false);
+    strokeinvert_mode = prefs.getBool("StrokeInvert", true);
+    ble_force_homeing = prefs.getBool("BleForceHomeing", true);
     int brightness = prefs.getInt("Brightness", 180);
     if (brightness < 5) brightness = 5;
     if (brightness > 255) brightness = 255;
@@ -1730,7 +1730,7 @@ void handleScreens() {
         if (click2_short_waspressed) {
             lv_obj_send_event(ui_MenuButtonL, LV_EVENT_SHORT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {
-            lv_obj_send_event(lv_group_get_focused(ui_g_menu), LV_EVENT_SHORT_CLICKED, NULL);
+            lv_obj_send_event(ui_MenuButtonM, LV_EVENT_SHORT_CLICKED, NULL);
         } else if (click3_short_waspressed) {
             lv_obj_send_event(ui_MenuButtonR, LV_EVENT_SHORT_CLICKED, NULL);
         } else if (click3_long_waspressed) {

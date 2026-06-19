@@ -592,6 +592,7 @@ void ui_Start_screen_init(void)
     lv_obj_add_event_cb(ui_StartButtonM, ui_event_StartButtonM, LV_EVENT_ALL, NULL);
     applyButtonStyles(ui_StartButtonM, &style_button_m, &style_button_m_focused, NULL);
 
+    lv_obj_add_flag(ui_StartButtonM, LV_OBJ_FLAG_HIDDEN); // Hide the middle button for now
     // ui_StartButtonMText
 
     ui_StartButtonMText = lv_label_create(ui_StartButtonM);
@@ -624,6 +625,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_add_event_cb(ui_StartButtonR, ui_event_StartButtonR, LV_EVENT_ALL, NULL);
     applyButtonStyles(ui_StartButtonR, &style_button_r, &style_button_r_focused, NULL);
+    lv_obj_add_flag(ui_StartButtonR, LV_OBJ_FLAG_HIDDEN); // Hide the middle button for now
 
     // ui_StartButtonRText
 
