@@ -60,7 +60,6 @@ void loop()
   Button1.tick();
   Button2.tick();
   Button3.tick();
-  buttonHapticsTick();
   handleScreens();
   delay(5);
 }

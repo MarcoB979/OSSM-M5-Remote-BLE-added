@@ -357,42 +357,31 @@ void streamingBeginInitSequence() {
     s_streaming_init_completed = false;
 
     if (bleCommIsMenu()) {
-        LogDebug("Already in menu mode, skipping go:menu step");
     } else {
-        LogDebug("Not in menu mode, sending go:menu command first");
         if (!bleCommGoToMenu()) {
-            LogDebug("Failed to queue go:menu command");
             return;
         }
         if (!waitForStreamingCondition(streamingStateIsMenuOrHoming, 4000)) {
-            LogDebug("Timed out waiting for menu/homing after go:menu");
             return;
         }
     }
 
-    LogDebug("Sending go:streaming command");
     if (!bleCommGoToStreaming()) {
-        LogDebug("Failed to queue go:streaming command");
         return;
     }
 
     if (!waitForStreamingCondition(streamingStateIsHomingOrStrokeEngineOrStreaming, 12000)) {
-        LogDebug("Timed out waiting for streaming transition to start");
         return;
     }
 
     if (streamingStateIsHoming()) {
-        LogDebug("Streaming init entered homing; waiting for post-homing handoff");
         if (!waitForStreamingCondition(streamingStateIsStrokeEngineOrStreaming, 20000)) {
-            LogDebug("Timed out waiting for homing to complete");
             return;
         }
     }
 
     if (!streamingStateIsStreaming()) {
-        LogDebug("Post-homing state is not streaming yet; re-sending go:streaming");
         if (!bleCommGoToStreaming()) {
-            LogDebug("Failed to re-queue go:streaming command");
             return;
         }
         waitForStreamingCondition(streamingStateIsStreaming, 1500);
@@ -492,12 +481,9 @@ static void event_streaming_btn_l(lv_event_t *e) {
 }
 
 static void event_streaming_btn_m(lv_event_t *e) {
-    LogDebug("Streaming pause/resume button event activated");
     if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
-        LogDebug("Button is really clicked, processing pause/resume toggle");
         const uint32_t nowMs = millis();
         if ((nowMs - s_streaming_last_toggle_ms) < 250U) {
-            LogDebug("Button toggle ignored due to debounce");
             return;
         }
         s_streaming_last_toggle_ms = nowMs;

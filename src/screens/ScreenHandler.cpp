@@ -326,19 +326,6 @@ static void updateStatusStrip() {
         appendToken(LV_SYMBOL_WIFI);
     }
 
-    /*    if (bleCommIsHoming()) {
-        LogDebug("BLE is homing - adding direction indicator to status strip");
-        int dir = bleCommGetHomingDirection();
-        if (dir > 0) appendToken(LV_SYMBOL_UP);
-        else if (dir < 0) appendToken(LV_SYMBOL_DOWN);
-//        if (dir > 0) appendToken("H");
-//        else if (dir < 0) appendToken("H");
-//        if (dir > 0) appendToken(LV_SYMBOL_NEXT);
-//        else if (dir < 0) appendToken(LV_SYMBOL_PREV);
-//        if (dir > 0) appendToken(LV_SYMBOL_UPLOAD);
-//        else if (dir < 0) appendToken(LV_SYMBOL_DOWNLOAD);
-    }
-*/
     if (labelText[0] == '\0') {
         snprintf(labelText, sizeof(labelText), " ");
     }
@@ -1036,23 +1023,7 @@ extern "C" void menuRestartAction(void)
         esp_restart();
     }
 }
-/*
-void ResetButtons()
-{
-  click2_short_waspressed = false;
-  click2_long_waspressed = false;
-  mxclick_short_waspressed = false;
-  mxclick_long_waspressed = false;
-  click3_short_waspressed = false;
-  click3_long_waspressed = false;
-  click3_double_waspressed = false;
-}
-*/
 
-// -------------------------------------------------------
-// screenInit() — load NVS settings and apply to UI
-// Call after ui_init() and buttonInit()
-// -------------------------------------------------------
 void screenInit() {
     Preferences prefs;
     prefs.begin("m5-ctnr", false);
@@ -1138,8 +1109,8 @@ void screenmachine(lv_event_t * e) {
         syncHomeSliderRangesToLimits();
         syncHomeSensationSliderToTransport();
         speed = lv_slider_get_value(ui_homespeedslider);
-        LogDebug(speedenc);
-        LogDebug(speed);
+        //LogDebug(speedenc);
+        //LogDebug(speed);
     } else if (lv_scr_act() == ui_Menu) {
         // requestMenuEntryAction equivalent (mirrors backup firmware logic).
         // At this point st_screens is STILL the PREVIOUS screen value.
@@ -1315,7 +1286,7 @@ void savepattern(lv_event_t * e) {
     lv_roller_get_selected_str(ui_PatternS, patternstr, 0);
     lv_label_set_text(ui_HomePatternLabel, patternstr);
     if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
-    LogDebug(pattern);
+    //LogDebug(pattern);
     float patterns = pattern;
     SendCommand(PATTERN, patterns, OSSM_ID);
 }
@@ -1350,7 +1321,7 @@ static void updateHomeButtonMState() {
 }
 
 void homebuttonmevent(lv_event_t * e) {
-    LogDebug("HomeButton");
+    //LogDebug("HomeButton");
     if (OSSM_On == false) {
         if (speed == 0 || stroke == 0 || depth == 0) return;
         LogDebug("Starting OSSM");
@@ -1682,9 +1653,9 @@ void handleScreens() {
             _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
             st_screens = ST_UI_MENU;
         } else if (click3_long_waspressed) {
-            LogDebug("HomeButtonR long pressed - checking for FistIT addon");
+            //LogDebug("HomeButtonR long pressed - checking for FistIT addon");
             if (addonsIsFistITEnabled() && FistITPaired()) {
-                LogDebug("Fist-IT addon is paired - opening Fist-IT screen");
+                //LogDebug("Fist-IT addon is paired - opening Fist-IT screen");
                 g_addon_return_screen = lv_scr_act();
                 FistITPrepareScreen();
                 _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
@@ -1699,7 +1670,7 @@ void handleScreens() {
         }
         const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         if (!wasMotionReady && isMotionReady && changed && !OSSM_On) {
-          LogDebug("Auto pressed HomeButtonM to start OSSM because speed, stroke, and depth are all > 0");
+          //LogDebug("Auto pressed HomeButtonM to start OSSM because speed, stroke, and depth are all > 0");
           lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
         }
 
@@ -2082,14 +2053,14 @@ void handleScreens() {
             touch_disabled = true;
         }
         if (encoder4.getCount() > encoder4_enc + 2) {
-            LogDebug("next");
+            //LogDebug("next");
             uint32_t t = LV_KEY_DOWN;
             lv_obj_send_event(ui_PatternS, LV_EVENT_KEY, &t);
             encoder4_enc = encoder4.getCount();
         } else if (encoder4.getCount() < encoder4_enc - 2) {
             uint32_t t = LV_KEY_UP;
             lv_obj_send_event(ui_PatternS, LV_EVENT_KEY, &t);
-            LogDebug("Preview");
+            //LogDebug("Preview");
             encoder4_enc = encoder4.getCount();
         }
         if (click2_short_waspressed) {
@@ -2210,12 +2181,12 @@ void handleScreens() {
         }
 
         if (encoder4.getCount() > encoder4_enc + 2) {
-            LogDebug("next");
+            //LogDebug("next");
             if (ui_g_settings) lv_group_focus_next(ui_g_settings);
             encoder4_enc = encoder4.getCount();
         } else if (encoder4.getCount() < encoder4_enc - 2) {
             if (ui_g_settings) lv_group_focus_prev(ui_g_settings);
-            LogDebug("Preview");
+            //LogDebug("Preview");
             encoder4_enc = encoder4.getCount();
         }
         if (click2_short_waspressed) {

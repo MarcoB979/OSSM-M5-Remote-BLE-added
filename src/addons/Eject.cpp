@@ -97,11 +97,11 @@ static void lockEspNowChannelIfConfigured(const char *reason)
   esp_wifi_set_promiscuous(true);
   esp_err_t setResult = esp_wifi_set_channel(ESP_NOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   esp_wifi_set_promiscuous(false);
-  LogDebugFormatted("[EJECT][CHAN] %s current=%d target=%d result=%d\n",
-                    reason ? reason : "set",
-                    (int)current,
-                    ESP_NOW_CHANNEL,
-                    (int)setResult);
+  //LogDebugFormatted("[EJECT][CHAN] %s current=%d target=%d result=%d\n",
+  //                  reason ? reason : "set",
+  //                  (int)current,
+  //                  ESP_NOW_CHANNEL,
+  //                  (int)setResult);
 }
 
 static bool ensurePeer(const uint8_t *addr)
@@ -277,7 +277,7 @@ static void setPairedAddress(const uint8_t *mac)
   memcpy(s_eject_addr, mac, 6);
   if (ensurePeer(s_eject_addr)) {
     s_is_paired = true;
-    LogDebug("eject.cpp - EJECT Paired.");
+    //LogDebug("eject.cpp - EJECT Paired.");
     LogDebugFormatted("EJECT paired MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
                       s_eject_addr[0], s_eject_addr[1], s_eject_addr[2],
                       s_eject_addr[3], s_eject_addr[4], s_eject_addr[5]);
@@ -415,13 +415,13 @@ bool EjectSendCommand(int command, float value)
   }
 
   if (!s_is_paired) {
-    LogDebugFormatted("TX EJECT blocked: not paired cmd=%d val=%.2f\n", command, value);
+    //LogDebugFormatted("TX EJECT blocked: not paired cmd=%d val=%.2f\n", command, value);
     sendPairingHeartbeatIfNeeded();
     return false;
   }
 
   if (!ensurePeer(s_eject_addr)) {
-    LogDebug("TX EJECT blocked: ensurePeer failed");
+    //LogDebug("TX EJECT blocked: ensurePeer failed");
     return false;
   }
 
@@ -441,7 +441,7 @@ bool EjectSendCommand(int command, float value)
     Serial.printf("[EJECT] TX failed result=%d\n", (int)result);
     return false;
   }
-  LogDebugFormatted("TX EJECT cmd=%d val=%.2f\n", command, value);
+  //LogDebugFormatted("TX EJECT cmd=%d val=%.2f\n", command, value);
   return true;
 }
 
@@ -502,11 +502,11 @@ void EjectHandleScreen(const ButtonEvents &events)
     g_addon_return_screen = nullptr;
     clearButtonFlags();
   } else if (events.mxShort) {
-    LogDebug("EJECT UI: mxShort detected -> toggle action");
+    //LogDebug("EJECT UI: mxShort detected -> toggle action");
     ejectToggleAction();
     clearButtonFlags();
   } else if (events.rightShort) {
-    LogDebug("EJECT UI: rightShort detected -> Set unload true/false");
+    //LogDebug("EJECT UI: rightShort detected -> Set unload true/false");
     resetEncoderCounts();
     if (ejectUnload) {
       ejectUnload = false;

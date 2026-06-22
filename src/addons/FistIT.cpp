@@ -107,11 +107,11 @@ static void lockEspNowChannelIfConfigured(const char *reason)
   esp_wifi_set_promiscuous(true);
   esp_err_t setResult = esp_wifi_set_channel(ESP_NOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   esp_wifi_set_promiscuous(false);
-  LogDebugFormatted("[FIST][CHAN] %s current=%d target=%d result=%d\n",
-                    reason ? reason : "set",
-                    (int)current,
-                    ESP_NOW_CHANNEL,
-                    (int)setResult);
+  //LogDebugFormatted("[FIST][CHAN] %s current=%d target=%d result=%d\n",
+  //                  reason ? reason : "set",
+  //                  (int)current,
+  //                  ESP_NOW_CHANNEL,
+  //                  (int)setResult);
 }
 
 static bool ensurePeer(const uint8_t *addr)
@@ -418,11 +418,11 @@ static void setPairedAddress(const uint8_t *mac)
   memcpy(s_fist_addr, mac, 6);
   if (ensurePeer(s_fist_addr)) {
     s_is_paired = true;
-    LogDebug("fistit.cpp - FIST Paired.");
+    //LogDebug("fistit.cpp - FIST Paired.");
 
-    LogDebugFormatted("Fist-IT paired MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
-                      s_fist_addr[0], s_fist_addr[1], s_fist_addr[2],
-                      s_fist_addr[3], s_fist_addr[4], s_fist_addr[5]);
+    //LogDebugFormatted("Fist-IT paired MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
+    //                  s_fist_addr[0], s_fist_addr[1], s_fist_addr[2],
+    //                  s_fist_addr[3], s_fist_addr[4], s_fist_addr[5]);
   }
 }
 
@@ -555,13 +555,13 @@ bool FistITSendCommand(int command, float value)
   }
 
   if (!s_is_paired) {
-    LogDebugFormatted("TX FIST blocked: not paired cmd=%d val=%.2f\n", command, value);
+    //LogDebugFormatted("TX FIST blocked: not paired cmd=%d val=%.2f\n", command, value);
     sendPairingHeartbeatIfNeeded();
     return false;
   }
 
   if (!ensurePeer(s_fist_addr)) {
-    LogDebug("TX FIST blocked: ensurePeer failed");
+    //LogDebug("TX FIST blocked: ensurePeer failed");
     return false;
   }
 
@@ -572,15 +572,15 @@ bool FistITSendCommand(int command, float value)
   msg.esp_target = s_peer_id;
   msg.esp_sender = s_local_id;
 
-  LogDebugFormatted("TX FIST send cmd=%d val=%.2f target=%d sender=%d to=%02X:%02X:%02X:%02X:%02X:%02X\n",
-                    command, value, msg.esp_target, msg.esp_sender,
-                    s_fist_addr[0], s_fist_addr[1], s_fist_addr[2], s_fist_addr[3], s_fist_addr[4], s_fist_addr[5]);
+  //LogDebugFormatted("TX FIST send cmd=%d val=%.2f target=%d sender=%d to=%02X:%02X:%02X:%02X:%02X:%02X\n",
+  //                  command, value, msg.esp_target, msg.esp_sender,
+  //                  s_fist_addr[0], s_fist_addr[1], s_fist_addr[2], s_fist_addr[3], s_fist_addr[4], s_fist_addr[5]);
   Serial.printf("ESP-NOW TX: to=%02X:%02X:%02X:%02X:%02X:%02X target=%d cmd=%d sender=%d hb=%d len=%u\n",
                 s_fist_addr[0], s_fist_addr[1], s_fist_addr[2], s_fist_addr[3], s_fist_addr[4], s_fist_addr[5],
                 msg.esp_target, msg.esp_command, msg.esp_sender, msg.esp_heartbeat ? 1 : 0, (unsigned)sizeof(msg));
   esp_err_t result = esp_now_send(s_fist_addr, reinterpret_cast<uint8_t *>(&msg), sizeof(msg));
   Serial.printf("ESP-NOW TX result=%d\n", (int)result);
-  LogDebugFormatted("TX FIST result=%s err=%d\n", (result == ESP_OK) ? "OK" : "FAIL", (int)result);
+  //LogDebugFormatted("TX FIST result=%s err=%d\n", (result == ESP_OK) ? "OK" : "FAIL", (int)result);
   return (result == ESP_OK);
 }
 
@@ -633,17 +633,17 @@ void FistITHandleScreen(const ButtonEvents &events)
   refreshValueLabels();
 
   if (events.leftShort) {
-    LogDebug("FistIT: Left short click - returning to previous screen");
+    //LogDebug("FistIT: Left short click - returning to previous screen");
     lv_obj_t *dest = g_addon_return_screen ? g_addon_return_screen : ui_Home;
     _ui_screen_change(dest, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     g_addon_return_screen = nullptr;
     clearButtonFlags();
   } else if (events.mxShort) {
-    LogDebug("FistIT: Middle short click - toggling on/off");
+    //LogDebug("FistIT: Middle short click - toggling on/off");
     toggleOnOff();
     clearButtonFlags();
   } else if (events.rightShort) {
-    LogDebug("FistIT: Right short click - returning to Menu screen");
+    //LogDebug("FistIT: Right short click - returning to Menu screen");
     resetEncoderCounts();
     _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();

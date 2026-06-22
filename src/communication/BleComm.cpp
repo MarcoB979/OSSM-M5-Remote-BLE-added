@@ -13,7 +13,7 @@
 #include "../main.h"
 #include "../screens/ScreenHandler.h"
 
-bool showBlePollSerial = false;  // Set to true to enable serial output of BLE state polls (for debugging);
+bool showBlePollSerial = true;  // Set to true to enable serial output of BLE state polls (for debugging);
 
 namespace {
 
@@ -408,40 +408,6 @@ static bool queueCommand(const String& cmd, bool requireConfirm = true) {
   if (g_txSem) xSemaphoreGive(g_txSem);
   return true;
 }
-
-/*
-static bool queueCommandOLD(const String& cmd, bool requireConfirm = true) {
-  if (cmd.length() == 0) return false;
-  if (!g_bleMutex) return false;
-
-  String type;
-  bool dedupeType = isRealtimeSetCommand(cmd, &type);
-
-  xSemaphoreTake(g_bleMutex, portMAX_DELAY);
-  if (dedupeType) {
-    std::queue<TxQueueItem> temp;
-    while (!g_txQueue.empty()) {
-      TxQueueItem existing = g_txQueue.front();
-      g_txQueue.pop();
-      String existingType;
-      if (isRealtimeSetCommand(existing.cmd, &existingType) && existingType == type) {
-        continue;
-      }
-      temp.push(existing);
-    }
-    g_txQueue = temp;
-  }
-  TxQueueItem item;
-  item.cmd = cmd;
-  item.requireConfirm = requireConfirm;
-  item.isRealtime = dedupeType;
-  g_txQueue.push(item);
-  xSemaphoreGive(g_bleMutex);
-
-  if (g_txSem) xSemaphoreGive(g_txSem);
-  return true;
-}
-*/
 
 static bool bleReadStateOnce() {
   if (!g_state || !g_client || !g_client->isConnected() || !g_state->canRead()) return false;
