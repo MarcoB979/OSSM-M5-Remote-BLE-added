@@ -30,6 +30,7 @@ extern bool click3_double_waspressed;
 
 // Haptic feedback helper (defaults: medium intensity, short pulse)
 void vibrate(int vbr_Intensity = 200, int vbr_Length = 100);
+void buttonHapticsTick();
 
 // Initialise encoders and attach OneButton callbacks – call once from setup()
 void buttonInit();

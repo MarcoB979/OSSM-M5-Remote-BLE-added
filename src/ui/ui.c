@@ -461,6 +461,7 @@ static void ui_event_EJECTButtonR(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
+        
         _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
@@ -677,7 +678,7 @@ void ui_Start_screen_init(void)
     ui_Batt = lv_label_create(ui_Start);
 
     lv_obj_set_width(ui_Batt, 85);
-    lv_obj_set_height(ui_Batt, 30);
+    lv_obj_set_height(ui_Batt, 35);
 
     lv_obj_set_x(ui_Batt, 115);
     lv_obj_set_y(ui_Batt, -103);
@@ -1947,6 +1948,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_add_flag(ui_EJECTButtonR, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_clear_flag(ui_EJECTButtonR, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_state(ui_EJECTButtonR, LV_STATE_CHECKED);
 
     lv_obj_add_event_cb(ui_EJECTButtonR, ui_event_EJECTButtonR, LV_EVENT_ALL, NULL);
     applyButtonStyles(ui_EJECTButtonR, &style_button_r, &style_button_r_focused, NULL);
@@ -1963,7 +1965,7 @@ void ui_EJECTSettings_screen_init(void)
 
     lv_obj_set_align(ui_EJECTButtonRText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_EJECTButtonRText, T_MENU);
+    lv_label_set_text(ui_EJECTButtonRText, T_CUM_LOAD);
     applyTextPrimaryStyle(ui_EJECTButtonRText);
 
     // ui_Batt6

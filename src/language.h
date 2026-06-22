@@ -81,6 +81,7 @@
 #define T_CUM_TIME          "Shots"
 #define T_CUM_Volume        "Volume"
 #define T_CUM_Accel         "Force"
+#define T_CUM_LOAD          "Load"
 #define T_ROTATION          "Rotation"
 #define T_ACCEL             "Accel"
 #define T_FUCKS_MIN         " F/m"

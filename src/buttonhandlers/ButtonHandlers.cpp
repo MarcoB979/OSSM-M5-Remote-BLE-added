@@ -6,6 +6,7 @@
 #include <M5Unified.h>
 #include "ButtonHandlers.h"
 #include <lvgl.h>
+#include <Arduino.h>
 #include "../ui/ui.h"        // for ui_vibrate
 #include "../config/config_pins.h"  // for ENC_x_CLK/DT pin defines (no object definitions)
 
@@ -22,14 +23,40 @@ bool click3_short_waspressed   = false;
 bool click3_long_waspressed    = false;
 bool click3_double_waspressed  = false;
 
+static bool g_hapticActive = false;
+static int g_hapticIntensity = 0;
+static uint32_t g_hapticStopMs = 0;
+
 // ---------------------------------------------------------------------------
 // Haptic feedback
 // ---------------------------------------------------------------------------
 void vibrate(int vbr_Intensity, int vbr_Length) {
     if (lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED) == 1) {
-        M5.Power.setVibration(vbr_Intensity);
-        vTaskDelay(vbr_Length);
+        if (vbr_Length < 1) vbr_Length = 1;
+        g_hapticIntensity = vbr_Intensity;
+        g_hapticStopMs = millis() + (uint32_t)vbr_Length;
+        g_hapticActive = true;
+        M5.Power.setVibration(g_hapticIntensity);
+    }
+}
+
+void buttonHapticsTick() {
+    if (!g_hapticActive) return;
+
+    const int vibrationEnabled = lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED);
+    if (vibrationEnabled != 1) {
         M5.Power.setVibration(0);
+        g_hapticActive = false;
+        g_hapticIntensity = 0;
+        g_hapticStopMs = 0;
+        return;
+    }
+
+    if ((int32_t)(millis() - g_hapticStopMs) >= 0) {
+        M5.Power.setVibration(0);
+        g_hapticActive = false;
+        g_hapticIntensity = 0;
+        g_hapticStopMs = 0;
     }
 }
 
@@ -52,6 +79,9 @@ void buttonInit() {
     Button3.setClickMs(200);
     Button2.setPressMs(800);
     Button3.setPressMs(800);
+    Button1.setDebounceMs(30);
+    Button1.setClickMs(50);  //candidate for speed improvement: 100ms click window for encoder push-button makes double-click recognition feel snappier.
+    Button1.setPressMs(800);
 
     Button1.attachClick(mxclick);
     Button1.attachLongPressStart(mxlong);
@@ -67,41 +97,41 @@ void buttonInit() {
 // OneButton callbacks
 // ---------------------------------------------------------------------------
 void mxclick() {
-    vibrate();
     mxclick_short_waspressed = true;
+    vibrate();
 }
 
 void mxlong() {
-    vibrate(200, 200);
     mxclick_long_waspressed = true;
+    vibrate(200, 200);
 }
 
 void click2() {
-    vibrate();
     click2_short_waspressed = true;
+    vibrate();
 }
 
 void click2long() {
-    vibrate(200, 200);
     click2_long_waspressed = true;
+    vibrate(200, 200);
 }
 
 void c2double() {
-    vibrate();
     click2_double_waspressed = true;
+    vibrate();
 }
 
 void click3() {
-    vibrate();
     click3_short_waspressed = true;
+    vibrate();
 }
 
 void c3long() {
-    vibrate();
     click3_long_waspressed = true;
+    vibrate();
 }
 
 void c3double() {
-    vibrate();
     click3_double_waspressed = true;
+    vibrate();
 }

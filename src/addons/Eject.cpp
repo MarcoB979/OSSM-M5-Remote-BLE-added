@@ -17,6 +17,8 @@
 #include "config/debug.h"
 extern "C" const int EJECT_ID = 2;
 
+bool ejectUnload = false;
+
 namespace {
 
 struct EjectMessage {
@@ -423,6 +425,10 @@ bool EjectSendCommand(int command, float value)
     return false;
   }
 
+  if (ejectUnload && command == CUMSIZE) {
+    value = value * -1.0f; // Invert size value when unload mode is active.
+  }
+
   EjectMessage msg = {};
   msg.esp_connected = true;
   msg.esp_command = command;
@@ -500,8 +506,18 @@ void EjectHandleScreen(const ButtonEvents &events)
     ejectToggleAction();
     clearButtonFlags();
   } else if (events.rightShort) {
+    LogDebug("EJECT UI: rightShort detected -> Set unload true/false");
     resetEncoderCounts();
-    _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    if (ejectUnload) {
+      ejectUnload = false;
+      EjectSendCommand(CUMSIZE, s_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
+      lv_obj_clear_state(ui_EJECTButtonR, LV_STATE_CHECKED);
+    } else {
+      ejectUnload = true;
+      EjectSendCommand(CUMSIZE, s_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
+      lv_obj_add_state(ui_EJECTButtonR, LV_STATE_CHECKED);
+    }
+    //_ui_screen_change(ui_Start, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
   }
 }

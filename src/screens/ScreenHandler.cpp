@@ -785,10 +785,10 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
             if (label != nullptr) {
                 lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_set_align(label, LV_ALIGN_RIGHT_MID);
-                lv_obj_set_y(label, -5);
-                lv_obj_set_x(label, -20);  //was -34
+                lv_obj_set_y(label, 0);
+                lv_obj_set_x(label, -5);  //was -34
                 lv_obj_set_style_text_color(label, lv_color_hex(getActiveTextSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_text_font(label, &lv_font_montserrat_8, LV_PART_MAIN | LV_STATE_DEFAULT);
+                lv_obj_set_style_text_font(label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
             }
         }
         for (lv_obj_t *bar : batteryBars) {
@@ -799,7 +799,7 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
         for (lv_obj_t *label : batteryTitleLabels) {
             if (label != nullptr) {
                 lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_text_font(label, &lv_font_montserrat_24, LV_PART_MAIN | LV_STATE_DEFAULT);
+                lv_obj_set_style_text_font(label, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
             }
         }
         batteryUiInitialized = true;
@@ -1354,12 +1354,12 @@ void homebuttonmevent(lv_event_t * e) {
     if (OSSM_On == false) {
         if (speed == 0 || stroke == 0 || depth == 0) return;
         LogDebug("Starting OSSM");
-        applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
         SendCommand(ON, 0.0, OSSM_ID);
+        applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
     } else {
         LogDebug("Stopping OSSM");
-        applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
         SendCommand(OFF, 0.0, OSSM_ID);
+        applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
     }
 }
 
