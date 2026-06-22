@@ -10,11 +10,16 @@
 #include "display/colors.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
+#include "display/colors.h"
 #include "display/styles.h"
 #include "communication/esp_nowCommunication.h"
 #include "buttonhandlers/ButtonHandlers.h"
 #include "screens/ScreenHandler.h"
 #include "config/debug.h"
+#include "addons/addonsStreaming.h"
+#include "language.h"
+
+// Single-definition of EJECT_ID (C linkage so C code can reference it)
 extern "C" const int EJECT_ID = 2;
 
 bool ejectUnload = false;
@@ -36,48 +41,60 @@ struct EjectMessage {
   int esp_sender;
 };
 
-static bool s_ui_initialized = false;
-static bool s_is_paired = false;
-static bool s_is_on = false;
-static bool s_addon_enabled = false;
+static lv_obj_t *e_screen = nullptr;
+lv_obj_t *ui_Eject = nullptr;
 
-static lv_obj_t *s_speed_label = nullptr;
-static lv_obj_t *s_speed_slider = nullptr;
-static lv_obj_t *s_speed_value = nullptr;
-static lv_obj_t *s_time_label = nullptr;
-static lv_obj_t *s_time_slider = nullptr;
-static lv_obj_t *s_time_value = nullptr;
-static lv_obj_t *s_size_label = nullptr;
-static lv_obj_t *s_size_slider = nullptr;
-static lv_obj_t *s_size_value = nullptr;
-static lv_obj_t *s_accel_label = nullptr;
-static lv_obj_t *s_accel_slider = nullptr;
-static lv_obj_t *s_accel_value = nullptr;
+static lv_obj_t *e_title = nullptr;
+static lv_obj_t *e_button_left = nullptr;
+static lv_obj_t *e_button_mid = nullptr;
+static lv_obj_t *e_button_right = nullptr;
+static lv_obj_t *e_button_left_text = nullptr;
+static lv_obj_t *e_button_mid_text = nullptr;
+static lv_obj_t *e_button_right_text = nullptr;
 
-static float s_speed = 0.0f;
-static float s_time = 0.0f;
-static float s_size = 0.0f;
-static float s_accel = 0.0f;
+static lv_obj_t *e_speed_label = nullptr;
+static lv_obj_t *e_speed_slider = nullptr;
+static lv_obj_t *e_speed_value = nullptr;
+static lv_obj_t *e_batt_title = nullptr;
+static lv_obj_t *e_batt_value = nullptr;
+static lv_obj_t *e_time_label = nullptr;
+static lv_obj_t *e_time_slider = nullptr;
+static lv_obj_t *e_time_value = nullptr;
+static lv_obj_t *e_size_label = nullptr;
+static lv_obj_t *e_size_slider = nullptr;
+static lv_obj_t *e_size_value = nullptr;
+static lv_obj_t *e_accel_label = nullptr;
+static lv_obj_t *e_accel_slider = nullptr;
+static lv_obj_t *e_accel_value = nullptr;
 
-static long s_enc1 = 0;
-static long s_enc2 = 0;
-static long s_enc3 = 0;
-static long s_enc4 = 0;
+static float e_speed = 0.0f;
+static float e_time = 0.0f;
+static float e_size = 0.0f;
+static float e_accel = 0.0f;
 
-static bool s_ramp_enabled = true;
-static int s_ramp_value = 1;
-static int s_ramp_time_ms = 75;
-static int s_ramp_max = 8;
-static int s_ramp_active_encoder = 0;
-static unsigned long s_ramp_ms = 0;
+static long e_enc1 = 0;
+static long e_enc2 = 0;
+static long e_enc3 = 0;
+static long e_enc4 = 0;
 
-static uint8_t s_eject_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+static bool e_ramp_enabled = true;
+static int e_ramp_value = 1;
+static int e_ramp_time_ms = 75;
+static int e_ramp_max = 8;
+static int e_ramp_active_encoder = 0;
+static unsigned long e_ramp_ms = 0;
+
+static bool e_is_paired = false;
+static bool e_is_on = false;
+static bool e_addon_enabled = false;
+static uint8_t e_eject_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static constexpr uint8_t BROADCAST_ADDR[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 static constexpr int LEGACY_EJECT_ID = 2;
 static constexpr int LEGACY_M5_ID = M5_ID;
-static uint32_t s_last_pairing_heartbeat_ms = 0;
-static int s_peer_id = EJECT_ID;
-static int s_local_id = M5_ID;
+static uint32_t e_last_pairing_heartbeat_ms = 0;
+static int e_peer_id = EJECT_ID;
+static int e_local_id = M5_ID;
+static bool e_flush_buttons_once = false;
 
 static void lockEspNowChannelIfConfigured(const char *reason)
 {
@@ -97,11 +114,6 @@ static void lockEspNowChannelIfConfigured(const char *reason)
   esp_wifi_set_promiscuous(true);
   esp_err_t setResult = esp_wifi_set_channel(ESP_NOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   esp_wifi_set_promiscuous(false);
-  //LogDebugFormatted("[EJECT][CHAN] %s current=%d target=%d result=%d\n",
-  //                  reason ? reason : "set",
-  //                  (int)current,
-  //                  ESP_NOW_CHANNEL,
-  //                  (int)setResult);
 }
 
 static bool ensurePeer(const uint8_t *addr)
@@ -133,18 +145,18 @@ static void clearButtonFlags()
   click3_short_waspressed = false;
   click3_long_waspressed = false;
   click3_double_waspressed = false;
+  resetEncoderCounts();
 }
 
-static void screensaver_check_activity()
-{
-  // Compatibility stub for old addon code path.
-}
+//static void screensaver_check_activity()
+//{
+//  // Compatibility stub for old addon code path.
+//}
 
-static void styleSliderRow(lv_obj_t *slider, int slot)
+// Apply shared styles to a slider using the provided slot index (0..3)
+static void styleSlider(lv_obj_t *slider, int slot)
 {
-  if (slider == nullptr) {
-    return;
-  }
+  if (slider == nullptr) return;
   if (slot < 0) slot = 0;
   if (slot > 3) slot = 3;
   lv_obj_add_style(slider, &style_slider_track[slot], LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -152,8 +164,7 @@ static void styleSliderRow(lv_obj_t *slider, int slot)
   lv_obj_add_style(slider, &style_slider_indicator[slot], LV_PART_KNOB | LV_STATE_DEFAULT);
 }
 
-static void createSliderRow(lv_obj_t *parent,
-                            lv_obj_t **rowLabel,
+static void createSliderRow(lv_obj_t **rowLabel,
                             lv_obj_t **rowSlider,
                             lv_obj_t **rowValue,
                             const char *labelText,
@@ -162,7 +173,7 @@ static void createSliderRow(lv_obj_t *parent,
                             int maxValue,
                             int slot)
 {
-  *rowLabel = lv_label_create(parent);
+  *rowLabel = lv_label_create(e_screen);
   lv_obj_set_width(*rowLabel, lv_pct(95));
   lv_obj_set_height(*rowLabel, LV_SIZE_CONTENT);
   lv_obj_set_x(*rowLabel, 0);
@@ -180,24 +191,145 @@ static void createSliderRow(lv_obj_t *parent,
   lv_obj_set_x(*rowSlider, -15);
   lv_obj_set_y(*rowSlider, 0);
   lv_obj_set_align(*rowSlider, LV_ALIGN_RIGHT_MID);
-  styleSliderRow(*rowSlider, slot);
+  styleSlider(*rowSlider, slot);
 
   *rowValue = lv_label_create(*rowLabel);
   lv_obj_set_width(*rowValue, LV_SIZE_CONTENT);
   lv_obj_set_height(*rowValue, LV_SIZE_CONTENT);
-  lv_obj_set_x(*rowValue, 80);
+  lv_obj_set_x(*rowValue, 100);
   lv_obj_set_y(*rowValue, 0);
   lv_obj_set_align(*rowValue, LV_ALIGN_LEFT_MID);
   lv_label_set_text(*rowValue, "0");
   lv_obj_add_style(*rowValue, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_text_font(*rowValue, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
+}
+
+//static void createScreenIfNeeded()
+static void EjectUiScreenCreateInternal()
+{
+  if (e_screen != nullptr) {
+    return;
+  }
+
+  e_screen = lv_obj_create(nullptr);
+  ui_EJECTSettings = e_screen;
+  ui_Eject = e_screen;
+  lv_obj_clear_flag(e_screen, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_event_cb(e_screen, screenmachine, LV_EVENT_SCREEN_LOADED, nullptr);
+
+  e_title = lv_label_create(e_screen);
+  lv_obj_set_align(e_title, LV_ALIGN_TOP_MID);
+  lv_obj_set_y(e_title, 12);
+  lv_label_set_text(e_title, T_EJECT);
+  lv_obj_set_style_text_font(e_title, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(e_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+  e_batt_title = lv_label_create(e_screen);
+  lv_obj_set_width(e_batt_title, 85);
+  lv_obj_set_height(e_batt_title, 30);
+  lv_obj_set_x(e_batt_title, 115);
+  lv_obj_set_y(e_batt_title, -103);
+  lv_obj_set_align(e_batt_title, LV_ALIGN_CENTER);
+  lv_label_set_text(e_batt_title, T_BATT);
+
+  e_batt_value = lv_label_create(e_batt_title);
+  lv_obj_set_width(e_batt_value, LV_SIZE_CONTENT);
+  lv_obj_set_height(e_batt_value, LV_SIZE_CONTENT);
+  lv_obj_set_x(e_batt_value, 0);
+  lv_obj_set_y(e_batt_value, -7);
+  lv_obj_set_align(e_batt_value, LV_ALIGN_RIGHT_MID);
+  lv_label_set_text(e_batt_value, T_BLANK);
+
+
+  createSliderRow(&e_speed_label, &e_speed_slider, &e_speed_value, T_CUM_SPEED, -60, 0, 100, 0);
+  createSliderRow(&e_time_label, &e_time_slider, &e_time_value, T_CUM_TIME, -25, 0, 360, 1);
+  createSliderRow(&e_size_label, &e_size_slider, &e_size_value, T_CUM_Volume, 10, 0, 100, 2);
+  createSliderRow(&e_accel_label, &e_accel_slider, &e_accel_value, T_CUM_Accel, 45, 0, 100, 3);
+
+  e_button_left = lv_btn_create(e_screen);
+  lv_obj_set_width(e_button_left, 100);
+  lv_obj_set_height(e_button_left, 30);
+  lv_obj_set_y(e_button_left, 100);
+  lv_obj_set_x(e_button_left, lv_pct(-33));
+  lv_obj_set_align(e_button_left, LV_ALIGN_CENTER);
+  lv_obj_add_style(e_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(e_button_left, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_add_style(e_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
+  e_button_left_text = lv_label_create(e_button_left);
+  lv_obj_set_align(e_button_left_text, LV_ALIGN_CENTER);
+  lv_label_set_text(e_button_left_text, T_BACK); //was T_HOME
+
+  e_button_mid = lv_btn_create(e_screen);
+  lv_obj_set_width(e_button_mid, 100);
+  lv_obj_set_height(e_button_mid, 30);
+  lv_obj_set_y(e_button_mid, 100);
+  lv_obj_set_x(e_button_mid, lv_pct(0));
+  lv_obj_set_align(e_button_mid, LV_ALIGN_CENTER);
+  lv_obj_add_style(e_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(e_button_mid, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_add_style(e_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
+  e_button_mid_text = lv_label_create(e_button_mid);
+  lv_obj_set_align(e_button_mid_text, LV_ALIGN_CENTER);
+  lv_label_set_text(e_button_mid_text, T_START);
+
+  e_button_right = lv_btn_create(e_screen);
+  lv_obj_set_width(e_button_right, 100);
+  lv_obj_set_height(e_button_right, 30);
+  lv_obj_set_y(e_button_right, 100);
+  lv_obj_set_x(e_button_right, lv_pct(33));
+  lv_obj_set_align(e_button_right, LV_ALIGN_CENTER);
+  lv_obj_add_style(e_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(e_button_right, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_add_style(e_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
+  e_button_right_text = lv_label_create(e_button_right);
+  lv_obj_set_align(e_button_right_text, LV_ALIGN_CENTER);
+  lv_label_set_text(e_button_right_text, T_CUM_LOAD);
+}
+
+static void refreshTheme()
+{
+  if (e_screen == nullptr) {
+    return;
+  }
+
+  // Apply the shared background style first, then apply the semantic
+  // `style_option_bg` (which is defined as a black option background).
+  lv_obj_add_style(e_screen, &style_background, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(e_screen, &style_option_bg, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+  if (e_title != nullptr) {
+    lv_obj_add_style(e_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(e_title, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+
+  // Battery/status label in this addon screen should also follow the
+  // shared primary text style so icons/text remain readable across
+  // dark/light themes.
+  if (e_batt_title != nullptr) {
+    lv_obj_add_style(e_batt_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  if (e_batt_value != nullptr) {
+    lv_obj_add_style(e_batt_value, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+
+  lv_obj_t *valueLabels[] = {e_speed_value, e_time_value, e_size_value, e_accel_value};
+  for (lv_obj_t *lbl : valueLabels) {
+    if (!lbl) continue;
+    lv_obj_add_style(lbl, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_text_font(lbl, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
+  }
+  styleSlider(e_speed_slider, 0);
+  styleSlider(e_time_slider, 1);
+  styleSlider(e_size_slider, 2);
+  styleSlider(e_accel_slider, 3);
 }
 
 static void refreshValueLabels()
 {
-  lv_label_set_text_fmt(s_speed_value, "%d", (int)s_speed);
-  lv_label_set_text_fmt(s_time_value, "%d", (int)s_time);
-  lv_label_set_text_fmt(s_size_value, "%d", (int)s_size);
-  lv_label_set_text_fmt(s_accel_value, "%d", (int)s_accel);
+  lv_label_set_text_fmt(e_speed_value, "%d", (int)e_speed);
+  lv_label_set_text_fmt(e_time_value, "%d", (int)e_time);
+  lv_label_set_text_fmt(e_size_value, "%d", (int)e_size);
+  lv_label_set_text_fmt(e_accel_value, "%d", (int)e_accel);
 }
 
 static int getRampedDetentDelta(int encoderId, int detents)
@@ -206,50 +338,50 @@ static int getRampedDetentDelta(int encoderId, int detents)
     return 0;
   }
 
-  if (!s_ramp_enabled) {
-    s_ramp_value = 1;
-    s_ramp_active_encoder = encoderId;
-    s_ramp_ms = millis();
+  if (!e_ramp_enabled) {
+    e_ramp_value = 1;
+    e_ramp_active_encoder = encoderId;
+    e_ramp_ms = millis();
     return detents;
   }
 
   unsigned long now = millis();
-  bool sameEncoder = (encoderId == s_ramp_active_encoder);
-  bool withinRampWindow = ((now - s_ramp_ms) <= (unsigned long)s_ramp_time_ms);
+  bool sameEncoder = (encoderId == e_ramp_active_encoder);
+  bool withinRampWindow = ((now - e_ramp_ms) <= (unsigned long)e_ramp_time_ms);
   if (!sameEncoder || !withinRampWindow) {
-    s_ramp_value = 1;
+    e_ramp_value = 1;
   }
 
   int sign = (detents > 0) ? 1 : -1;
   int steps = abs(detents);
   int delta = 0;
   for (int i = 0; i < steps; ++i) {
-    delta += sign * s_ramp_value;
-    if (s_ramp_value < s_ramp_max) {
-      ++s_ramp_value;
+    delta += sign * e_ramp_value;
+    if (e_ramp_value < e_ramp_max) {
+      ++e_ramp_value;
     }
   }
 
-  s_ramp_active_encoder = encoderId;
-  s_ramp_ms = now;
+  e_ramp_active_encoder = encoderId;
+  e_ramp_ms = now;
   return delta;
 }
 
 static void sendPairingHeartbeatIfNeeded()
 {
-  if (!s_addon_enabled) {
+  if (!e_addon_enabled) {
     return;
   }
 
-  if (s_is_paired) {
+  if (e_is_paired) {
     return;
   }
 
   const uint32_t nowMs = millis();
-  if ((nowMs - s_last_pairing_heartbeat_ms) < 1000UL) {
+  if ((nowMs - e_last_pairing_heartbeat_ms) < 1000UL) {
     return;
   }
-  s_last_pairing_heartbeat_ms = nowMs;
+  e_last_pairing_heartbeat_ms = nowMs;
 
   if (!ensurePeer(BROADCAST_ADDR)) {
     return;
@@ -261,72 +393,26 @@ static void sendPairingHeartbeatIfNeeded()
   msg.esp_target = EJECT_ID;
   msg.esp_sender = M5_ID;
   lockEspNowChannelIfConfigured("pair-heartbeat");
+  Serial.printf("ESP-NOW TX: to=%02X:%02X:%02X:%02X:%02X:%02X target=%d cmd=%d sender=%d hb=%d len=%u\n",
+                BROADCAST_ADDR[0], BROADCAST_ADDR[1], BROADCAST_ADDR[2], BROADCAST_ADDR[3], BROADCAST_ADDR[4], BROADCAST_ADDR[5],
+                msg.esp_target, msg.esp_command, msg.esp_sender, msg.esp_heartbeat ? 1 : 0, (unsigned)sizeof(msg));
   esp_now_send(BROADCAST_ADDR, reinterpret_cast<uint8_t *>(&msg), sizeof(msg));
 }
 
 static void setPairedAddress(const uint8_t *mac)
 {
-  if (memcmp(s_eject_addr, mac, 6) == 0 && s_is_paired) {
+  if (memcmp(e_eject_addr, mac, 6) == 0 && e_is_paired) {
     return;
   }
 
-  if (esp_now_is_peer_exist(s_eject_addr)) {
-    esp_now_del_peer(s_eject_addr);
+  if (esp_now_is_peer_exist(e_eject_addr)) {
+    esp_now_del_peer(e_eject_addr);
   }
 
-  memcpy(s_eject_addr, mac, 6);
-  if (ensurePeer(s_eject_addr)) {
-    s_is_paired = true;
-    //LogDebug("eject.cpp - EJECT Paired.");
-    LogDebugFormatted("EJECT paired MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
-                      s_eject_addr[0], s_eject_addr[1], s_eject_addr[2],
-                      s_eject_addr[3], s_eject_addr[4], s_eject_addr[5]);
+  memcpy(e_eject_addr, mac, 6);
+  if (ensurePeer(e_eject_addr)) {
+    e_is_paired = true;
   }
-}
-
-static void ejectToggleAction()
-{
-  if (s_is_on) {
-    EjectSendCommand(OFF, 0.0f);
-    s_is_on = false;
-  } else {
-    EjectSendCommand(ON, 0.0f);
-    s_is_on = true;
-  }
-}
-
-static void onEjectLeftButtonClicked(lv_event_t *e)
-{
-  if (lv_event_get_code(e) != LV_EVENT_SHORT_CLICKED) {
-    return;
-  }
-  ejectToggleAction();
-}
-
-static void ensureUiInitialized()
-{
-  if (s_ui_initialized || ui_EJECTSettings == nullptr) {
-    return;
-  }
-
-  if (ui_EJECTButtonLText != nullptr) {
-    lv_label_set_text(ui_EJECTButtonLText, T_BACK); //was T_HOME
-  }
-  if (ui_EJECTButtonMText != nullptr) {
-    lv_label_set_text(ui_EJECTButtonMText, T_CUM);
-  }
-
-  createSliderRow(ui_EJECTSettings, &s_speed_label, &s_speed_slider, &s_speed_value, T_CUM_SPEED, -60, 0, 100, 0);
-  createSliderRow(ui_EJECTSettings, &s_time_label, &s_time_slider, &s_time_value, T_CUM_TIME, -25, 0, 61, 1);
-  createSliderRow(ui_EJECTSettings, &s_size_label, &s_size_slider, &s_size_value, T_CUM_Volume, 10, 0, 100, 2);
-  createSliderRow(ui_EJECTSettings, &s_accel_label, &s_accel_slider, &s_accel_value, T_CUM_Accel, 45, 0, 100, 3);
-
-  if (ui_EJECTButtonM != nullptr) {
-    lv_obj_add_event_cb(ui_EJECTButtonM, onEjectLeftButtonClicked, LV_EVENT_SHORT_CLICKED, nullptr);
-  }
-
-  s_ui_initialized = true;
-  refreshValueLabels();
 }
 
 static bool applySliderFromEncoder(ESP32Encoder &encoder,
@@ -337,6 +423,10 @@ static bool applySliderFromEncoder(ESP32Encoder &encoder,
                                    int command)
 {
   bool changed = false;
+
+  if (slider == nullptr) {
+    return false;
+  }
 
   if (lv_slider_is_dragged(slider) == false) {
     lv_slider_set_value(slider, (int)value, LV_ANIM_OFF);
@@ -372,56 +462,98 @@ static bool applySliderFromEncoder(ESP32Encoder &encoder,
 
   if (changed) {
     encoderState = encoder.getCount();
-    float txValue = value;
-    if (command == CUMSPEED || command == CUMACCEL) {
-      txValue = value / 10.0f;
-    }
-    EjectSendCommand(command, txValue);
+    EjectSendCommand(command, value);
   }
 
   return changed;
 }
 
-} // namespace
+static void toggleOnOff()
+{
+  if (e_is_on) {
+    EjectSendCommand(OFF, 0.0f);
+    e_is_on = false;
+  } else {
+    EjectSendCommand(ON, 0.0f);
+    e_is_on = true;
+  }
+  refreshValueLabels();
+}
 
+}  // namespace
 
+extern "C" void EjectUiScreenCreate(void)
+{
+  EjectUiScreenCreateInternal();
+}
 
-bool EjectIsPaired(){
-  return s_addon_enabled && s_is_paired;
+void EjectPrepareScreen()
+{
+  EjectUiScreenCreate();
+  refreshTheme();
+  refreshValueLabels();
+  // The click used to enter this screen can still be latched for one loop.
+  // Flush it once so left/mid/right actions start from a clean state.
+  e_flush_buttons_once = true;
+}
+
+lv_obj_t *EjectGetScreen()
+{
+  EjectUiScreenCreate();
+  return e_screen;
+}
+
+lv_obj_t *EjectGetBatteryTitleLabel()
+{
+  return e_batt_title;
+}
+
+lv_obj_t *EjectGetBatteryValueLabel()
+{
+  return e_batt_value;
+}
+
+void EjectToggle()
+{
+  if (e_addon_enabled && e_is_paired) {
+    toggleOnOff();
+  }
+}
+
+bool EjectIsPaired()
+{
+  return e_addon_enabled && e_is_paired;
 }
 
 void EjectSetAddonEnabled(bool enabled)
 {
-  s_addon_enabled = enabled;
-  eject_status = enabled;
+  e_addon_enabled = enabled;
+
   if (!enabled) {
-    s_is_on = false;
-    s_is_paired = false;
-    if (esp_now_is_peer_exist(s_eject_addr)) {
-      esp_now_del_peer(s_eject_addr);
+    if (esp_now_is_peer_exist(e_eject_addr)) {
+      esp_now_del_peer(e_eject_addr);
     }
-    memset(s_eject_addr, 0xFF, sizeof(s_eject_addr));
+    e_is_paired = false;
+    e_is_on = false;
+    memset(e_eject_addr, 0xFF, sizeof(e_eject_addr));
   }
 
   // Allow immediate heartbeat retry when enabled.
-  s_last_pairing_heartbeat_ms = 0;
-
+  e_last_pairing_heartbeat_ms = 0;
 }
 
 bool EjectSendCommand(int command, float value)
 {
-  if (!s_addon_enabled) {
+  if (!e_addon_enabled) {
     return false;
   }
 
-  if (!s_is_paired) {
-    //LogDebugFormatted("TX EJECT blocked: not paired cmd=%d val=%.2f\n", command, value);
+  if (!e_is_paired) {
     sendPairingHeartbeatIfNeeded();
     return false;
   }
 
-  if (!ensurePeer(s_eject_addr)) {
-    //LogDebug("TX EJECT blocked: ensurePeer failed");
+  if (!ensurePeer(e_eject_addr)) {
     return false;
   }
 
@@ -433,36 +565,32 @@ bool EjectSendCommand(int command, float value)
   msg.esp_connected = true;
   msg.esp_command = command;
   msg.esp_value = value;
-  msg.esp_target = s_peer_id;
-  msg.esp_sender = s_local_id;
+  msg.esp_target = e_peer_id;
+  msg.esp_sender = e_local_id;
 
-  esp_err_t result = esp_now_send(s_eject_addr, reinterpret_cast<uint8_t *>(&msg), sizeof(msg));
-  if (result != ESP_OK) {
-    Serial.printf("[EJECT] TX failed result=%d\n", (int)result);
-    return false;
-  }
-  //LogDebugFormatted("TX EJECT cmd=%d val=%.2f\n", command, value);
-  return true;
+  Serial.printf("ESP-NOW TX: to=%02X:%02X:%02X:%02X:%02X:%02X target=%d cmd=%d sender=%d hb=%d len=%u\n",
+                e_eject_addr[0], e_eject_addr[1], e_eject_addr[2], e_eject_addr[3], e_eject_addr[4], e_eject_addr[5],
+                msg.esp_target, msg.esp_command, msg.esp_sender, msg.esp_heartbeat ? 1 : 0, (unsigned)sizeof(msg));
+  esp_err_t result = esp_now_send(e_eject_addr, reinterpret_cast<uint8_t *>(&msg), sizeof(msg));
+  Serial.printf("ESP-NOW TX result=%d\n", (int)result);
+  return (result == ESP_OK);
 }
 
 bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
-                                    int target,
-                                    int sender,
-                                    int command,
-                                    float value,
-                                    bool heartbeat)
+                                     int target,
+                                     int sender,
+                                     int command,
+                                     float value,
+                                     bool heartbeat)
 {
   (void)value;
   (void)heartbeat;
 
-  if (!s_addon_enabled) {
+  if (!e_addon_enabled) {
     return false;
   }
 
-
-  s_peer_id = sender;
-  // Do NOT update s_local_id: M5 always identifies as M5_ID regardless of
-  // which legacy target ID the peer used to address us.
+  e_peer_id = sender;
 
   // Only set paired address for this addon when the sender/target indicates
   // the frame is intended for Eject (avoid stealing paired address from other addons)
@@ -471,51 +599,52 @@ bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
   }
 
   if (command == OFF) {
-    s_is_on = false;
+    e_is_on = false;
   } else if (command == ON) {
-    s_is_on = true;
+    e_is_on = true;
   }
+
 
   return true;
 }
 
 void EjectHandleScreen(const ButtonEvents &events)
 {
-  if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-    touch_disabled = true;
-  }
-
-  ensureUiInitialized();
+  EjectUiScreenCreate();
   sendPairingHeartbeatIfNeeded();
 
-  if (s_ui_initialized) {
-    applySliderFromEncoder(encoder1, 1, s_enc1, s_speed, s_speed_slider, CUMSPEED);
-    applySliderFromEncoder(encoder2, 2, s_enc2, s_time, s_time_slider, CUMTIME);
-    applySliderFromEncoder(encoder3, 3, s_enc3, s_size, s_size_slider, CUMSIZE);
-    applySliderFromEncoder(encoder4, 4, s_enc4, s_accel, s_accel_slider, CUMACCEL);
-    refreshValueLabels();
+  if (e_flush_buttons_once) {
+    clearButtonFlags();
+    e_flush_buttons_once = false;
   }
 
+  applySliderFromEncoder(encoder1, 1, e_enc1, e_speed, e_speed_slider, CUMSPEED);
+  applySliderFromEncoder(encoder2, 2, e_enc2, e_time, e_time_slider, CUMTIME);
+  applySliderFromEncoder(encoder3, 3, e_enc3, e_size, e_size_slider, CUMSIZE);
+  applySliderFromEncoder(encoder4, 4, e_enc4, e_accel, e_accel_slider, CUMACCEL);
+  refreshValueLabels();
+
   if (events.leftShort) {
+    //LogDebug("Eject: Left short click - returning to previous screen");
     lv_obj_t *dest = g_addon_return_screen ? g_addon_return_screen : ui_Home;
     _ui_screen_change(dest, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     g_addon_return_screen = nullptr;
     clearButtonFlags();
   } else if (events.mxShort) {
-    //LogDebug("EJECT UI: mxShort detected -> toggle action");
-    ejectToggleAction();
+    //LogDebug("Eject: Middle short click - toggling on/off");
+    toggleOnOff();
     clearButtonFlags();
   } else if (events.rightShort) {
-    //LogDebug("EJECT UI: rightShort detected -> Set unload true/false");
+    //LogDebug("Eject: Right short click - returning to Menu screen");
     resetEncoderCounts();
     if (ejectUnload) {
       ejectUnload = false;
-      EjectSendCommand(CUMSIZE, s_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
-      lv_obj_clear_state(ui_EJECTButtonR, LV_STATE_CHECKED);
+      EjectSendCommand(CUMSIZE, e_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
+      lv_obj_clear_state(e_button_right, LV_STATE_CHECKED);
     } else {
       ejectUnload = true;
-      EjectSendCommand(CUMSIZE, s_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
-      lv_obj_add_state(ui_EJECTButtonR, LV_STATE_CHECKED);
+      EjectSendCommand(CUMSIZE, e_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
+      lv_obj_add_state(e_button_right, LV_STATE_CHECKED);
     }
     //_ui_screen_change(ui_Start, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();
@@ -528,4 +657,3 @@ extern "C" void EjectHandleScreen(const struct ButtonEvents *events)
   if (events == nullptr) return;
   EjectHandleScreen(*events);
 }
-

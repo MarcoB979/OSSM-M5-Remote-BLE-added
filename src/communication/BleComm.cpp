@@ -13,7 +13,6 @@
 #include "../main.h"
 #include "../screens/ScreenHandler.h"
 
-bool showBlePollSerial = true;  // Set to true to enable serial output of BLE state polls (for debugging);
 
 namespace {
 
@@ -173,11 +172,13 @@ static MachineMode parseMachineMode(const String& stateName) {
 static void updateCachedMachineState(const String& stateRaw) {
   String parsedStateName;
   if (extractJsonStringValue(stateRaw, "state", &parsedStateName)) {
-    if (showBlePollSerial && parsedStateName != g_machineStateName) {
+    #ifdef SHOWBLEPOLL
+    if (parsedStateName != g_machineStateName) {  //if (showBlePollSerial && .....
       Serial.printf("[BLE] State changed: %s -> %s\n",
                     g_machineStateName.length() ? g_machineStateName.c_str() : "<none>",
                     parsedStateName.c_str());
     }
+    #endif
     g_machineStateName = parsedStateName;
     g_machineMode = parseMachineMode(parsedStateName);
   }
@@ -439,7 +440,8 @@ static void blePollTask(void*) {
       }
     }
 
-    if (showBlePollSerial) {
+    //if (showBlePollSerial) {
+    #ifdef SHOWBLEPOLL
       uint32_t now = millis();
       if ((now - g_lastPollInfoMs) >= 1000) {
         size_t qSize = 0;
@@ -468,7 +470,7 @@ static void blePollTask(void*) {
           speedlimit);
         g_lastPollInfoMs = now;
       }
-    }
+    #endif
 
     vTaskDelay(pdMS_TO_TICKS(BLE_STATE_POLL_MS));
   }

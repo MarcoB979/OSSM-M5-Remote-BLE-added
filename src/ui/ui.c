@@ -10,6 +10,8 @@
 #include "../addons/addonsStreaming.h"
 #include "../screens/ScreenHandler.h"
 
+extern void EjectUiScreenCreate(void);
+
 ///////////////////// VARIABLES ////////////////////
 lv_obj_t * ui_Start;
 lv_obj_t * ui_Logo;
@@ -432,36 +434,6 @@ static void ui_event_TorqeButtonR(lv_event_t * e)
     lv_event_code_t event = lv_event_get_code(e);
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
-        _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-    }
-}
-static void ui_event_EJECTSettings(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_SCREEN_LOADED) {
-        screenmachine(e);
-    }
-}
-static void ui_event_EJECTButtonL(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_CLICKED) {
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 90, 0);
-    }
-}
-static void ui_event_EJECTButtonM(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-}
-static void ui_event_EJECTButtonR(lv_event_t * e)
-{
-    lv_event_code_t event = lv_event_get_code(e);
-    lv_obj_t * ta = lv_event_get_target(e);
-    if(event == LV_EVENT_CLICKED) {
-        
         _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
 }
@@ -1840,179 +1812,6 @@ void ui_Torqe_screen_init(void)
     applyBatteryStyles(ui_Battery4);
 
 }
-void ui_EJECTSettings_screen_init(void)
-{
-
-    // ui_EJECTSettings
-
-    ui_EJECTSettings = lv_obj_create(NULL);
-
-    lv_obj_clear_flag(ui_EJECTSettings, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_add_event_cb(ui_EJECTSettings, ui_event_EJECTSettings, LV_EVENT_ALL, NULL);
-
-    // ui_Logo6
-
-    ui_Logo6 = lv_label_create(ui_EJECTSettings);
-
-    lv_obj_set_width(ui_Logo6, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_Logo6, LV_SIZE_CONTENT);
-
-    lv_obj_set_y(ui_Logo6, -103);
-    lv_obj_set_x(ui_Logo6, lv_pct(0));
-
-    lv_obj_set_align(ui_Logo6, LV_ALIGN_CENTER);
-
-    lv_label_set_text(ui_Logo6, T_SCREEN_EJECT);
-
-    lv_obj_set_style_text_font(ui_Logo6, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    applyTitleBarStyle(ui_Logo6);
-
-    // ui_EJECTButtonL
-
-    ui_EJECTButtonL = lv_btn_create(ui_EJECTSettings);
-
-    lv_obj_set_width(ui_EJECTButtonL, 100);
-    lv_obj_set_height(ui_EJECTButtonL, 30);
-
-    lv_obj_set_y(ui_EJECTButtonL, 100);
-    lv_obj_set_x(ui_EJECTButtonL, lv_pct(-33));
-
-    lv_obj_set_align(ui_EJECTButtonL, LV_ALIGN_CENTER);
-
-    lv_obj_add_flag(ui_EJECTButtonL, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-    lv_obj_clear_flag(ui_EJECTButtonL, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_add_event_cb(ui_EJECTButtonL, ui_event_EJECTButtonL, LV_EVENT_ALL, NULL);
-    applyButtonStyles(ui_EJECTButtonL, &style_button_l, &style_button_l_focused, NULL);
-
-    // ui_EJECTButtonLText
-
-    ui_EJECTButtonLText = lv_label_create(ui_EJECTButtonL);
-
-    lv_obj_set_width(ui_EJECTButtonLText, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_EJECTButtonLText, LV_SIZE_CONTENT);
-
-    lv_obj_set_x(ui_EJECTButtonLText, lv_pct(0));
-    lv_obj_set_y(ui_EJECTButtonLText, lv_pct(0));
-
-    lv_obj_set_align(ui_EJECTButtonLText, LV_ALIGN_CENTER);
-
-    lv_label_set_text(ui_EJECTButtonLText, "");
-    applyTextPrimaryStyle(ui_EJECTButtonLText);
-
-    // ui_EJECTButtonM
-
-    ui_EJECTButtonM = lv_btn_create(ui_EJECTSettings);
-
-    lv_obj_set_width(ui_EJECTButtonM, 100);
-    lv_obj_set_height(ui_EJECTButtonM, 30);
-
-    lv_obj_set_y(ui_EJECTButtonM, 100);
-    lv_obj_set_x(ui_EJECTButtonM, lv_pct(0));
-
-    lv_obj_set_align(ui_EJECTButtonM, LV_ALIGN_CENTER);
-
-    lv_obj_add_flag(ui_EJECTButtonM, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-    lv_obj_clear_flag(ui_EJECTButtonM, LV_OBJ_FLAG_SCROLLABLE);
-
-    lv_obj_add_event_cb(ui_EJECTButtonM, ui_event_EJECTButtonM, LV_EVENT_ALL, NULL);
-    applyButtonStyles(ui_EJECTButtonM, &style_button_m, &style_button_m_focused, NULL);
-
-    // ui_EJECTButtonMText
-
-    ui_EJECTButtonMText = lv_label_create(ui_EJECTButtonM);
-
-    lv_obj_set_width(ui_EJECTButtonMText, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_EJECTButtonMText, LV_SIZE_CONTENT);
-
-    lv_obj_set_x(ui_EJECTButtonMText, lv_pct(0));
-    lv_obj_set_y(ui_EJECTButtonMText, lv_pct(0));
-
-    lv_obj_set_align(ui_EJECTButtonMText, LV_ALIGN_CENTER);
-
-    lv_label_set_text(ui_EJECTButtonMText, T_HOME);
-    applyTextPrimaryStyle(ui_EJECTButtonMText);
-
-    // ui_EJECTButtonR
-
-    ui_EJECTButtonR = lv_btn_create(ui_EJECTSettings);
-
-    lv_obj_set_width(ui_EJECTButtonR, 100);
-    lv_obj_set_height(ui_EJECTButtonR, 30);
-
-    lv_obj_set_y(ui_EJECTButtonR, 100);
-    lv_obj_set_x(ui_EJECTButtonR, lv_pct(33));
-
-    lv_obj_set_align(ui_EJECTButtonR, LV_ALIGN_CENTER);
-
-    lv_obj_add_flag(ui_EJECTButtonR, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-    lv_obj_clear_flag(ui_EJECTButtonR, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_state(ui_EJECTButtonR, LV_STATE_CHECKED);
-
-    lv_obj_add_event_cb(ui_EJECTButtonR, ui_event_EJECTButtonR, LV_EVENT_ALL, NULL);
-    applyButtonStyles(ui_EJECTButtonR, &style_button_r, &style_button_r_focused, NULL);
-
-    // ui_EJECTButtonRText
-
-    ui_EJECTButtonRText = lv_label_create(ui_EJECTButtonR);
-
-    lv_obj_set_width(ui_EJECTButtonRText, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_EJECTButtonRText, LV_SIZE_CONTENT);
-
-    lv_obj_set_x(ui_EJECTButtonRText, lv_pct(0));
-    lv_obj_set_y(ui_EJECTButtonRText, lv_pct(0));
-
-    lv_obj_set_align(ui_EJECTButtonRText, LV_ALIGN_CENTER);
-
-    lv_label_set_text(ui_EJECTButtonRText, T_CUM_LOAD);
-    applyTextPrimaryStyle(ui_EJECTButtonRText);
-
-    // ui_Batt6
-
-    ui_Batt6 = lv_label_create(ui_EJECTSettings);
-
-    lv_obj_set_width(ui_Batt6, 85);
-    lv_obj_set_height(ui_Batt6, 30);
-
-    lv_obj_set_x(ui_Batt6, 115);
-    lv_obj_set_y(ui_Batt6, -103);
-
-    lv_obj_set_align(ui_Batt6, LV_ALIGN_CENTER);
-
-    lv_label_set_text(ui_Batt6, T_BATT);
-
-    // ui_BattValue6
-
-    ui_BattValue6 = lv_label_create(ui_Batt6);
-
-    lv_obj_set_width(ui_BattValue6, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_BattValue6, LV_SIZE_CONTENT);
-
-    lv_obj_set_x(ui_BattValue6, 0);
-    lv_obj_set_y(ui_BattValue6, -7);
-
-    lv_obj_set_align(ui_BattValue6, LV_ALIGN_RIGHT_MID);
-
-    lv_label_set_text(ui_BattValue6, T_BLANK);
-
-
-    // ui_Battery6
-
-    ui_Battery6 = lv_bar_create(ui_Batt6);
-    lv_bar_set_range(ui_Battery6, 0, 100);
-
-    lv_obj_set_width(ui_Battery6, 80);
-    lv_obj_set_height(ui_Battery6, 10);
-
-    lv_obj_set_x(ui_Battery6, 0);
-    lv_obj_set_y(ui_Battery6, 10);
-
-    lv_obj_set_align(ui_Battery6, LV_ALIGN_CENTER);
-
-    applyBatteryStyles(ui_Battery6);
-
-}
 void ui_Settings_screen_init(void)
 {
 
@@ -2338,7 +2137,7 @@ void ui_init(void)
     ui_Menu_screen_init();
     ui_Pattern_screen_init();
     ui_Torqe_screen_init();
-    ui_EJECTSettings_screen_init();
+    EjectUiScreenCreate();
     ui_Settings_screen_init();
     ui_Stroke_screen_init();
     ui_Streaming_screen_init();

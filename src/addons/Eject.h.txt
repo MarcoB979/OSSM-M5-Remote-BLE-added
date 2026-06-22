@@ -6,7 +6,7 @@
 extern "C" {
 #endif
 extern const int EJECT_ID;
-void EjectUiScreenCreate(void);
+void EjectUiScreenInit(void);
 #ifdef __cplusplus
 }
 #endif
@@ -19,32 +19,22 @@ struct ButtonEvents {
     bool rightShort;
 };
 #endif
-typedef struct _lv_obj_t lv_obj_t;
 
 #ifdef __cplusplus
 extern "C" {
 void EjectHandleScreen(const struct ButtonEvents *events);
 }
 
-void EjectPrepareScreen();
-lv_obj_t *EjectGetScreen();
 void EjectHandleScreen(const ButtonEvents &events);
 #else
-void EjectPrepareScreen();
-lv_obj_t *EjectGetScreen();
 void EjectHandleScreen(const struct ButtonEvents *events);
 #endif
-
 bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
-                                     int target,
-                                     int sender,
-                                     int command,
-                                     float value,
-                                     bool heartbeat);
-
+                                    int target,
+                                    int sender,
+                                    int command,
+                                    float value,
+                                    bool heartbeat);
 bool EjectSendCommand(int command, float value);
-void EjectToggle();        // Toggle on/off (uses internal state)
 bool EjectIsPaired();
 void EjectSetAddonEnabled(bool enabled);
-lv_obj_t *EjectGetBatteryTitleLabel();
-lv_obj_t *EjectGetBatteryValueLabel();

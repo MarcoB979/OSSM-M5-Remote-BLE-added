@@ -21,7 +21,7 @@ lv_obj_t *ui_Batt8 = nullptr;
 lv_obj_t *ui_BattValue8 = nullptr;
 lv_obj_t *ui_Battery8 = nullptr;
 lv_group_t *ui_g_addons = nullptr;
-lv_obj_t *ui_FistIT = nullptr;
+//lv_obj_t *ui_FistIT = nullptr;
 
 static lv_obj_t *s_streaming_btn_l_text = nullptr;
 static lv_obj_t *s_streaming_btn_m_text = nullptr;
@@ -55,7 +55,7 @@ extern lv_obj_t *g_addon_return_screen;
 
 
 //for new addons: add a line here with the code what screen to activate when the addon is selected in the menu, and a default enabled/disabled state. The screen activation code should be a function that prepares the screen (e.g. updates slider values from current addon state) and then calls _ui_screen_change() to switch to it.
-static void activateEject()     { g_addon_return_screen = lv_scr_act(); _ui_screen_change(ui_EJECTSettings,  LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
+static void activateEject()     { g_addon_return_screen = lv_scr_act(); EjectPrepareScreen(); _ui_screen_change(EjectGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateFistIT()    { g_addon_return_screen = lv_scr_act(); FistITPrepareScreen(); _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateStreaming() { _ui_screen_change(ui_Streaming,       LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 

@@ -21,7 +21,7 @@
 #include "../display/styles.h"
 #include "../addons/strokeMode.h"
 #include "../addons/addonsStreaming.h"
-#include "../icons.h"
+#include "../screens/icons.h"
 #include "language.h"
 #include <M5Unified.h>
 #include <string>
@@ -1885,13 +1885,6 @@ void handleScreens() {
             }    
 
             streamingBeginInitSequence();
-            showNotification(
-                T_STREAMING_ACTIVE_TITLE,
-                T_STREAMING_ACTIVE_TEXT,
-                0,
-                true, T_CONFIRM,
-                false, nullptr,
-                false);
             s_waiting_for_running_notice = true;
         }
 
