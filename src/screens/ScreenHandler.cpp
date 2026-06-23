@@ -105,84 +105,58 @@ static int           maxRamp    = 8;
 static int           encId      = 0;
 static int           activeEncId = 0;
 
-static constexpr int EJECT_ICON_W = 16;
-static constexpr int EJECT_ICON_H = 22;
-static constexpr int FIST_ICON_W = 18;
-static constexpr int FIST_ICON_H = 22;
+static constexpr int EJECT_ICON_W = 15;
+static constexpr int EJECT_ICON_H = 20;
+static constexpr int FIST_ICON_W = 22;
+static constexpr int FIST_ICON_H = 18;
 static constexpr int HOME_ICON_W = 18;
 static constexpr int HOME_ICON_H = 22;
+static constexpr int ESP_ICON_W = 21;
+static constexpr int ESP_ICON_H = 18;
 
 static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
-  "................",
-  "........##......",
-  "..##..####...##.",
-  ".###..#####.###.",
-  "..##...###..##..",
-  "........#.......",
-  "................",
-  "......###......",
-  "....##.#.##....",
-  "...##.....##...",
-  "...##.....##...",
-  ".....######....",
-  "....###..###...",
-  "....###..###...",
-  "....###..###...",
-  "....###..###...",
-  "....###..###...",
-  "....###..###...",
-  "....###..###...",
-  ".....######....",
-  "......###......",
-  "................",
+".....###.........",
+".....####.....###",
+"......###....##..",
+"..... ..##...#...",
+".......##.......",
+".......###..###.",
+"................",
+"................",
+"........##......",
+".......#..#.....",
+"......######....",
+".....#########..",
+"....##########..",
+".....########...",
+"......######....",
+"......######....",
+"......######.....",
+"......######....",
+"......######....",
+"......######...."
 };
 
 static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
-/*  "..........#####...",
-  ".....##.##.##..#..",
-  "..##...#...#...##.",
-  "##..#...#...#..##.",
-  "##...##..##..##.##",
-  ".##.............##",
-  ".##.............##",
-  ".###.##.........##",
-  "..#######.......##",
-  "...####........##.",
-  "....###.#......##.",
-  ".....##..##....##.",
-  "......##....##.##.",
-  "......##....#.##..",
-  "......###.....##..",
-  "......###.....##..",
-  "......####...###..",
-  "......##########..",
-  ".......########...",
-  "........######....",
-  ".........##.##....",
-  ".........#####....",
-*/
-"....######..........",
-  "..##......##........",
-  ".#..........#.......",
-  ".#....##....#.......",
-  ".#...#..#...#.......",
-  ".#...#..#...#.......",
-  ".#...#..#...#.......",
-  ".#...#..#...#######.",
-  ".#...#..#..#.......#",
-  "..#..#..#.#........#",
-  "..#.......#........#",
-  "...#......#........#",
-  "....#.....#........#",
-  "....#..............#",
-  "....#.............#.",
-  "....#............#.",
-  ".....#..........#..",
-  "......#........#...",
-  ".......########....",
-  ".......#......#....",
-  ".......#......#....",
-  ".......########...."
+
+"...........##........",
+"..##..#####..#####...",
+"##..##...#...##...#..",
+"##..##...#...##...#..",
+"#....#............#..",
+"#.................#..",
+"#.................##.",
+"#....#...#...##...#.#",
+"#....#...#...##...#.#",
+"#....#...#...##...#.#",
+"#....#...#...##...#.#",
+"#....#...#...##...#.#",
+"###################.#",
+"........#..........#.",
+"........#..........#.",
+".......##........##..",
+"........#########....",
+"....................."
   };
 
 static const char* const HOME_ICON_MASK[HOME_ICON_H] = {
@@ -210,6 +184,27 @@ static const char* const HOME_ICON_MASK[HOME_ICON_H] = {
   "......####.......",
 };
 
+static const char* const ESP_ICON_MASK[ESP_ICON_H] = {
+"......########.......",
+"....##........##.....",
+"...#...........##....",
+"..#..#####......##...",
+".#.......####....##..",
+".#..##....####.....#..",
+".#.####.....###.....#",
+"#..##.####...###....#",
+"#.##.....###..###...#",
+"#..#####..###..###..#",
+"#....###..###..###..#",
+".#.....###..##..##..#",
+"..#.##..###.##..##..#",
+"..#.##..###.##..##..#",
+"..#....###,.##..##.#.",
+"...#...##...##....#..",
+"....##.........##...",
+"......#########....."
+};
+
 
 static lv_obj_t* createStatusIconBase(lv_obj_t* parent, int width, int height) {
     if (!parent) return nullptr;
@@ -220,6 +215,16 @@ static lv_obj_t* createStatusIconBase(lv_obj_t* parent, int width, int height) {
     lv_obj_clear_flag(icon, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_style_bg_opa(icon, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_opa(icon, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
+    return icon;
+}
+
+static lv_obj_t* createStatusESPIcon(lv_obj_t* parent) {
+    static uint8_t iconBuffer[LV_CANVAS_BUF_SIZE(32, 32, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+    static bool iconReady = false;
+    lv_obj_t* icon = createStatusIconBase(parent, ESP_ICON_W, ESP_ICON_H);
+    if (!icon) return nullptr;
+    icons_render_mask_canvas(icon, iconBuffer, iconReady, ESP_ICON_MASK, ESP_ICON_W, ESP_ICON_H,
+                             getActiveBackgroundColor(), getActiveTextPrimaryColor());
     return icon;
 }
 
@@ -253,11 +258,13 @@ static lv_obj_t* createStatusHomeIcon(lv_obj_t* parent) {
     return icon;
 }
 
+
 static void updateStatusStrip() {
     static lv_obj_t* statusLabels[12] = { nullptr };
     static lv_obj_t* statusEjectIcons[12] = { nullptr };
     static lv_obj_t* statusFistIcons[12] = { nullptr };
     static lv_obj_t* statusHomeIcons[12] = { nullptr };
+    static lv_obj_t* statusESPIcons[12] = { nullptr };
     lv_obj_t* statusScreens[12] = {
         ui_Start,
         ui_Home,
@@ -292,6 +299,9 @@ static void updateStatusStrip() {
         lv_obj_set_style_text_font(statusLabels[i], &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(statusLabels[i], LV_OBJ_FLAG_HIDDEN);
 
+        if (statusESPIcons[i] == nullptr) {
+            statusESPIcons[i] = createStatusESPIcon(statusScreens[i]);
+        }
         if (statusEjectIcons[i] == nullptr) {
             statusEjectIcons[i] = createStatusEjectIcon(statusScreens[i]);
         }
@@ -322,8 +332,6 @@ static void updateStatusStrip() {
 
     if (bleCommIsConnected()) {
         appendToken(LV_SYMBOL_BLUETOOTH);
-    } else if (espNowIsPaired()) {
-        appendToken(LV_SYMBOL_WIFI);
     }
 
     if (labelText[0] == '\0') {
@@ -332,7 +340,7 @@ static void updateStatusStrip() {
 
     const bool ejectPaired = espNowIsEjectConnected();
     const bool fistPaired = espNowIsFistConnected();
-
+    const bool espPaired = espNowIsPaired();
     for (size_t i = 0; i < 12; ++i) {
         lv_obj_t* label = statusLabels[i];
         if (label == nullptr) continue;
@@ -343,6 +351,18 @@ static void updateStatusStrip() {
         lv_obj_update_layout(label);
 
         int iconX = 10 + lv_obj_get_width(label) + 4;
+
+        if (statusESPIcons[i] != nullptr) {
+            lv_obj_set_align(statusESPIcons[i], LV_ALIGN_LEFT_MID);
+            lv_obj_set_x(statusESPIcons[i], iconX);
+            lv_obj_set_y(statusESPIcons[i], -102);
+                if (espPaired) {
+                lv_obj_clear_flag(statusESPIcons[i], LV_OBJ_FLAG_HIDDEN);
+                iconX += lv_obj_get_width(statusESPIcons[i]) + 2;
+            } else {
+                lv_obj_add_flag(statusESPIcons[i], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
 
         if (statusFistIcons[i] != nullptr) {
             lv_obj_set_align(statusFistIcons[i], LV_ALIGN_LEFT_MID);
