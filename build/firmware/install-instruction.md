@@ -6,7 +6,7 @@
 4. Select the matching firmware file for your device:
    - `OSSM-M5-Remote_m5stack-core2_TEST-v0-92.bin`
    - `OSSM-M5-Remote_m5stack-cores3_TEST-v0-92.bin`
-5. Leave the flash offset at `0x0000`.
+5. For Flash Address choose 0x0 (flash offset `0x0000`).
 6. Click **Program / Flash** and wait until it finishes.
 
 After flashing, reboot the device.
