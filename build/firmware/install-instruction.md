@@ -14,3 +14,4 @@ After flashing, reboot the device.
 Below you can see how your screen should look like using esptool:
 
 ![ESP Web Flasher screenshot](../../image/install-esptool.png)
+<img src="../../image/install-esptool.png?raw=true" alt="Installation example" title="Settings" width="300">
