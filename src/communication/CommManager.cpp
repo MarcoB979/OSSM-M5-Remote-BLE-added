@@ -150,6 +150,8 @@ bool SendCommand(int Command, float Value, int Target) {
     if (commGetMode() != COMM_MODE_BLE) {
       setMode(COMM_MODE_BLE);
     }
+    //LogDebugFormatted("Sending command via BLE: Command=%d, Value=%.2f, Speed=%.2f, Depth=%.2f, Stroke=%.2f, MaxDepth=%.2f, MaxSpeed=%.2f\n",
+    //                Command, Value, speed, depth, stroke, maxdepthinmm, speedlimit);
     return bleCommSendAppCommand(Command, Value, speed, depth, stroke, maxdepthinmm, speedlimit);
   }
 

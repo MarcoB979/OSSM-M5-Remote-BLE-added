@@ -200,6 +200,7 @@ static void applySliderStyles(lv_obj_t *obj, int styleIndex)
     lv_obj_add_style(obj, &style_slider_track[styleIndex], LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(obj, &style_slider_indicator[styleIndex], LV_PART_INDICATOR | LV_STATE_DEFAULT);
     lv_obj_add_style(obj, &style_slider_indicator[styleIndex], LV_PART_KNOB | LV_STATE_DEFAULT);
+    lv_style_set_pad_left(&style_slider_track[styleIndex], 0);
 }
 
 static void applyBatteryStyles(lv_obj_t *obj)
@@ -729,7 +730,7 @@ void ui_Home_screen_init(void)
 
     lv_obj_set_align(ui_HomeButtonL, LV_ALIGN_CENTER);
 
-    lv_obj_add_state(ui_HomeButtonL, LV_STATE_DISABLED);
+//    lv_obj_add_state(ui_HomeButtonL, LV_STATE_DISABLED);
 
     lv_obj_add_flag(ui_HomeButtonL, LV_OBJ_FLAG_CHECKABLE | LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_clear_flag(ui_HomeButtonL, LV_OBJ_FLAG_SCROLLABLE);
@@ -839,12 +840,13 @@ void ui_Home_screen_init(void)
 
     ui_homespeedslider = lv_slider_create(ui_SpeedL);
     lv_slider_set_range(ui_homespeedslider, 0, speedlimit);
-    //lv_slider_set_mode(ui_homespeedslider, LV_SLIDER_MODE_SYMMETRICAL);
+    lv_slider_set_start_value(ui_homespeedslider, 0, LV_ANIM_OFF);
+    lv_slider_set_mode(ui_homespeedslider, LV_SLIDER_MODE_SYMMETRICAL);
 
-    lv_obj_set_width(ui_homespeedslider, 130);
+    lv_obj_set_width(ui_homespeedslider, 130); //was 130
     lv_obj_set_height(ui_homespeedslider, 10);
 
-    lv_obj_set_x(ui_homespeedslider, -15);
+    lv_obj_set_x(ui_homespeedslider, -15); //was -15
     lv_obj_set_y(ui_homespeedslider, 0);
 
     lv_obj_set_align(ui_homespeedslider, LV_ALIGN_RIGHT_MID);
@@ -885,6 +887,7 @@ void ui_Home_screen_init(void)
 
     ui_homedepthslider = lv_slider_create(ui_DepthL);
     lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
+    lv_slider_set_start_value(ui_homedepthslider, 0, LV_ANIM_OFF);
 
     lv_obj_set_width(ui_homedepthslider, 130);
     lv_obj_set_height(ui_homedepthslider, 10);
@@ -931,6 +934,7 @@ void ui_Home_screen_init(void)
     ui_homestrokeslider = lv_slider_create(ui_StrokeL);
     lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
     lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_RANGE);
+    lv_slider_set_start_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
 
     lv_obj_set_width(ui_homestrokeslider, 130);
     lv_obj_set_height(ui_homestrokeslider, 10);
@@ -978,6 +982,7 @@ void ui_Home_screen_init(void)
     lv_slider_set_range(ui_homesensationslider, -100, 100);
     lv_slider_set_mode(ui_homesensationslider, LV_SLIDER_MODE_SYMMETRICAL);
     lv_slider_set_value(ui_homesensationslider, 0, LV_ANIM_OFF);
+    lv_slider_set_start_value(ui_homesensationslider, 0, LV_ANIM_OFF);
 
     lv_obj_set_width(ui_homesensationslider, 170);
     lv_obj_set_height(ui_homesensationslider, 10);
@@ -1641,6 +1646,8 @@ void ui_Torqe_screen_init(void)
     ui_outtroqeslider = lv_slider_create(ui_outtroqelabel);
     lv_slider_set_range(ui_outtroqeslider, 50, 200);
     lv_slider_set_value(ui_outtroqeslider, 180, LV_ANIM_OFF);
+    lv_slider_set_start_value(ui_outtroqeslider, 0, LV_ANIM_OFF);
+
     if(lv_slider_get_mode(ui_outtroqeslider) == LV_SLIDER_MODE_RANGE) lv_slider_set_left_value(ui_outtroqeslider, 0,
                                                                                                    LV_ANIM_OFF);
 
@@ -1723,6 +1730,8 @@ void ui_Torqe_screen_init(void)
     ui_introqeslider = lv_slider_create(ui_introqelabel);
     lv_slider_set_range(ui_introqeslider, 20, 200);
     lv_slider_set_value(ui_introqeslider, 100, LV_ANIM_OFF);
+    lv_slider_set_start_value(ui_introqeslider, 0, LV_ANIM_OFF);
+    
     if(lv_slider_get_mode(ui_introqeslider) == LV_SLIDER_MODE_RANGE) lv_slider_set_left_value(ui_introqeslider, 0,
                                                                                                   LV_ANIM_OFF);
 

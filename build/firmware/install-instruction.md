@@ -13,4 +13,4 @@ After flashing, reboot the device.
 
 Below you can see how your screen should look like using esptool:
 
-<img src="../../image/install-esptool.png?raw=true" alt="Installation example" title="Settings" width="350">
+<img src="../../image/install-esptool.png?raw=true" alt="Installation example" title="Settings" width="400">

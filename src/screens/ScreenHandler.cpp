@@ -100,7 +100,8 @@ static unsigned long nowMs      = 0;
 static int           rampMs     = 0;
 static bool          rampEnabled = true;
 static int           rampValue  = 1;
-static int           rampTime   = 75;
+static int           rampUpValue = 2;
+static int           rampTime   = 90;
 static int           maxRamp    = 8;
 static int           encId      = 0;
 static int           activeEncId = 0;
@@ -166,16 +167,16 @@ static const char* const HOME_ICON_MASK[HOME_ICON_H] = {
   "####........####.",
   ".................",
   ".................",
-  ".................",
-  "......###........",
-  "......###........",
-  "......###........",
-  "......###........",
-  "......###........",
-  "......###........",
-  "......###........",
-  "......###........",
-  ".................",
+  ".###...###...###.",
+  ".###...###...###.",
+  ".###...###...###.",
+  ".###...###...###.",
+  ".###############.",
+  ".###############.",
+  ".###...###...###.",
+  ".###...###...###.",
+  ".###...###...###.",
+  ".###...###...###.",
   ".................",
   ".................",
   "####........####.",
@@ -764,9 +765,9 @@ static const char* battery_symbol_for_level(int level, bool isCharging)
         return baseSymbol;
     }
 
-    // Show both fill level and charging state when plugged in.
+    // Show both fill level and charging state when plugged in. (now only charging symbol with percentage)
     static char chargingSymbol[24];
-    snprintf(chargingSymbol, sizeof(chargingSymbol), "%s %s", baseSymbol, LV_SYMBOL_CHARGE);
+    snprintf(chargingSymbol, sizeof(chargingSymbol), "%s", LV_SYMBOL_CHARGE);
     return chargingSymbol;
 }
 
@@ -793,9 +794,13 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
                 lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_set_align(label, LV_ALIGN_RIGHT_MID);
                 lv_obj_set_y(label, 0);
-                lv_obj_set_x(label, -5);  //was -34
-                lv_obj_set_style_text_color(label, lv_color_hex(getActiveTextSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_text_font(label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
+                if (isCharging) {
+                    lv_obj_set_x(label, -25);  //was -34
+                } else {
+                    lv_obj_set_x(label, -40);  //was -34
+                }
+                lv_obj_set_style_text_color(label, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+                lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
             }
         }
         for (lv_obj_t *bar : batteryBars) {
@@ -813,6 +818,7 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
     }
 
     const char *symbol = battery_symbol_for_level(level, isCharging);
+    //shows charging icon right from battery icon, but not the percentage
     char percentText[8];
     snprintf(percentText, sizeof(percentText), "%d%%", level);
 
@@ -900,6 +906,48 @@ static void maybeShowChargingWarning(bool isCharging)
 
 static int estimateBatteryPercentFromVoltageMv(float batteryMv)
 {
+
+    // 1. Get raw voltage and charging state from Core2 AXP192
+    bool isCharging = detectChargingNow();
+    LogDebugFormatted("Raw battery voltage: %.1f mV, charging: %s\n", batteryMv, isCharging ? "yes" : "no");
+    //return batteryMv;
+    // 2. Corrected Hardware Offset Calibration
+    if (!isCharging) {
+        // When running on battery, load drags voltage down. 
+        // Adding 60mV brings it back to the true chemical state.
+        batteryMv += 60.0f; 
+    } else {
+        // When charging, voltage reads high. Reduce slightly to match real capacity.
+        batteryMv -= 40.0f;
+    }
+
+    // Non-linear Li-ion OCV-inspired mapping (mV -> percent), then interpolate.
+    // This avoids the "too optimistic" mid-range values from linear mapping.
+    struct BatteryCurvePoint {
+        float mv;
+        int pct;
+    };
+    // 3. Your optimized curve for Core2 hardware
+    static const BatteryCurvePoint curve[] = {
+        {3400.0f, 0}, {3500.0f, 5}, {3600.0f, 15}, {3650.0f, 30}, {3700.0f, 50},
+        {3750.0f, 65}, {3800.0f, 80}, {3950.0f, 95}, {4100.0f, 100}
+    };
+
+    const int n = (int)(sizeof(curve) / sizeof(curve[0]));
+    if (batteryMv <= curve[0].mv) return curve[0].pct;
+    if (batteryMv >= curve[n - 1].mv) return curve[n - 1].pct;
+
+    for (int i = 0; i < n - 1; ++i) {
+        const BatteryCurvePoint &a = curve[i];
+        const BatteryCurvePoint &b = curve[i + 1];
+        if (batteryMv >= a.mv && batteryMv <= b.mv) {
+            const float t = (batteryMv - a.mv) / (b.mv - a.mv);
+            int pct = (int)(a.pct + t * (float)(b.pct - a.pct) + 0.5f);
+            return (pct < 0) ? 0 : (pct > 100) ? 100 : pct;
+        }
+    }
+    return 0;
+    /*
     // Non-linear Li-ion OCV-inspired mapping (mV -> percent), then interpolate.
     // This avoids the "too optimistic" mid-range values from linear mapping.
     struct BatteryCurvePoint {
@@ -938,16 +986,19 @@ static int estimateBatteryPercentFromVoltageMv(float batteryMv)
     }
 
     return 0;
+    */
 }
 
 static int readBatteryPercentForUi(bool isCharging)
 {
-    if (isCharging) {
-        const float battMv = M5.Power.getBatteryVoltage();
+    const float battMv = M5.Power.getBatteryVoltage();
+    return estimateBatteryPercentFromVoltageMv(battMv); //temporary change to check if percentage is handled better now
+    if (!isCharging) {
         if (battMv > 1000.0f) {
             return estimateBatteryPercentFromVoltageMv(battMv);
         }
     }
+    LogDebugFormatted("Battery voltage too low or charging, using M5.Power.getBatteryLevel() instead\n");
     return M5.Power.getBatteryLevel();
 }
 
@@ -975,7 +1026,7 @@ static int getSmoothedBatteryLevel(bool isCharging)
 
     if (inSettlingWindow) return displayedLevel;
 
-    if (now - lastSampleMs >= 30000UL || lastSampleMs == 0) {
+    if (now - lastSampleMs >= 10000UL || lastSampleMs == 0) {
         lastSampleMs = now;
         const float raw = (float)readBatteryPercentForUi(isCharging);
         emaLevel       = 0.1f * raw + 0.9f * emaLevel;
@@ -1349,6 +1400,7 @@ void homebuttonmevent(lv_event_t * e) {
         applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
     } else {
         LogDebug("Stopping OSSM");
+        LogDebugFormatted("BLE: Unpause speed %.1f\n", bleCommGetUnpauseSpeed());
         SendCommand(OFF, 0.0, OSSM_ID);
         applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
     }
@@ -1542,19 +1594,22 @@ void handleScreens() {
         nowMs = millis();
         if (nowMs - rampMs <= (unsigned long)rampTime && rampEnabled == true) {
             if (rampValue <= maxRamp && encId == activeEncId) {
-                ++rampValue;
+                rampValue += rampUpValue;
+                //++rampValue;
             }
         } else {
-            rampValue   = 1;
+            rampValue = 1;  //TEST AFTER EAU COMMENTS
             activeEncId = encId;
         }
 
+        bool motionValueChanged = false;
+
         // Encoder 1 — Speed
         bool changed = false;
-        bool updateMXbutton = false;
+        int prevSpeed = speed;
+        //bool updateMXbutton = false;
         if (lv_slider_is_dragged(ui_homespeedslider) == false) {
             changed = false;
-            lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
             if (encoder1.getCount() >= 2) {
                 changed = true; speed += rampValue;
                 encoder1.setCount(0); rampMs = millis(); encId = 1;
@@ -1564,11 +1619,17 @@ void handleScreens() {
             }
             if (speed <= 0)          { changed = true; speed = 0; }
             if (speed > speedlimit) { changed = true; speed = speedlimit; }
-            if (changed) { SendCommand(SPEED, speed, OSSM_ID); }
+            if (changed) { 
+                lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
+                SendCommand(SPEED, speed, OSSM_ID); 
+                motionValueChanged = true;
+                //updateMXbutton=true;
+            }
         } else if (lv_slider_get_value(ui_homespeedslider) != speed) {
             speed = lv_slider_get_value(ui_homespeedslider);
             SendCommand(SPEED, speed, OSSM_ID);
-            updateMXbutton=true;
+            motionValueChanged = true;
+            //updateMXbutton=true;
         }
         char speed_v[7]; dtostrf(speed, 6, 0, speed_v);
         lv_label_set_text(ui_homespeedvalue, speed_v);
@@ -1576,7 +1637,8 @@ void handleScreens() {
         // Encoder 2 — Depth
         if (lv_slider_is_dragged(ui_homedepthslider) == false) {
             changed = false;
-            lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
+            const float prevDepth = depth;
+            const float prevStroke = stroke;
             if (encoder2.getCount() >= 2) {
                 changed = true; depth += rampValue;
                 if (dynamicStroke) stroke += rampValue;
@@ -1589,16 +1651,21 @@ void handleScreens() {
                 }
                 encoder2.setCount(0); rampMs = millis(); encId = 2;
             }
-            if (depth <= 0)            { changed = true; depth = 0; stroke = 0; }
+            if (depth <= 0)            { changed = true; depth = 0; stroke = 0; }   //here is the error
             if (depth > maxdepthinmm) { changed = true; depth = maxdepthinmm; }
-            if (changed) {
+            if (stroke > depth)         { changed = true; stroke = depth; }
+            if (changed && (depth != prevDepth || stroke != prevStroke)) {
+                LogDebug("Possible error 1");
+                lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
                 SendCommand(DEPTH,  depth,  OSSM_ID);
                 SendCommand(STROKE, stroke, OSSM_ID);
+                motionValueChanged = true;
             }
         } else if (lv_slider_get_value(ui_homedepthslider) != depth) {
             depth = lv_slider_get_value(ui_homedepthslider);
             SendCommand(DEPTH,  depth,  OSSM_ID);
             SendCommand(STROKE, stroke, OSSM_ID);
+            motionValueChanged = true;
         }
         char depth_v[7]; dtostrf(depth, 6, 0, depth_v);
         lv_label_set_text(ui_homedepthvalue, depth_v);
@@ -1606,29 +1673,43 @@ void handleScreens() {
         // Encoder 3 — Stroke
         if (lv_slider_is_dragged(ui_homestrokeslider) == false) {
             changed = false;
-            lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
-            lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
+            const float prevDepth = depth;
+            const float prevStroke = stroke;
             bool invertStroke = ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED);
             if (encoder3.getCount() >= 2) {
-                changed = true; stroke += invertStroke ? rampValue : -rampValue;
-                encoder3.setCount(0); rampMs = millis(); encId = 3;
-            } else if (encoder3.getCount() <= -2) {
                 changed = true; stroke += invertStroke ? -rampValue : rampValue;
+                encoder3.setCount(0); rampMs = millis(); encId = 3;
+            } else if (encoder3.getCount() <= -2) {  
+                changed = true; stroke += invertStroke ? rampValue : -rampValue; 
                 encoder3.setCount(0); rampMs = millis(); encId = 3;
             }
             if (stroke <= 0)            { changed = true; stroke = 0; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
-            if (changed) {
+            if (stroke > depth)         { changed = true; stroke = depth; }
+            if (invertStroke) {
+                lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
+                lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
+            }
+            else {
+                lv_bar_set_start_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
+                lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
+            }
+
+            if (changed && (depth != prevDepth || stroke != prevStroke)) {
+                LogDebug("Possible error 3");
                 SendCommand(STROKE, stroke, OSSM_ID);
                 SendCommand(DEPTH,  depth,  OSSM_ID);
+                motionValueChanged = true;
             }
         } else if (lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke) {
             stroke = depth - lv_slider_get_left_value(ui_homestrokeslider);
             SendCommand(STROKE, stroke, OSSM_ID);
+            motionValueChanged = true;
         } else if (lv_slider_get_value(ui_homestrokeslider) != depth) {
             depth = lv_slider_get_value(ui_homestrokeslider);
             SendCommand(DEPTH, depth, OSSM_ID);
             SendCommand(STROKE, stroke, OSSM_ID);
+            motionValueChanged = true;
         }
         char stroke_v[7]; dtostrf(stroke, 6, 0, stroke_v);
         lv_label_set_text(ui_homestrokevalue, stroke_v);
@@ -1689,8 +1770,7 @@ void handleScreens() {
             lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
         }
         const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
-        if (!wasMotionReady && isMotionReady && changed && !OSSM_On) {
-          //LogDebug("Auto pressed HomeButtonM to start OSSM because speed, stroke, and depth are all > 0");
+                if (!wasMotionReady && isMotionReady && motionValueChanged && !OSSM_On) {
           lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
         }
 

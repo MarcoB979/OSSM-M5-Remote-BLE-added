@@ -20,7 +20,8 @@ void bleCommSetEnabled(bool enabled);
 bool bleCommIsEnabled();
 bool bleCommIsHoming();
 int bleCommGetHomingDirection();
-
+int bleCommSetUnpauseSpeed(float speedValue);
+int bleCommGetUnpauseSpeed();
 // Mode/query helpers used by UI streaming flow.
 bool bleCommIsMenu();
 bool bleCommGoToMenu();

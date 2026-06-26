@@ -4,6 +4,7 @@
 #include <esp_timer.h>
 #include "../config/debug.h"
 #include "../display/styles.h"
+#include "../screens/ScreenHandler.h"
 
 extern bool touch_disabled;  // defined in screens/ScreenHandler.cpp
 
@@ -81,6 +82,7 @@ static void my_touchpad_read(lv_indev_t *drv, lv_indev_data_t *data) {
   auto count = M5.Touch.getCount();
 
   if (touch_disabled != true) {
+    screensaver_check_activity();
     if (count == 0) {
       data->state = LV_INDEV_STATE_RELEASED;
     } else {

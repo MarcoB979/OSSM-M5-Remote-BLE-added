@@ -687,6 +687,15 @@ int bleCommGetHomingDirection() {
   return 0;
 }
 
+int bleCommStoreUnpauseSpeed(float speedValue) {
+  g_unpauseSpeed = (float)clampPercent(speedValue);
+  return (int)g_unpauseSpeed;
+}
+
+int bleCommGetUnpauseSpeed() {
+  return (int)g_unpauseSpeed;
+}
+
 
 bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
                            float currentDepth, float currentStroke,
@@ -752,6 +761,7 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
         bool ok1 = queueCommand(String("set:stroke:") + String(clampPercent(requestedStroke)), true);
         bool ok2 = queueCommand(String("set:speed:") + String(clampPercent(resume)), true);
         g_lastRequestedStroke = requestedStroke;
+        LogDebugFormatted("BLE: Resume speed %.1f after stroke %.1f\n", resume, requestedStroke); // TEST AFTER EAU COMMENTS
         return ok1 && ok2;
       }
     }
@@ -763,6 +773,8 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
   switch (appCommand) {
     case SPEED:
       cmd = String("set:speed:") + String(clampPercent(value)) + "\n";
+      LogDebugFormatted("BLE: Set speed command queued: %s\n", cmd.c_str());// TEST AFTER EAU COMMENTS
+
       if (value > 0.5f) g_lastRunSpeed = value;
       break;
     case DEPTH:
@@ -782,9 +794,12 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
       break;
     }
     case OFF:
+    LogDebugFormatted("BLE: OFF command queued, storing unpause speed %.1f\n", currentSpeed); // TEST AFTER EAU COMMENTS
+    bleStoreUnpauseSpeed(currentSpeed);
       cmd = "set:speed:0\n";
       break;
     case ON: {
+      
       int resume = clampPercent(speedParam > 0.001f ? speedParam : currentSpeed);
       cmd = String("set:speed:") + String(resume) + "\n";
       break;
