@@ -33,12 +33,4 @@ void streamingCancelInitSequence();
 bool streamingConsumeInitCompleted();
 // Handle one Streaming screen tick.
 void streamingScreenHandle(bool firstEntry);
-int showNotification(const char *title,
-					 const char *text,
-					 uint32_t duration,
-					 bool showLeftButton = false,
-					 const char *leftButtonText = nullptr,
-					 bool showRightButton = false,
-					 const char *rightButtonText = nullptr,
-					 bool showFullScreen = false);
 #endif

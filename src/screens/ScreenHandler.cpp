@@ -778,6 +778,7 @@ static const char* battery_symbol_for_level(int level, bool isCharging)
 static void update_battery_icons_all_screens(int level, bool isCharging)
 {
     static bool batteryUiInitialized = false;
+    const int valueLabelX = isCharging ? -25 : -40;
 
     lv_obj_t *batteryTitleLabels[] = {
         ui_Batt, ui_Batt1, ui_Batt2, ui_Batt3, ui_Batt4,
@@ -798,11 +799,6 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
                 lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
                 lv_obj_set_align(label, LV_ALIGN_RIGHT_MID);
                 lv_obj_set_y(label, 0);
-                if (isCharging) {
-                    lv_obj_set_x(label, -25);  //was -34
-                } else {
-                    lv_obj_set_x(label, -40);  //was -34
-                }
                 lv_obj_set_style_text_color(label, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
                 lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
             }
@@ -830,7 +826,10 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
         if (label != nullptr) lv_label_set_text(label, symbol);
     }
     for (lv_obj_t *label : batteryValueLabels) {
-        if (label != nullptr) lv_label_set_text(label, percentText);
+        if (label != nullptr) {
+            lv_obj_set_x(label, valueLabelX);
+            lv_label_set_text(label, percentText);
+        }
     }
 }
 
