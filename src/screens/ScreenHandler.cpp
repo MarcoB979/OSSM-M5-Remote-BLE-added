@@ -1661,7 +1661,7 @@ void handleScreens() {
             speed = lv_slider_get_value(ui_homespeedslider);
             //updateMXbutton=true;
         }
-        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homespeedslider) == speed);
+        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homespeedslider) != speed);
         char speed_v[7]; dtostrf(speed, 6, 0, speed_v);
         lv_label_set_text(ui_homespeedvalue, speed_v);
 
@@ -1692,7 +1692,7 @@ void handleScreens() {
         } else if (lv_slider_get_value(ui_homedepthslider) != depth) {
             depth = lv_slider_get_value(ui_homedepthslider);
         }
-        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homedepthslider) == depth);
+        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homedepthslider) != depth);
         char depth_v[7]; dtostrf(depth, 6, 0, depth_v);
         lv_label_set_text(ui_homedepthvalue, depth_v);
 
@@ -1729,7 +1729,7 @@ void handleScreens() {
         } else if (lv_slider_get_value(ui_homestrokeslider) != depth) {
             depth = lv_slider_get_value(ui_homestrokeslider);
         }
-        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_left_value(ui_homestrokeslider) == depth - stroke) || (lv_slider_get_value(ui_homestrokeslider) == depth);
+        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke) || (lv_slider_get_value(ui_homestrokeslider) != depth);
         char stroke_v[7]; dtostrf(stroke, 6, 0, stroke_v);
         lv_label_set_text(ui_homestrokevalue, stroke_v);
 
