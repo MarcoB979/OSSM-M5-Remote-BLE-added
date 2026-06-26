@@ -71,6 +71,10 @@ static int  s_prev_st_screens = -1;
 // Home/stroke screen checks this flag before sending go:strokeEngine, so that
 // home→menu→home does NOT cause an unnecessary re-home.
 static bool s_ble_menu_requires_stroke_reentry = false;
+static bool  s_motion_command_cache_valid = false;
+static float s_last_motion_speed = 0.0f;
+static float s_last_motion_depth = 0.0f;
+static float s_last_motion_stroke = 0.0f;
 
 bool dynamicStroke  = false;
 bool eject_status   = false;
@@ -101,8 +105,8 @@ static int           rampMs     = 0;
 static bool          rampEnabled = true;
 static int           rampValue  = 1;
 static int           rampUpValue = 2;
-static int           rampTime   = 90;
-static int           maxRamp    = 8;
+static int           rampTime   = 95;
+static int           maxRamp    = 10;
 static int           encId      = 0;
 static int           activeEncId = 0;
 
@@ -167,16 +171,16 @@ static const char* const HOME_ICON_MASK[HOME_ICON_H] = {
   "####........####.",
   ".................",
   ".................",
-  ".###...###...###.",
-  ".###...###...###.",
-  ".###...###...###.",
-  ".###...###...###.",
-  ".###############.",
-  ".###############.",
-  ".###...###...###.",
-  ".###...###...###.",
-  ".###...###...###.",
-  ".###...###...###.",
+  "...###.....###...",
+  "...###.....###...",
+  "...###.....###...",
+  "...###.....###...",
+  "...###########...",
+  "...###########...",
+  "...###.....###...",
+  "...###.....###...",
+  "...###.....###...",
+  "...###.....###...",
   ".................",
   ".................",
   "####........####.",
@@ -909,7 +913,6 @@ static int estimateBatteryPercentFromVoltageMv(float batteryMv)
 
     // 1. Get raw voltage and charging state from Core2 AXP192
     bool isCharging = detectChargingNow();
-    LogDebugFormatted("Raw battery voltage: %.1f mV, charging: %s\n", batteryMv, isCharging ? "yes" : "no");
     //return batteryMv;
     // 2. Corrected Hardware Offset Calibration
     if (!isCharging) {
@@ -1420,6 +1423,40 @@ void resetEncoderCounts() {
     encoder3.setCount(0);
     encoder4.setCount(0);
 }
+
+static void syncMotionCommandCache(float motionSpeed, float motionDepth, float motionStroke)
+{
+    s_last_motion_speed = motionSpeed;
+    s_last_motion_depth = motionDepth;
+    s_last_motion_stroke = motionStroke;
+    s_motion_command_cache_valid = true;
+}
+
+static void flushMotionCommands(float motionSpeed,
+                                float motionDepth,
+                                float motionStroke,
+                                bool  motionValueChanged,
+                                bool  allowSend,
+                                bool  requestAutoStart)
+{
+    if (!motionValueChanged && !requestAutoStart) return;
+
+    if (allowSend && motionValueChanged) {
+        const bool speedChanged = !s_motion_command_cache_valid || motionSpeed != s_last_motion_speed;
+        const bool depthChanged = !s_motion_command_cache_valid || motionDepth != s_last_motion_depth;
+        const bool strokeChanged = !s_motion_command_cache_valid || motionStroke != s_last_motion_stroke;
+
+        if (speedChanged) { SendCommand(SPEED, motionSpeed, OSSM_ID); }
+        if (depthChanged) { SendCommand(DEPTH, motionDepth, OSSM_ID); }
+        if (strokeChanged) { SendCommand(STROKE, motionStroke, OSSM_ID); }
+
+        syncMotionCommandCache(motionSpeed, motionDepth, motionStroke);
+    }
+
+    if (requestAutoStart && speed > 0.0f && stroke > 0.0f && depth > 0.0f && !OSSM_On) {
+        homebuttonmevent(nullptr);
+    }
+}
 // -------------------------------------------------------
 // checkBleDisconnectError() — show a fatal notification if BLE drops
 // and does not recover within 3 seconds.
@@ -1571,6 +1608,7 @@ void handleScreens() {
         }
 
         const bool wasMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
+        bool homeMotionValueChanged = false;
 
         // On first entry from a non-strokeEngine screen, tell OSSM to switch to strokeEngine.
         // Only re-home when we know it is needed:
@@ -1602,11 +1640,8 @@ void handleScreens() {
             activeEncId = encId;
         }
 
-        bool motionValueChanged = false;
-
         // Encoder 1 — Speed
         bool changed = false;
-        int prevSpeed = speed;
         //bool updateMXbutton = false;
         if (lv_slider_is_dragged(ui_homespeedslider) == false) {
             changed = false;
@@ -1621,16 +1656,13 @@ void handleScreens() {
             if (speed > speedlimit) { changed = true; speed = speedlimit; }
             if (changed) { 
                 lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
-                SendCommand(SPEED, speed, OSSM_ID); 
-                motionValueChanged = true;
                 //updateMXbutton=true;
             }
         } else if (lv_slider_get_value(ui_homespeedslider) != speed) {
             speed = lv_slider_get_value(ui_homespeedslider);
-            SendCommand(SPEED, speed, OSSM_ID);
-            motionValueChanged = true;
             //updateMXbutton=true;
         }
+        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homespeedslider) == speed);
         char speed_v[7]; dtostrf(speed, 6, 0, speed_v);
         lv_label_set_text(ui_homespeedvalue, speed_v);
 
@@ -1657,16 +1689,11 @@ void handleScreens() {
             if (changed && (depth != prevDepth || stroke != prevStroke)) {
                 LogDebug("Possible error 1");
                 lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
-                SendCommand(DEPTH,  depth,  OSSM_ID);
-                SendCommand(STROKE, stroke, OSSM_ID);
-                motionValueChanged = true;
             }
         } else if (lv_slider_get_value(ui_homedepthslider) != depth) {
             depth = lv_slider_get_value(ui_homedepthslider);
-            SendCommand(DEPTH,  depth,  OSSM_ID);
-            SendCommand(STROKE, stroke, OSSM_ID);
-            motionValueChanged = true;
         }
+        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homedepthslider) == depth);
         char depth_v[7]; dtostrf(depth, 6, 0, depth_v);
         lv_label_set_text(ui_homedepthvalue, depth_v);
 
@@ -1697,20 +1724,13 @@ void handleScreens() {
 
             if (changed && (depth != prevDepth || stroke != prevStroke)) {
                 LogDebug("Possible error 3");
-                SendCommand(STROKE, stroke, OSSM_ID);
-                SendCommand(DEPTH,  depth,  OSSM_ID);
-                motionValueChanged = true;
             }
         } else if (lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke) {
             stroke = depth - lv_slider_get_left_value(ui_homestrokeslider);
-            SendCommand(STROKE, stroke, OSSM_ID);
-            motionValueChanged = true;
         } else if (lv_slider_get_value(ui_homestrokeslider) != depth) {
             depth = lv_slider_get_value(ui_homestrokeslider);
-            SendCommand(DEPTH, depth, OSSM_ID);
-            SendCommand(STROKE, stroke, OSSM_ID);
-            motionValueChanged = true;
         }
+        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_left_value(ui_homestrokeslider) == depth - stroke) || (lv_slider_get_value(ui_homestrokeslider) == depth);
         char stroke_v[7]; dtostrf(stroke, 6, 0, stroke_v);
         lv_label_set_text(ui_homestrokevalue, stroke_v);
 
@@ -1770,9 +1790,7 @@ void handleScreens() {
             lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
         }
         const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
-                if (!wasMotionReady && isMotionReady && motionValueChanged && !OSSM_On) {
-          lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
-        }
+                flushMotionCommands(speed, depth, stroke, homeMotionValueChanged, true, (!wasMotionReady && isMotionReady));
 
         updateHomeButtonMState();
 
@@ -1816,6 +1834,8 @@ void handleScreens() {
             touch_disabled = true;
         }
         bool changed = false;
+        bool motionValueChanged = false;
+        const bool wasMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
 
         // On first entry from a non-strokeEngine screen, tell OSSM to switch to strokeEngine.
         // Same flag-gated logic as ST_UI_HOME — prevents spurious re-homing on stroke→menu→stroke.
@@ -1856,11 +1876,11 @@ void handleScreens() {
             if (changed) {
                 char sv[7]; dtostrf(speed, 6, 0, sv);
                 if (ui_StrokeSpeedValue) lv_label_set_text(ui_StrokeSpeedValue, sv);
-                SendCommand(SPEED, speed, OSSM_ID);
+                motionValueChanged = true;
             }
         } else if (ui_StrokeSpeedSlider && lv_slider_get_value(ui_StrokeSpeedSlider) != (int)speed) {
             speed = lv_slider_get_value(ui_StrokeSpeedSlider);
-            SendCommand(SPEED, speed, OSSM_ID);
+            motionValueChanged = true;
         }
 
         // Encoder 2 — Stroke (motion range); depth auto-calculated as centre-minus-half
@@ -1881,15 +1901,13 @@ void handleScreens() {
                 if (ui_StrokeStrokeValue) lv_label_set_text(ui_StrokeStrokeValue, sv);
                 depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
                 if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
-                SendCommand(STROKE, stroke, OSSM_ID);
-                SendCommand(DEPTH,  depth,  OSSM_ID);
+                motionValueChanged = true;
             }
         } else if (ui_StrokeStrokeSlider && lv_slider_get_value(ui_StrokeStrokeSlider) != (int)stroke) {
             stroke = lv_slider_get_value(ui_StrokeStrokeSlider);
             depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
             if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
-            SendCommand(STROKE, stroke, OSSM_ID);
-            SendCommand(DEPTH,  depth,  OSSM_ID);
+            motionValueChanged = true;
         }
 
         // Encoder 4 — Sensation
@@ -1924,6 +1942,12 @@ void handleScreens() {
             g_pattern_return_screen = ui_Stroke;
             _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
         }
+
+        const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
+        depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
+        if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
+
+        flushMotionCommands(speed, depth, stroke, motionValueChanged, true, (!wasMotionReady && isMotionReady));
     }
     break;
 
@@ -1954,6 +1978,8 @@ void handleScreens() {
         static bool  s_waiting_for_running_notice = false;
 
         bool paused = streamingIsPaused();
+        bool motionValueChanged = false;
+        const bool wasMotionReady = (s_str_speed > 0.0f && s_str_depth > 0.0f && s_str_stroke > 0.0f);
 
         // On first entry: set all sliders to maximum, reset homing flags
         if (s_prev_st_screens != ST_UI_STREAMING) {
@@ -2015,14 +2041,14 @@ void handleScreens() {
             if (ch) {
                 lv_slider_set_value(ui_streamingspeedslider, (int)s_str_speed, LV_ANIM_OFF);
                 streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(SPEED, s_str_speed, OSSM_ID);
+                motionValueChanged = true;
             }
         } else if (ui_streamingspeedslider) {
             int sv = lv_slider_get_value(ui_streamingspeedslider);
             if (sv != (int)s_str_speed) {
                 s_str_speed = sv;
                 streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(SPEED, s_str_speed, OSSM_ID);
+                motionValueChanged = true;
             }
         }
 
@@ -2037,14 +2063,14 @@ void handleScreens() {
             if (ch) {
                 lv_slider_set_value(ui_streamingdepthslider, (int)s_str_depth, LV_ANIM_OFF);
                 streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(DEPTH, s_str_depth, OSSM_ID);
+                motionValueChanged = true;
             }
         } else if (ui_streamingdepthslider) {
             int dv = lv_slider_get_value(ui_streamingdepthslider);
             if (dv != (int)s_str_depth) {
                 s_str_depth = dv;
                 streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(DEPTH, s_str_depth, OSSM_ID);
+                motionValueChanged = true;
             }
         }
 
@@ -2059,14 +2085,14 @@ void handleScreens() {
             if (ch) {
                 lv_slider_set_value(ui_streamingstrokeslider, (int)s_str_stroke, LV_ANIM_OFF);
                 streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(STROKE, s_str_stroke, OSSM_ID);
+                motionValueChanged = true;
             }
         } else if (ui_streamingstrokeslider) {
             int strv = lv_slider_get_value(ui_streamingstrokeslider);
             if (strv != (int)s_str_stroke) {
                 s_str_stroke = strv;
                 streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(STROKE, s_str_stroke, OSSM_ID);
+                motionValueChanged = true;
             }
         }
 
@@ -2092,6 +2118,13 @@ void handleScreens() {
             }
         }
 
+        const bool isMotionReady = (s_str_speed > 0.0f && s_str_depth > 0.0f && s_str_stroke > 0.0f);
+        if (s_was_paused != paused) {
+            motionValueChanged = false;
+        } else {
+            flushMotionCommands(s_str_speed, s_str_depth, s_str_stroke, motionValueChanged, !paused, (!wasMotionReady && isMotionReady && !paused));
+        }
+
         // Pause/resume transition: send SPEED=0 on pause, resend all values on resume
         if (!s_was_paused && paused) {
             streamingRememberResumeSpeed(s_str_speed);
@@ -2107,6 +2140,7 @@ void handleScreens() {
             SendCommand(DEPTH,   s_str_depth,  OSSM_ID);
             SendCommand(STROKE,  s_str_stroke,  OSSM_ID);
             SendCommand(SENSATION, s_str_sensation, OSSM_ID);
+            syncMotionCommandCache(s_str_speed, s_str_depth, s_str_stroke);
         }
         s_was_paused = paused;
 
