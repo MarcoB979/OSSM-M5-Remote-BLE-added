@@ -114,7 +114,7 @@ static constexpr int EJECT_ICON_W = 15;
 static constexpr int EJECT_ICON_H = 20;
 static constexpr int FIST_ICON_W = 22;
 static constexpr int FIST_ICON_H = 18;
-static constexpr int HOME_ICON_W = 18;
+static constexpr int HOME_ICON_W = 22;
 static constexpr int HOME_ICON_H = 22;
 static constexpr int ESP_ICON_W = 21;
 static constexpr int ESP_ICON_H = 18;
@@ -165,28 +165,28 @@ static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
   };
 
 static const char* const HOME_ICON_MASK[HOME_ICON_H] = {
-  "........#####........",
-  "......#########......",
-  "....#####...#####....",
-  "..#####.......#####..",
-  "#####...........#####",
+  "........#####.........",
+  "......#########.......",
+  "....#####....#####....",
+  "..#####........#####..",
+  "#####............#####",
+  "......................",
+  "......###....###......",
+  "......###....###......",
+  "......###....###......",
+  "......###....###......",
+  "......##########......",
+  "......##########......",
+  "......###....###......",
+  "......###....###......",
+  "......###....###......",
+  "......###....###......",
   ".....................",
-  ".....###.....###.....",
-  ".....###.....###.....",
-  ".....###.....###.....",
-  ".....###.....###.....",
-  ".....###########.....",
-  ".....###########.....",
-  ".....###.....###.....",
-  ".....###.....###.....",
-  ".....###.....###.....",
-  ".....###.....###.....",
-  ".....................",
-  "#####...........#####",
-  "..#####.......#####..",
-  "....#####...#####....",
-  "......#########......",
-  "........#####........"
+  "#####............#####",
+  "..#####........#####..",
+  "....#####....#####....",
+  "......#########.......",
+  "........#####........."
 };
 
 static const char* const ESP_ICON_MASK[ESP_ICON_H] = {
@@ -1435,10 +1435,9 @@ static void flushMotionCommands(float motionSpeed,
                                 float motionDepth,
                                 float motionStroke,
                                 bool  motionValueChanged,
-                                bool  allowSend,
-                                bool  requestAutoStart)
+                                bool  allowSend)
 {
-    if (!motionValueChanged && !requestAutoStart) return;
+    if (!motionValueChanged) return;
 
     if (allowSend && motionValueChanged) {
         const bool speedChanged = !s_motion_command_cache_valid || motionSpeed != s_last_motion_speed;
@@ -1450,10 +1449,6 @@ static void flushMotionCommands(float motionSpeed,
         if (strokeChanged) { SendCommand(STROKE, motionStroke, OSSM_ID); }
 
         syncMotionCommandCache(motionSpeed, motionDepth, motionStroke);
-    }
-
-    if (requestAutoStart && speed > 0.0f && stroke > 0.0f && depth > 0.0f && !OSSM_On) {
-        homebuttonmevent(nullptr);
     }
 }
 // -------------------------------------------------------
@@ -1789,7 +1784,11 @@ void handleScreens() {
             lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
         }
         const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
-                flushMotionCommands(speed, depth, stroke, homeMotionValueChanged, true, (!wasMotionReady && isMotionReady));
+        flushMotionCommands(speed, depth, stroke, homeMotionValueChanged, true);
+
+        if (!homeMotionValueChanged && !wasMotionReady && isMotionReady && !OSSM_On) {
+            homebuttonmevent(nullptr);
+        }
 
         updateHomeButtonMState();
 
