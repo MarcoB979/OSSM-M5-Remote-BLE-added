@@ -11,8 +11,10 @@
 #include "addons/FistIT.h"
 #include "communication/EspNowComm.h"
 #include "communication/BleComm.h"
+#include "../screens/ScreenHandler.h"
 #include "platform/PlatformCompat.h"
 #include <Preferences.h>
+#include <M5Unified.h>
 #include "../config/debug.h"
 
 // Extra globals exposed through ui.h
@@ -33,6 +35,8 @@ static lv_obj_t *s_streaming_sensation_val = nullptr;
 static bool s_streaming_paused = true;
 static float s_streaming_resume_speed = 100.0f;
 static uint32_t s_streaming_last_toggle_ms = 0;
+
+// The Streaming addon owns both the screen widgets and the per-tick screen logic.
 
 static lv_obj_t *s_addons_btn_l_text = nullptr;
 static lv_obj_t *s_addons_btn_m_text = nullptr;
@@ -441,6 +445,215 @@ void streamingRememberResumeSpeed(float speed) {
 
 float streamingGetResumeSpeed() {
     return s_streaming_resume_speed;
+}
+
+static bool  s_streaming_motion_cache_valid = false;
+static float s_streaming_last_speed = 0.0f;
+static float s_streaming_last_depth = 0.0f;
+static float s_streaming_last_stroke = 0.0f;
+
+static void flushStreamingMotionCommands(float speedValue,
+                                         float depthValue,
+                                         float strokeValue,
+                                         bool motionValueChanged,
+                                         bool allowSend)
+{
+    if (!motionValueChanged || !allowSend) return;
+
+    const bool speedChanged = !s_streaming_motion_cache_valid || speedValue != s_streaming_last_speed;
+    const bool depthChanged = !s_streaming_motion_cache_valid || depthValue != s_streaming_last_depth;
+    const bool strokeChanged = !s_streaming_motion_cache_valid || strokeValue != s_streaming_last_stroke;
+
+    if (speedChanged) { SendCommand(SPEED, speedValue, OSSM_ID); }
+    if (depthChanged) { SendCommand(DEPTH, depthValue, OSSM_ID); }
+    if (strokeChanged) { SendCommand(STROKE, strokeValue, OSSM_ID); }
+
+    s_streaming_last_speed = speedValue;
+    s_streaming_last_depth = depthValue;
+    s_streaming_last_stroke = strokeValue;
+    s_streaming_motion_cache_valid = true;
+}
+
+static constexpr int STREAMING_NOTIFICATION_RESULT_RIGHT = 2;
+
+void streamingScreenHandle(bool firstEntry) {
+    static float s_str_speed  = 0.0f;
+    static float s_str_depth  = 0.0f;
+    static float s_str_stroke = 0.0f;
+    static float s_str_sensation = 50.0f;
+    static bool  s_was_paused = false;
+    static bool  s_waiting_for_running_notice = false;
+
+    bool paused = streamingIsPaused();
+    bool motionValueChanged = false;
+    const bool wasMotionReady = (s_str_speed > 0.0f && s_str_depth > 0.0f && s_str_stroke > 0.0f);
+
+    if (firstEntry) {
+        s_str_speed  = 100.0f;
+        s_str_depth  = 100.0f;
+        s_str_stroke = 100.0f;
+        s_str_sensation = 50.0f;
+        streamingResetPause();
+        s_was_paused = false;
+        paused = false;
+        if (ui_streamingspeedslider)  lv_slider_set_value(ui_streamingspeedslider,  s_str_speed, LV_ANIM_OFF);
+        if (ui_streamingdepthslider)  lv_slider_set_value(ui_streamingdepthslider,  s_str_depth, LV_ANIM_OFF);
+        if (ui_streamingstrokeslider) lv_slider_set_value(ui_streamingstrokeslider, s_str_stroke, LV_ANIM_OFF);
+        if (ui_streamingsensationslider) lv_slider_set_value(ui_streamingsensationslider, s_str_sensation, LV_ANIM_OFF);
+        streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+        
+        const int result = showNotification(
+            T_STREAMING_CAUTION_TITLE,
+            T_STREAMING_CAUTION_TEXT,
+            0,
+            true, T_DONE,
+            true, T_CANCEL,
+            false);
+        if (result == NOTIFICATION_RESULT_RIGHT) {
+            bleCommGoToMenu();
+            _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+            return;
+        }
+
+        streamingBeginInitSequence();
+        s_waiting_for_running_notice = true;
+    }
+
+    if (s_waiting_for_running_notice && streamingConsumeInitCompleted()) {
+        const int result = showNotification(
+            T_STREAMING_RUNNING_TITLE,
+            T_STREAMING_RUNNING_TEXT,
+            0,
+            true, T_OVERRIDE,
+            true, T_SHUTDOWN,
+            false);
+
+        if (result == STREAMING_NOTIFICATION_RESULT_RIGHT) {
+            platformPowerOff();
+        }
+
+        s_waiting_for_running_notice = false;
+    }
+
+    if (ui_streamingspeedslider && !lv_slider_is_dragged(ui_streamingspeedslider)) {
+        bool ch = false;
+        lv_slider_set_value(ui_streamingspeedslider, (int)s_str_speed, LV_ANIM_OFF);
+        if (encoder1.getCount() >= 2) { ch = true; s_str_speed += 1; encoder1.setCount(0); }
+        else if (encoder1.getCount() <= -2) { ch = true; s_str_speed -= 1; encoder1.setCount(0); }
+        if (s_str_speed < 0)   { ch = true; s_str_speed = 0; }
+        if (s_str_speed > 100) { ch = true; s_str_speed = 100; }
+        if (ch) {
+            lv_slider_set_value(ui_streamingspeedslider, (int)s_str_speed, LV_ANIM_OFF);
+            streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+            motionValueChanged = true;
+        }
+    } else if (ui_streamingspeedslider) {
+        int sv = lv_slider_get_value(ui_streamingspeedslider);
+        if (sv != (int)s_str_speed) {
+            s_str_speed = sv;
+            streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+            motionValueChanged = true;
+        }
+    }
+
+    if (ui_streamingdepthslider && !lv_slider_is_dragged(ui_streamingdepthslider)) {
+        bool ch = false;
+        lv_slider_set_value(ui_streamingdepthslider, (int)s_str_depth, LV_ANIM_OFF);
+        if (encoder2.getCount() >= 2) { ch = true; s_str_depth += 1; encoder2.setCount(0); }
+        else if (encoder2.getCount() <= -2) { ch = true; s_str_depth -= 1; encoder2.setCount(0); }
+        if (s_str_depth < 0)   { ch = true; s_str_depth = 0; }
+        if (s_str_depth > 100) { ch = true; s_str_depth = 100; }
+        if (ch) {
+            lv_slider_set_value(ui_streamingdepthslider, (int)s_str_depth, LV_ANIM_OFF);
+            streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+            motionValueChanged = true;
+        }
+    } else if (ui_streamingdepthslider) {
+        int dv = lv_slider_get_value(ui_streamingdepthslider);
+        if (dv != (int)s_str_depth) {
+            s_str_depth = dv;
+            streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+            motionValueChanged = true;
+        }
+    }
+
+    if (ui_streamingstrokeslider && !lv_slider_is_dragged(ui_streamingstrokeslider)) {
+        bool ch = false;
+        lv_slider_set_value(ui_streamingstrokeslider, (int)s_str_stroke, LV_ANIM_OFF);
+        if (encoder3.getCount() >= 2) { ch = true; s_str_stroke += 1; encoder3.setCount(0); }
+        else if (encoder3.getCount() <= -2) { ch = true; s_str_stroke -= 1; encoder3.setCount(0); }
+        if (s_str_stroke < 0)   { ch = true; s_str_stroke = 0; }
+        if (s_str_stroke > 100) { ch = true; s_str_stroke = 100; }
+        if (ch) {
+            lv_slider_set_value(ui_streamingstrokeslider, (int)s_str_stroke, LV_ANIM_OFF);
+            streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+            motionValueChanged = true;
+        }
+    } else if (ui_streamingstrokeslider) {
+        int strv = lv_slider_get_value(ui_streamingstrokeslider);
+        if (strv != (int)s_str_stroke) {
+            s_str_stroke = strv;
+            streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+            motionValueChanged = true;
+        }
+    }
+
+    if (ui_streamingsensationslider && !lv_slider_is_dragged(ui_streamingsensationslider)) {
+        bool ch = false;
+        lv_slider_set_value(ui_streamingsensationslider, (int)s_str_sensation, LV_ANIM_OFF);
+        if (encoder4.getCount() >= 2) { ch = true; s_str_sensation += 1; encoder4.setCount(0); }
+        else if (encoder4.getCount() <= -2) { ch = true; s_str_sensation -= 1; encoder4.setCount(0); }
+        if (s_str_sensation < 0)   { ch = true; s_str_sensation = 0; }
+        if (s_str_sensation > 100) { ch = true; s_str_sensation = 100; }
+        if (ch) {
+            lv_slider_set_value(ui_streamingsensationslider, (int)s_str_sensation, LV_ANIM_OFF);
+            streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+            if (!paused) SendCommand(SENSATION, s_str_sensation, OSSM_ID);
+        }
+    } else if (ui_streamingsensationslider) {
+        int sev = lv_slider_get_value(ui_streamingsensationslider);
+        if (sev != (int)s_str_sensation) {
+            s_str_sensation = sev;
+            streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
+            if (!paused) SendCommand(SENSATION, s_str_sensation, OSSM_ID);
+        }
+    }
+
+    const bool isMotionReady = (s_str_speed > 0.0f && s_str_depth > 0.0f && s_str_stroke > 0.0f);
+    if (s_was_paused != paused) {
+        motionValueChanged = false;
+    } else {
+        flushStreamingMotionCommands(s_str_speed, s_str_depth, s_str_stroke, motionValueChanged, !paused);
+    }
+
+    if (!s_was_paused && paused) {
+        streamingRememberResumeSpeed(s_str_speed);
+        LogDebug("Streaming paused, did not send speed");
+        SendCommand(SPEED, 0.0f, OSSM_ID);
+    } else if (s_was_paused && !paused) {
+        const float resumeSpeed = streamingGetResumeSpeed();
+        if (resumeSpeed > 0.0f) {
+            s_str_speed = resumeSpeed;
+        }
+        SendCommand(ON,      resumeSpeed, OSSM_ID);
+        SendCommand(SPEED,   resumeSpeed, OSSM_ID);
+        SendCommand(DEPTH,   s_str_depth,  OSSM_ID);
+        SendCommand(STROKE,  s_str_stroke,  OSSM_ID);
+        SendCommand(SENSATION, s_str_sensation, OSSM_ID);
+        s_streaming_last_speed = s_str_speed;
+        s_streaming_last_depth = s_str_depth;
+        s_streaming_last_stroke = s_str_stroke;
+        s_streaming_motion_cache_valid = true;
+    }
+    s_was_paused = paused;
+
+    if (click2_short_waspressed) {
+        lv_obj_send_event(ui_StreamingButtonL, LV_EVENT_SHORT_CLICKED, NULL);
+    } else if (mxclick_short_waspressed) {
+        lv_obj_send_event(ui_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
+    } else if (click3_short_waspressed) {
+        lv_obj_send_event(ui_StreamingButtonR, LV_EVENT_SHORT_CLICKED, NULL);
+    }
 }
 
 static void applyStreamingButtonMState(bool paused) {

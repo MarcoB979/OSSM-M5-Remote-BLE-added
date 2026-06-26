@@ -7,13 +7,14 @@
 #endif
 
 // Build the LVGL Stroke screen.
-// Encoder/button handling for this screen lives in ScreenHandler.cpp (case ST_UI_STROKE).
+// Stroke screen handling now lives here; ScreenHandler.cpp only routes into it.
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 void ui_Stroke_screen_init(void);
 void refreshStrokeStartStopUi(void);
+void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke);
 
 // Stroke-screen slider and value label objects (extern so ScreenHandler.cpp can drive them)
 extern lv_obj_t *ui_StrokeSpeedSlider;

@@ -20,9 +20,9 @@ bool FistITPaired(void);
 #endif
 
 #ifdef __cplusplus
-// Update streaming value labels (speed, depth, stroke, sensation) — called from ScreenHandler encoder logic
+// Update streaming value labels (speed, depth, stroke, sensation) for the addon-owned screen loop.
 void streamingUpdateValueLabels(float spd, float dep, float str, float sen);
-// Pause state — managed by addonsStreaming.cpp, polled by ScreenHandler
+// Pause state — managed by addonsStreaming.cpp and used by the addon-owned screen loop.
 bool streamingIsPaused();
 void streamingResetPause();
 void streamingRememberResumeSpeed(float speed);
@@ -31,4 +31,14 @@ float streamingGetResumeSpeed();
 void streamingBeginInitSequence();
 void streamingCancelInitSequence();
 bool streamingConsumeInitCompleted();
+// Handle one Streaming screen tick.
+void streamingScreenHandle(bool firstEntry);
+int showNotification(const char *title,
+					 const char *text,
+					 uint32_t duration,
+					 bool showLeftButton = false,
+					 const char *leftButtonText = nullptr,
+					 bool showRightButton = false,
+					 const char *rightButtonText = nullptr,
+					 bool showFullScreen = false);
 #endif

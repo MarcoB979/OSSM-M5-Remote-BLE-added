@@ -165,28 +165,28 @@ static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
   };
 
 static const char* const HOME_ICON_MASK[HOME_ICON_H] = {
-  "......####.......",
-  "....########.....",
-  "..####....####...",
-  "####........####.",
-  ".................",
-  ".................",
-  "...###.....###...",
-  "...###.....###...",
-  "...###.....###...",
-  "...###.....###...",
-  "...###########...",
-  "...###########...",
-  "...###.....###...",
-  "...###.....###...",
-  "...###.....###...",
-  "...###.....###...",
-  ".................",
-  ".................",
-  "####........####.",
-  "..####....####...",
-  "....########.....",
-  "......####.......",
+  "........#####........",
+  "......#########......",
+  "....#####...#####....",
+  "..#####.......#####..",
+  "#####...........#####",
+  ".....................",
+  ".....###.....###.....",
+  ".....###.....###.....",
+  ".....###.....###.....",
+  ".....###.....###.....",
+  ".....###########.....",
+  ".....###########.....",
+  ".....###.....###.....",
+  ".....###.....###.....",
+  ".....###.....###.....",
+  ".....###.....###.....",
+  ".....................",
+  "#####...........#####",
+  "..#####.......#####..",
+  "....#####...#####....",
+  "......#########......",
+  "........#####........"
 };
 
 static const char* const ESP_ICON_MASK[ESP_ICON_H] = {
@@ -195,7 +195,7 @@ static const char* const ESP_ICON_MASK[ESP_ICON_H] = {
 "...#...........##....",
 "..#..#####......##...",
 ".#.......####....##..",
-".#..##....####.....#..",
+".#..##....####.....#.",
 ".#.####.....###.....#",
 "#..##.####...###....#",
 "#.##.....###..###...#",
@@ -206,8 +206,8 @@ static const char* const ESP_ICON_MASK[ESP_ICON_H] = {
 "..#.##..###.##..##..#",
 "..#....###,.##..##.#.",
 "...#...##...##....#..",
-"....##.........##...",
-"......#########....."
+"....##.........##....",
+"......#########......"
 };
 
 
@@ -1830,124 +1830,13 @@ void handleScreens() {
 
     case ST_UI_STROKE:
     {
-        if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-            touch_disabled = true;
-        }
-        bool changed = false;
-        bool motionValueChanged = false;
-        const bool wasMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
-
-        // On first entry from a non-strokeEngine screen, tell OSSM to switch to strokeEngine.
-        // Same flag-gated logic as ST_UI_HOME — prevents spurious re-homing on stroke→menu→stroke.
-        if (s_prev_st_screens != ST_UI_STROKE && s_prev_st_screens != ST_UI_HOME && s_prev_st_screens != ST_UI_PATTERN) {
-            const bool fromStart      = (s_prev_st_screens == ST_UI_START || s_prev_st_screens < 0);
-            const bool fromStreaming  = (s_prev_st_screens == ST_UI_STREAMING);
-            const bool fromMenuArmed = (s_prev_st_screens == ST_UI_MENU && s_ble_menu_requires_stroke_reentry);
-            if (fromStart || fromStreaming || fromMenuArmed) {
-                bleCommGoToStrokeEngine();
-                s_ble_menu_requires_stroke_reentry = false;
-            }
-        }
-
-        // On first entry (not returning from pattern screen), default to SimpleStroke
-        if (s_prev_st_screens != ST_UI_STROKE && s_prev_st_screens != ST_UI_PATTERN) {
-            if (ui_PatternS) {
-                lv_roller_set_selected(ui_PatternS, 0, LV_ANIM_OFF);
-                lv_roller_get_selected_str(ui_PatternS, patternstr, sizeof(patternstr));
-                pattern = 0;
-            }
-            if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
-            SendCommand(PATTERN, 0.0f, OSSM_ID);
-        }
-
-        // Encoder 1 — Speed
-        if (ui_StrokeSpeedSlider && lv_slider_is_dragged(ui_StrokeSpeedSlider) == false) {
-            changed = false;
-            lv_slider_set_value(ui_StrokeSpeedSlider, speed, LV_ANIM_OFF);
-            if (encoder1.getCount() >= 2) {
-                changed = true; speed += 1;
-                encoder1.setCount(0);
-            } else if (encoder1.getCount() <= -2) {
-                changed = true; speed -= 1;
-                encoder1.setCount(0);
-            }
-            if (speed < 0)          { changed = true; speed = 0; }
-            if (speed > speedlimit) { changed = true; speed = speedlimit; }
-            if (changed) {
-                char sv[7]; dtostrf(speed, 6, 0, sv);
-                if (ui_StrokeSpeedValue) lv_label_set_text(ui_StrokeSpeedValue, sv);
-                motionValueChanged = true;
-            }
-        } else if (ui_StrokeSpeedSlider && lv_slider_get_value(ui_StrokeSpeedSlider) != (int)speed) {
-            speed = lv_slider_get_value(ui_StrokeSpeedSlider);
-            motionValueChanged = true;
-        }
-
-        // Encoder 2 — Stroke (motion range); depth auto-calculated as centre-minus-half
-        if (ui_StrokeStrokeSlider && lv_slider_is_dragged(ui_StrokeStrokeSlider) == false) {
-            changed = false;
-            lv_slider_set_value(ui_StrokeStrokeSlider, stroke, LV_ANIM_OFF);
-            if (encoder2.getCount() >= 2) {
-                changed = true; stroke += 1;
-                encoder2.setCount(0);
-            } else if (encoder2.getCount() <= -2) {
-                changed = true; stroke -= 1;
-                encoder2.setCount(0);
-            }
-            if (stroke <= 0.5)            { changed = true; stroke = 0; depth = 0; }
-            if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
-            if (changed) {
-                char sv[7]; dtostrf(stroke, 6, 0, sv);
-                if (ui_StrokeStrokeValue) lv_label_set_text(ui_StrokeStrokeValue, sv);
-                depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
-                if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
-                motionValueChanged = true;
-            }
-        } else if (ui_StrokeStrokeSlider && lv_slider_get_value(ui_StrokeStrokeSlider) != (int)stroke) {
-            stroke = lv_slider_get_value(ui_StrokeStrokeSlider);
-            depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
-            if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
-            motionValueChanged = true;
-        }
-
-        // Encoder 4 — Sensation
-        if (ui_StrokeSensationSlider && lv_slider_is_dragged(ui_StrokeSensationSlider) == false) {
-            changed = false;
-            lv_slider_set_value(ui_StrokeSensationSlider, sensation, LV_ANIM_OFF);
-            if (encoder4.getCount() >= 2) {
-                changed = true; sensation += 2;
-                encoder4.setCount(0);
-            } else if (encoder4.getCount() <= -2) {
-                changed = true; sensation -= 2;
-                encoder4.setCount(0);
-            }
-            if (sensation < -100) { changed = true; sensation = -100; }
-            if (sensation >  100) { changed = true; sensation =  100; }
-            if (changed) {
-                char sv[7]; dtostrf(sensation, 6, 0, sv);
-                if (ui_StrokeSensationValue) lv_label_set_text(ui_StrokeSensationValue, sv);
-                SendCommand(SENSATION, sensation, OSSM_ID);
-            }
-        } else if (ui_StrokeSensationSlider && lv_slider_get_value(ui_StrokeSensationSlider) != (int)sensation) {
-            sensation = lv_slider_get_value(ui_StrokeSensationSlider);
-            SendCommand(SENSATION, sensation, OSSM_ID);
-        }
-
-        if (click2_short_waspressed) {
-            _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-        } else if (mxclick_short_waspressed) {
-            homebuttonmevent(NULL);
-            refreshStrokeStartStopUi();
-        } else if (click3_short_waspressed) {
-            g_pattern_return_screen = ui_Stroke;
-            _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-        }
-
-        const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
-        depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
-        if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
-
-        flushMotionCommands(speed, depth, stroke, motionValueChanged, true, (!wasMotionReady && isMotionReady));
+        const bool shouldRehome = (s_prev_st_screens != ST_UI_STROKE && s_prev_st_screens != ST_UI_HOME && s_prev_st_screens != ST_UI_PATTERN) && (
+            (s_prev_st_screens == ST_UI_START || s_prev_st_screens < 0) ||
+            (s_prev_st_screens == ST_UI_STREAMING) ||
+            (s_prev_st_screens == ST_UI_MENU && s_ble_menu_requires_stroke_reentry)
+        );
+        const bool resetToSimpleStroke = (s_prev_st_screens != ST_UI_STROKE && s_prev_st_screens != ST_UI_PATTERN);
+        strokeScreenHandle(shouldRehome, resetToSimpleStroke);
     }
     break;
 
@@ -1970,187 +1859,8 @@ void handleScreens() {
 
     case ST_UI_STREAMING:
     {
-        static float s_str_speed  = 0.0f;
-        static float s_str_depth  = 0.0f;
-        static float s_str_stroke = 0.0f;
-        static float s_str_sensation = 50.0f;
-        static bool  s_was_paused = false;
-        static bool  s_waiting_for_running_notice = false;
-
-        bool paused = streamingIsPaused();
-        bool motionValueChanged = false;
-        const bool wasMotionReady = (s_str_speed > 0.0f && s_str_depth > 0.0f && s_str_stroke > 0.0f);
-
-        // On first entry: set all sliders to maximum, reset homing flags
-        if (s_prev_st_screens != ST_UI_STREAMING) {
-            s_str_speed  = 100.0f;
-            s_str_depth  = 100.0f;
-            s_str_stroke = 100.0f;
-            s_str_sensation = 50.0f;
-            streamingResetPause();
-            s_was_paused = false;
-            paused = false;
-            if (ui_streamingspeedslider)  lv_slider_set_value(ui_streamingspeedslider,  s_str_speed, LV_ANIM_OFF);
-            if (ui_streamingdepthslider)  lv_slider_set_value(ui_streamingdepthslider,  s_str_depth, LV_ANIM_OFF);
-            if (ui_streamingstrokeslider) lv_slider_set_value(ui_streamingstrokeslider, s_str_stroke, LV_ANIM_OFF);
-            if (ui_streamingsensationslider) lv_slider_set_value(ui_streamingsensationslider, s_str_sensation, LV_ANIM_OFF);
-            streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-
-            const int result = showNotification(
-                T_STREAMING_CAUTION_TITLE,
-                T_STREAMING_CAUTION_TEXT,
-                0,
-                true, T_DONE,
-                true, T_CANCEL,
-                false);
-            if (result == NOTIFICATION_RESULT_RIGHT) {
-                bleCommGoToMenu();
-                _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-                st_screens = ST_UI_MENU;
-                return;
-            }    
-
-            streamingBeginInitSequence();
-            s_waiting_for_running_notice = true;
-        }
-
-        if (s_waiting_for_running_notice && streamingConsumeInitCompleted()) {
-            const int result = showNotification(
-                T_STREAMING_RUNNING_TITLE,
-                T_STREAMING_RUNNING_TEXT,
-                0,
-                true, T_OVERRIDE,
-                true, T_SHUTDOWN,
-                false);
-
-            if (result == NOTIFICATION_RESULT_RIGHT) {
-                M5.Power.powerOff();
-            }
-
-            s_waiting_for_running_notice = false;
-        }
-
-        // Encoder 1 — Speed
-        if (ui_streamingspeedslider && !lv_slider_is_dragged(ui_streamingspeedslider)) {
-            bool ch = false;
-            lv_slider_set_value(ui_streamingspeedslider, (int)s_str_speed, LV_ANIM_OFF);
-            if (encoder1.getCount() >= 2) { ch = true; s_str_speed += 1; encoder1.setCount(0); }
-            else if (encoder1.getCount() <= -2) { ch = true; s_str_speed -= 1; encoder1.setCount(0); }
-            if (s_str_speed < 0)   { ch = true; s_str_speed = 0; }
-            if (s_str_speed > 100) { ch = true; s_str_speed = 100; }
-            if (ch) {
-                lv_slider_set_value(ui_streamingspeedslider, (int)s_str_speed, LV_ANIM_OFF);
-                streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                motionValueChanged = true;
-            }
-        } else if (ui_streamingspeedslider) {
-            int sv = lv_slider_get_value(ui_streamingspeedslider);
-            if (sv != (int)s_str_speed) {
-                s_str_speed = sv;
-                streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                motionValueChanged = true;
-            }
-        }
-
-        // Encoder 2 — Depth
-        if (ui_streamingdepthslider && !lv_slider_is_dragged(ui_streamingdepthslider)) {
-            bool ch = false;
-            lv_slider_set_value(ui_streamingdepthslider, (int)s_str_depth, LV_ANIM_OFF);
-            if (encoder2.getCount() >= 2) { ch = true; s_str_depth += 1; encoder2.setCount(0); }
-            else if (encoder2.getCount() <= -2) { ch = true; s_str_depth -= 1; encoder2.setCount(0); }
-            if (s_str_depth < 0)   { ch = true; s_str_depth = 0; }
-            if (s_str_depth > 100) { ch = true; s_str_depth = 100; }
-            if (ch) {
-                lv_slider_set_value(ui_streamingdepthslider, (int)s_str_depth, LV_ANIM_OFF);
-                streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                motionValueChanged = true;
-            }
-        } else if (ui_streamingdepthslider) {
-            int dv = lv_slider_get_value(ui_streamingdepthslider);
-            if (dv != (int)s_str_depth) {
-                s_str_depth = dv;
-                streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                motionValueChanged = true;
-            }
-        }
-
-        // Encoder 3 — Stroke
-        if (ui_streamingstrokeslider && !lv_slider_is_dragged(ui_streamingstrokeslider)) {
-            bool ch = false;
-            lv_slider_set_value(ui_streamingstrokeslider, (int)s_str_stroke, LV_ANIM_OFF);
-            if (encoder3.getCount() >= 2) { ch = true; s_str_stroke += 1; encoder3.setCount(0); }
-            else if (encoder3.getCount() <= -2) { ch = true; s_str_stroke -= 1; encoder3.setCount(0); }
-            if (s_str_stroke < 0)   { ch = true; s_str_stroke = 0; }
-            if (s_str_stroke > 100) { ch = true; s_str_stroke = 100; }
-            if (ch) {
-                lv_slider_set_value(ui_streamingstrokeslider, (int)s_str_stroke, LV_ANIM_OFF);
-                streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                motionValueChanged = true;
-            }
-        } else if (ui_streamingstrokeslider) {
-            int strv = lv_slider_get_value(ui_streamingstrokeslider);
-            if (strv != (int)s_str_stroke) {
-                s_str_stroke = strv;
-                streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                motionValueChanged = true;
-            }
-        }
-
-        // Encoder 4 — Sensation (0..100)
-        if (ui_streamingsensationslider && !lv_slider_is_dragged(ui_streamingsensationslider)) {
-            bool ch = false;
-            lv_slider_set_value(ui_streamingsensationslider, (int)s_str_sensation, LV_ANIM_OFF);
-            if (encoder4.getCount() >= 2) { ch = true; s_str_sensation += 1; encoder4.setCount(0); }
-            else if (encoder4.getCount() <= -2) { ch = true; s_str_sensation -= 1; encoder4.setCount(0); }
-            if (s_str_sensation < 0)   { ch = true; s_str_sensation = 0; }
-            if (s_str_sensation > 100) { ch = true; s_str_sensation = 100; }
-            if (ch) {
-                lv_slider_set_value(ui_streamingsensationslider, (int)s_str_sensation, LV_ANIM_OFF);
-                streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(SENSATION, s_str_sensation, OSSM_ID);
-            }
-        } else if (ui_streamingsensationslider) {
-            int sev = lv_slider_get_value(ui_streamingsensationslider);
-            if (sev != (int)s_str_sensation) {
-                s_str_sensation = sev;
-                streamingUpdateValueLabels(s_str_speed, s_str_depth, s_str_stroke, s_str_sensation);
-                if (!paused) SendCommand(SENSATION, s_str_sensation, OSSM_ID);
-            }
-        }
-
-        const bool isMotionReady = (s_str_speed > 0.0f && s_str_depth > 0.0f && s_str_stroke > 0.0f);
-        if (s_was_paused != paused) {
-            motionValueChanged = false;
-        } else {
-            flushMotionCommands(s_str_speed, s_str_depth, s_str_stroke, motionValueChanged, !paused, (!wasMotionReady && isMotionReady && !paused));
-        }
-
-        // Pause/resume transition: send SPEED=0 on pause, resend all values on resume
-        if (!s_was_paused && paused) {
-            streamingRememberResumeSpeed(s_str_speed);
-            LogDebug("Streaming paused, did not send speed");
-            SendCommand(SPEED, 0.0f, OSSM_ID);
-        } else if (s_was_paused && !paused) {
-            const float resumeSpeed = streamingGetResumeSpeed();
-            if (resumeSpeed > 0.0f) {
-                s_str_speed = resumeSpeed;
-            }
-            SendCommand(ON,      resumeSpeed, OSSM_ID);
-            SendCommand(SPEED,   resumeSpeed, OSSM_ID);
-            SendCommand(DEPTH,   s_str_depth,  OSSM_ID);
-            SendCommand(STROKE,  s_str_stroke,  OSSM_ID);
-            SendCommand(SENSATION, s_str_sensation, OSSM_ID);
-            syncMotionCommandCache(s_str_speed, s_str_depth, s_str_stroke);
-        }
-        s_was_paused = paused;
-
-        if (click2_short_waspressed) {
-            lv_obj_send_event(ui_StreamingButtonL, LV_EVENT_SHORT_CLICKED, NULL);
-        } else if (mxclick_short_waspressed) {
-            lv_obj_send_event(ui_StreamingButtonM, LV_EVENT_SHORT_CLICKED, NULL);
-        } else if (click3_short_waspressed) {
-            lv_obj_send_event(ui_StreamingButtonR, LV_EVENT_SHORT_CLICKED, NULL);
-        }
+        const bool firstEntry = (s_prev_st_screens != ST_UI_STREAMING);
+        streamingScreenHandle(firstEntry);
     }
     break;
 

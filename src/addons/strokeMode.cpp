@@ -1,17 +1,20 @@
 // strokeMode.cpp — LVGL Stroke ("Bator mode") screen for M5_Remote
 //
-// This file creates the Stroke screen widgets and owns refreshStrokeStartStopUi().
-// All encoder and button input logic for this screen is handled in
-// ScreenHandler.cpp (case ST_UI_STROKE) to keep the architecture consistent
-// with the rest of M5_Remote.
+// This file creates the Stroke screen widgets and owns its screen handling.
+// ScreenHandler.cpp now only routes into the Stroke addon and keeps shared
+// screen-transition bookkeeping.
 
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
 #include "language.h"
 #include "strokeMode.h"
+#include "buttonhandlers/ButtonHandlers.h"
 #include "main.h"
+#include "config/config_ids.h"
 #include "display/styles.h"
 #include "communication/EspNowComm.h"
+#include "communication/CommManager.h"
+#include "communication/BleComm.h"
 #include "screens/ScreenHandler.h"
 
 // ---------------------------------------------------------------------------
@@ -49,6 +52,29 @@ static lv_obj_t *s_ButtonM        = nullptr;
 static lv_obj_t *s_ButtonMText    = nullptr;
 static lv_obj_t *s_ButtonR        = nullptr;
 static lv_obj_t *s_ButtonRText    = nullptr;
+
+static bool  s_stroke_motion_cache_valid = false;
+static float s_last_stroke_speed = 0.0f;
+static float s_last_stroke_depth = 0.0f;
+static float s_last_stroke = 0.0f;
+
+static void flushStrokeMotionCommands(float motionSpeed, float motionDepth, float motionStroke, bool motionValueChanged)
+{
+    if (!motionValueChanged) return;
+
+    const bool speedChanged = !s_stroke_motion_cache_valid || motionSpeed != s_last_stroke_speed;
+    const bool depthChanged = !s_stroke_motion_cache_valid || motionDepth != s_last_stroke_depth;
+    const bool strokeChanged = !s_stroke_motion_cache_valid || motionStroke != s_last_stroke;
+
+    if (speedChanged) { SendCommand(SPEED, motionSpeed, OSSM_ID); }
+    if (depthChanged) { SendCommand(DEPTH, motionDepth, OSSM_ID); }
+    if (strokeChanged) { SendCommand(STROKE, motionStroke, OSSM_ID); }
+
+    s_last_stroke_speed = motionSpeed;
+    s_last_stroke_depth = motionDepth;
+    s_last_stroke = motionStroke;
+    s_stroke_motion_cache_valid = true;
+}
 
 // ---------------------------------------------------------------------------
 // Event helpers
@@ -102,6 +128,120 @@ void refreshStrokeStartStopUi() {
         applyStrokeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
     }
 
+}
+
+void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
+    if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
+        touch_disabled = true;
+    }
+
+    bool changed = false;
+    bool motionValueChanged = false;
+    const bool wasMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
+
+    if (shouldRehome) {
+        bleCommGoToStrokeEngine();
+    }
+
+    if (resetToSimpleStroke) {
+        if (ui_PatternS) {
+            lv_roller_set_selected(ui_PatternS, 0, LV_ANIM_OFF);
+            lv_roller_get_selected_str(ui_PatternS, patternstr, sizeof(patternstr));
+            pattern = 0;
+        }
+        if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
+        SendCommand(PATTERN, 0.0f, OSSM_ID);
+    }
+
+    // Encoder 1 — Speed
+    if (ui_StrokeSpeedSlider && lv_slider_is_dragged(ui_StrokeSpeedSlider) == false) {
+        changed = false;
+        lv_slider_set_value(ui_StrokeSpeedSlider, speed, LV_ANIM_OFF);
+        if (encoder1.getCount() >= 2) {
+            changed = true; speed += 1;
+            encoder1.setCount(0);
+        } else if (encoder1.getCount() <= -2) {
+            changed = true; speed -= 1;
+            encoder1.setCount(0);
+        }
+        if (speed < 0)          { changed = true; speed = 0; }
+        if (speed > speedlimit) { changed = true; speed = speedlimit; }
+        if (changed) {
+            char sv[7]; dtostrf(speed, 6, 0, sv);
+            if (ui_StrokeSpeedValue) lv_label_set_text(ui_StrokeSpeedValue, sv);
+            motionValueChanged = true;
+        }
+    } else if (ui_StrokeSpeedSlider && lv_slider_get_value(ui_StrokeSpeedSlider) != (int)speed) {
+        speed = lv_slider_get_value(ui_StrokeSpeedSlider);
+        motionValueChanged = true;
+    }
+
+    // Encoder 2 — Stroke (motion range); depth auto-calculated as centre-minus-half
+    if (ui_StrokeStrokeSlider && lv_slider_is_dragged(ui_StrokeStrokeSlider) == false) {
+        changed = false;
+        lv_slider_set_value(ui_StrokeStrokeSlider, stroke, LV_ANIM_OFF);
+        if (encoder2.getCount() >= 2) {
+            changed = true; stroke += 1;
+            encoder2.setCount(0);
+        } else if (encoder2.getCount() <= -2) {
+            changed = true; stroke -= 1;
+            encoder2.setCount(0);
+        }
+        if (stroke <= 0.5)            { changed = true; stroke = 0; depth = 0; }
+        if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
+        if (changed) {
+            char sv[7]; dtostrf(stroke, 6, 0, sv);
+            if (ui_StrokeStrokeValue) lv_label_set_text(ui_StrokeStrokeValue, sv);
+            depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
+            if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
+            motionValueChanged = true;
+        }
+    } else if (ui_StrokeStrokeSlider && lv_slider_get_value(ui_StrokeStrokeSlider) != (int)stroke) {
+        stroke = lv_slider_get_value(ui_StrokeStrokeSlider);
+        depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
+        if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
+        motionValueChanged = true;
+    }
+
+    // Encoder 4 — Sensation
+    if (ui_StrokeSensationSlider && lv_slider_is_dragged(ui_StrokeSensationSlider) == false) {
+        changed = false;
+        lv_slider_set_value(ui_StrokeSensationSlider, sensation, LV_ANIM_OFF);
+        if (encoder4.getCount() >= 2) {
+            changed = true; sensation += 2;
+            encoder4.setCount(0);
+        } else if (encoder4.getCount() <= -2) {
+            changed = true; sensation -= 2;
+            encoder4.setCount(0);
+        }
+        if (sensation < -100) { changed = true; sensation = -100; }
+        if (sensation >  100) { changed = true; sensation =  100; }
+        if (changed) {
+            char sv[7]; dtostrf(sensation, 6, 0, sv);
+            if (ui_StrokeSensationValue) lv_label_set_text(ui_StrokeSensationValue, sv);
+            SendCommand(SENSATION, sensation, OSSM_ID);
+        }
+    } else if (ui_StrokeSensationSlider && lv_slider_get_value(ui_StrokeSensationSlider) != (int)sensation) {
+        sensation = lv_slider_get_value(ui_StrokeSensationSlider);
+        SendCommand(SENSATION, sensation, OSSM_ID);
+    }
+
+    if (click2_short_waspressed) {
+        _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    } else if (mxclick_short_waspressed) {
+        homebuttonmevent(NULL);
+        refreshStrokeStartStopUi();
+    } else if (click3_short_waspressed) {
+        g_pattern_return_screen = ui_Stroke;
+        _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    }
+
+    const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
+    flushStrokeMotionCommands(speed, depth, stroke, motionValueChanged);
+
+    if (!wasMotionReady && isMotionReady && !OSSM_On) {
+        homebuttonmevent(nullptr);
+    }
 }
 
 // ---------------------------------------------------------------------------
