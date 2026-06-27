@@ -841,7 +841,7 @@ void ui_Home_screen_init(void)
     ui_homespeedslider = lv_slider_create(ui_SpeedL);
     lv_slider_set_range(ui_homespeedslider, 0, speedlimit);
     lv_slider_set_start_value(ui_homespeedslider, 0, LV_ANIM_OFF);
-    lv_bar_set_mode(ui_homespeedslider, LV_BAR_MODE_RANGE);
+    lv_bar_set_mode(ui_homespeedslider, LV_BAR_MODE_NORMAL);
 
     lv_obj_set_width(ui_homespeedslider, 130); //was 130
     lv_obj_set_height(ui_homespeedslider, 10);
@@ -887,7 +887,7 @@ void ui_Home_screen_init(void)
 
     ui_homedepthslider = lv_slider_create(ui_DepthL);
     lv_slider_set_range(ui_homedepthslider, 0, maxdepthinmm);
-    lv_bar_set_mode(ui_homedepthslider, LV_BAR_MODE_RANGE);
+    lv_bar_set_mode(ui_homedepthslider, LV_BAR_MODE_NORMAL);
     lv_slider_set_start_value(ui_homedepthslider, 0, LV_ANIM_OFF);
 
     lv_obj_set_width(ui_homedepthslider, 130);
@@ -934,7 +934,7 @@ void ui_Home_screen_init(void)
 
     ui_homestrokeslider = lv_slider_create(ui_StrokeL);
     lv_slider_set_range(ui_homestrokeslider, 0, maxdepthinmm);
-    lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_RANGE);
+    lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_NORMAL);
     lv_slider_set_start_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
 
     lv_obj_set_width(ui_homestrokeslider, 130);

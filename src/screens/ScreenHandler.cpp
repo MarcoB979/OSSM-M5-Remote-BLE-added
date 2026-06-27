@@ -110,83 +110,83 @@ static int           maxRamp    = 10;
 static int           encId      = 0;
 static int           activeEncId = 0;
 
-static constexpr int EJECT_ICON_W = 15;
+static constexpr int EJECT_ICON_W = 12;
 static constexpr int EJECT_ICON_H = 20;
-static constexpr int FIST_ICON_W = 22;
+static constexpr int FIST_ICON_W = 17;
 static constexpr int FIST_ICON_H = 18;
-static constexpr int HOME_ICON_W = 22;
+static constexpr int HOME_ICON_W = 18;
 static constexpr int HOME_ICON_H = 22;
 static constexpr int ESP_ICON_W = 21;
 static constexpr int ESP_ICON_H = 18;
 
 static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
-".....###.........",
-".....####.....###",
-"......###....##..",
-"..... ..##...#...",
-".......##.......",
-".......###..###.",
-"................",
-"................",
-"........##......",
-".......#..#.....",
-"......######....",
-".....#########..",
-"....##########..",
-".....########...",
-"......######....",
-"......######....",
-"......######.....",
-"......######....",
-"......######....",
-"......######...."
+".###.........",
+".####.....###",
+"..###....##..",
+". ..##...#...",
+"...##.......",
+"...###..###.",
+"............",
+"............",
+"....##......",
+"...#..#.....",
+"..######....",
+".#########..",
+"##########..",
+".########...",
+"..######....",
+"..######....",
+"..######....",
+"..######....",
+"..######....",
+"..######...."
 };
 
 static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
 
-"...........##........",
-"..##..#####..#####...",
-"##..##...#...##...#..",
-"##..##...#...##...#..",
-"#....#............#..",
-"#.................#..",
-"#.................##.",
-"#....#...#...##...#.#",
-"#....#...#...##...#.#",
-"#....#...#...##...#.#",
-"#....#...#...##...#.#",
-"#....#...#...##...#.#",
-"###################.#",
-"........#..........#.",
-"........#..........#.",
-".......##........##..",
-"........#########....",
-"....................."
+"...........##....",
+"..##..####.####..",
+"##..##..#..##..#.",
+"##..##..#..##..#.",
+"#....#.........#.",
+"#..............#.",
+".#.............##.",
+".#..#..#..##..#.#",
+".#..#..#..##..#.#",
+".#..#..#..##..#.#",
+".#..#..#..##..#.#",
+".#..#..#..##..#.#",
+".##############.#",
+"......#.........#",
+"......#.........#",
+".....##.......##.",
+"......#######....",
+"................."
   };
 
 static const char* const HOME_ICON_MASK[HOME_ICON_H] = {
-  "........#####.........",
-  "......#########.......",
-  "....#####....#####....",
-  "..#####........#####..",
-  "#####............#####",
-  "......................",
-  "......###....###......",
-  "......###....###......",
-  "......###....###......",
-  "......###....###......",
-  "......##########......",
-  "......##########......",
-  "......###....###......",
-  "......###....###......",
-  "......###....###......",
-  "......###....###......",
-  ".....................",
-  "#####............#####",
-  "..#####........#####..",
-  "....#####....#####....",
-  "......#########.......",
-  "........#####........."
+  "......#####.......",
+  "....#########.....",
+  "..#####....#####..",
+  "#####........#####",
+  "..................",
+  "..................",
+  "....###....###....",
+  "....###....###....",
+  "....###....###....",
+  "....###....###....",
+  "....##########....",
+  "....##########....",
+  "....###....###....",
+  "....###....###....",
+  "....###....###....",
+  "....###....###....",
+  "..................",
+  "..................",
+  "#####........#####",
+  "..#####....#####..",
+  "....#########.....",
+  "......#####......."
 };
 
 static const char* const ESP_ICON_MASK[ESP_ICON_H] = {
@@ -1393,18 +1393,49 @@ static void updateHomeButtonMState() {
     }
 }
 
+static constexpr int HOME_START_RAMP_THRESHOLD = 10;
+static constexpr uint32_t HOME_START_RAMP_INTERVAL_MS = 12;
+
+static void rampHomeStartSpeed(int targetSpeed)
+{
+    for (int currentSpeed = HOME_START_RAMP_THRESHOLD + 1; currentSpeed <= targetSpeed; ++currentSpeed) {
+        delay(HOME_START_RAMP_INTERVAL_MS);
+        SendCommand(SPEED, (float)currentSpeed, OSSM_ID);
+    }
+}
+
+static void rampHomeStopSpeed(int startSpeed)
+{
+    for (int currentSpeed = startSpeed - 1; currentSpeed >= HOME_START_RAMP_THRESHOLD; --currentSpeed) {
+        delay(HOME_START_RAMP_INTERVAL_MS/2);
+        SendCommand(SPEED, (float)currentSpeed, OSSM_ID);
+    }
+}
+
 void homebuttonmevent(lv_event_t * e) {
     //LogDebug("HomeButton");
     if (OSSM_On == false) {
         if (speed == 0 || stroke == 0 || depth == 0) return;
-        LogDebug("Starting OSSM");
-        SendCommand(ON, 0.0, OSSM_ID);
         applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
+        lv_refr_now(NULL);
+        const int targetSpeed = (int)(speed + 0.5f);
+        const int startSpeed = (targetSpeed > HOME_START_RAMP_THRESHOLD) ? HOME_START_RAMP_THRESHOLD : targetSpeed;
+        LogDebug("Starting OSSM");
+        SendCommand(ON, (float)startSpeed, OSSM_ID);
+        if (targetSpeed > HOME_START_RAMP_THRESHOLD) {
+            rampHomeStartSpeed(targetSpeed);
+        }
     } else {
+        const int resumeSpeed = (int)(speed + 0.5f);
         LogDebug("Stopping OSSM");
         LogDebugFormatted("BLE: Unpause speed %.1f\n", bleCommGetUnpauseSpeed());
-        SendCommand(OFF, 0.0, OSSM_ID);
         applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
+        lv_refr_now(NULL);
+        if (resumeSpeed > HOME_START_RAMP_THRESHOLD) {
+            rampHomeStopSpeed(resumeSpeed);
+        }
+        SendCommand(OFF, 0.0, OSSM_ID);
+        bleCommSetUnpauseSpeed(resumeSpeed);
     }
 }
 
@@ -1681,11 +1712,15 @@ void handleScreens() {
             if (depth > maxdepthinmm) { changed = true; depth = maxdepthinmm; }
             if (stroke > depth)         { changed = true; stroke = depth; }
             if (changed && (depth != prevDepth || stroke != prevStroke)) {
-                LogDebug("Possible error 1");
                 lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
             }
         } else if (lv_slider_get_value(ui_homedepthslider) != depth) {
             depth = lv_slider_get_value(ui_homedepthslider);
+            if(stroke > depth) {
+                stroke = depth; 
+                lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF); 
+                lv_label_set_text(ui_homestrokevalue, std::to_string((int)depth).c_str());
+            }
         }
         homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homedepthslider) != depth);
         char depth_v[7]; dtostrf(depth, 6, 0, depth_v);
@@ -1706,12 +1741,17 @@ void handleScreens() {
             }
             if (stroke <= 0)            { changed = true; stroke = 0; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
-            if (stroke > depth)         { changed = true; stroke = depth; }
             if (invertStroke) {
+                if(lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_RANGE) {
+                    lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_RANGE);
+                }
                 lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
                 lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
             }
             else {
+                if(lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_NORMAL) {
+                    lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_NORMAL);
+                }
                 lv_bar_set_start_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
                 lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
             }
@@ -1723,6 +1763,12 @@ void handleScreens() {
             stroke = depth - lv_slider_get_left_value(ui_homestrokeslider);
         } else if (lv_slider_get_value(ui_homestrokeslider) != depth) {
             depth = lv_slider_get_value(ui_homestrokeslider);
+        }
+        if (stroke > depth) {
+             changed = true; 
+             depth = stroke; 
+             lv_slider_set_value(ui_homedepthslider, stroke, LV_ANIM_OFF);
+             lv_label_set_text(ui_homedepthvalue, std::to_string((int)depth).c_str());
         }
         homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke) || (lv_slider_get_value(ui_homestrokeslider) != depth);
         char stroke_v[7]; dtostrf(stroke, 6, 0, stroke_v);

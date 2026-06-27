@@ -40,7 +40,7 @@
 #define T_SETUP_DEPTH_I     "Set Depth Interactively"
 #define T_SETUP_DEPTH_F     "Set Depth Fancy"
 #define T_SELECT_PATTERN    "Select Pattern"
-#define T_PATTERN_Button    "Select Pattern \n Menue"
+#define T_PATTERN_Button    "Select Pattern \n Menu"
 #define T_RESTART           "Restart"
 #define T_TURN_OFF          "Turn off"
 //#define T_SETUP_TORQE       "Setup Torque"

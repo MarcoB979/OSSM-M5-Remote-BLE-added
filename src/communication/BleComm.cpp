@@ -687,7 +687,7 @@ int bleCommGetHomingDirection() {
   return 0;
 }
 
-int bleCommStoreUnpauseSpeed(float speedValue) {
+int bleCommSetUnpauseSpeed(float speedValue) {
   g_unpauseSpeed = (float)clampPercent(speedValue);
   return (int)g_unpauseSpeed;
 }

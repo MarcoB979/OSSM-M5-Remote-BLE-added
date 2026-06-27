@@ -625,24 +625,27 @@ void EjectHandleScreen(const ButtonEvents &events)
   refreshValueLabels();
 
   if (events.leftShort) {
-    //LogDebug("Eject: Left short click - returning to previous screen");
+    LogDebug("Eject: Left short click - returning to previous screen");
     lv_obj_t *dest = g_addon_return_screen ? g_addon_return_screen : ui_Home;
     _ui_screen_change(dest, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     g_addon_return_screen = nullptr;
     clearButtonFlags();
   } else if (events.mxShort) {
-    //LogDebug("Eject: Middle short click - toggling on/off");
+    LogDebug("Eject: Middle short click - toggling on/off");
     toggleOnOff();
     clearButtonFlags();
   } else if (events.rightShort) {
-    //LogDebug("Eject: Right short click - returning to Menu screen");
+    LogDebug("Eject: Right short click - returning to Menu screen");
     resetEncoderCounts();
     if (ejectUnload) {
       ejectUnload = false;
+      //lv_label_set_text(e_button_right_text, T_CUM);
       EjectSendCommand(CUMSIZE, e_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
+      
       lv_obj_clear_state(e_button_right, LV_STATE_CHECKED);
     } else {
       ejectUnload = true;
+      //lv_label_set_text(e_button_right_text, T_CUM_LOAD);
       EjectSendCommand(CUMSIZE, e_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
       lv_obj_add_state(e_button_right, LV_STATE_CHECKED);
     }
