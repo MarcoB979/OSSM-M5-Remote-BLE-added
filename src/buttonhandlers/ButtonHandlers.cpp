@@ -81,12 +81,12 @@ void buttonInit() {
     // - Slightly lower debounce keeps fast clicks reliable without phantom presses.
     Button2.setDebounceMs(20); //left
     Button3.setDebounceMs(20); //right
-    Button2.setClickMs(250);
-    Button3.setClickMs(250);
+    Button2.setClickMs(150);
+    Button3.setClickMs(150);
     Button2.setPressMs(500);  //pullout attached so keep long press shorter
     Button3.setPressMs(500);
     Button1.setDebounceMs(20);  //mx middle
-    Button1.setClickMs(250);
+    Button1.setClickMs(50);  //candidate for speed improvement: 100ms click window for encoder push-button makes double-click recognition feel snappier.
     Button1.setPressMs(500);  //Emergency stop attached so keep long press shorter
 
     Button1.attachClick(mxclick);

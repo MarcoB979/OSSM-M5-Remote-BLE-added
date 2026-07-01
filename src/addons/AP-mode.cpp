@@ -498,12 +498,10 @@ static bool tryBootstrapModelFromLiveBle(bool fetchExtras = true) {
 }
 
 static void refreshFromLiveStatusIfDue() {
-    if (!s_live_ap_available) return;
+    if (!s_live_ap_available || s_modifier_view) return;
 
     const uint32_t nowMs = millis();
-    const uint32_t pollIntervalMs = s_modifier_view ? 900U : 250U;
-    if ((nowMs - s_last_live_status_poll_ms) < pollIntervalMs) return;
-    if (s_modifier_view && (nowMs - s_last_ui_input_ms) < 600U) return;
+    if ((nowMs - s_last_live_status_poll_ms) < 250U) return;
     s_last_live_status_poll_ms = nowMs;
 
     String statusFrame;
@@ -517,9 +515,7 @@ static void refreshFromLiveStatusIfDue() {
     }
 
     parseStatusString(statusStd);
-    if (!s_modifier_view || (nowMs - s_last_ui_input_ms) > 200U) {
-        s_needs_redraw = true;
-    }
+    s_needs_redraw = true;
 }
 
 static void refreshFromLivePresetsIfDue(bool force = false) {
@@ -1666,7 +1662,7 @@ void APModeHandleScreen(const ButtonEvents &events) {
     if (!s_live_ap_available && !tryBootstrapModelFromLiveBle(true)) {
         refreshModelFromSyntheticFrames();
     }
-    const uint32_t nowMsPreInput = millis();
+    const bool hadButtonAction = events.leftShort || events.mxShort || events.rightShort;
 
     // Handle bottom-button intents first so UI navigation and start/stop feel immediate.
     if (events.leftShort) {
@@ -1682,77 +1678,79 @@ void APModeHandleScreen(const ButtonEvents &events) {
         if (!APModeOwnsActiveScreen()) return;
     }
 
-    refreshFromLiveStatusIfDue();
-    refreshFromLivePresetsIfDue();
-    normalizeIndexes();
-    normalizePresetSelection();
+    if (!hadButtonAction) {
+        refreshFromLiveStatusIfDue();
+        refreshFromLivePresetsIfDue();
+        normalizeIndexes();
+        normalizePresetSelection();
 
-    const int d1 = detentsFromEncoder(encoder1, &s_enc1);
-    const int d2 = detentsFromEncoder(encoder2, &s_enc2);
-    const int d3 = detentsFromEncoder(encoder3, &s_enc3);
-    const int d4 = detentsFromEncoder(encoder4, &s_enc4);
+        const int d1 = detentsFromEncoder(encoder1, &s_enc1);
+        const int d2 = detentsFromEncoder(encoder2, &s_enc2);
+        const int d3 = detentsFromEncoder(encoder3, &s_enc3);
+        const int d4 = detentsFromEncoder(encoder4, &s_enc4);
 
-    if (d1 != 0) {
-        s_last_ui_input_ms = millis();
-        Control *speed = getSetting(speedControlName());
-        int current = speed ? (int)(speed->value + 0.5f) : 0;
-        if (setSpeedValue(current + d1 * 2)) s_needs_redraw = true;
-    }
+        if (d1 != 0) {
+            s_last_ui_input_ms = millis();
+            Control *speed = getSetting(speedControlName());
+            int current = speed ? (int)(speed->value + 0.5f) : 0;
+            if (setSpeedValue(current + d1 * 2)) s_needs_redraw = true;
+        }
 
-    if (d2 != 0) {
-        s_last_ui_input_ms = millis();
-        if (s_preset_mode) {
-            if (!s_preset_names.empty()) {
-                s_preset_selection += d2;
-                normalizePresetSelection();
-                s_needs_redraw = true;
-            }
-        } else if (s_modifier_view) {
-            int modCount = (int)s_modifier_names.size();
-            if (modCount > 0) {
-                s_modifier_index += d2;
-                if (s_modifier_index < 0) s_modifier_index = modCount - 1;
-                if (s_modifier_index >= modCount) s_modifier_index = 0;
-                s_needs_redraw = true;
-            }
-        } else {
-            int baseCount = (int)s_control_names.size() - 1;
-            if (baseCount > 0) {
-                s_base_index += d2;
-                if (s_base_index < 0) s_base_index = baseCount - 1;
-                if (s_base_index >= baseCount) s_base_index = 0;
-                s_modifier_index = 0;
-                s_needs_redraw = true;
+        if (d2 != 0) {
+            s_last_ui_input_ms = millis();
+            if (s_preset_mode) {
+                if (!s_preset_names.empty()) {
+                    s_preset_selection += d2;
+                    normalizePresetSelection();
+                    s_needs_redraw = true;
+                }
+            } else if (s_modifier_view) {
+                int modCount = (int)s_modifier_names.size();
+                if (modCount > 0) {
+                    s_modifier_index += d2;
+                    if (s_modifier_index < 0) s_modifier_index = modCount - 1;
+                    if (s_modifier_index >= modCount) s_modifier_index = 0;
+                    s_needs_redraw = true;
+                }
+            } else {
+                int baseCount = (int)s_control_names.size() - 1;
+                if (baseCount > 0) {
+                    s_base_index += d2;
+                    if (s_base_index < 0) s_base_index = baseCount - 1;
+                    if (s_base_index >= baseCount) s_base_index = 0;
+                    s_modifier_index = 0;
+                    s_needs_redraw = true;
+                }
             }
         }
-    }
 
-    if (d3 != 0) {
-        s_last_ui_input_ms = millis();
-        if (!s_preset_mode && (int)s_control_names.size() > 1) {
-            if (s_modifier_view && !s_modifier_names.empty()) {
+        if (d3 != 0) {
+            s_last_ui_input_ms = millis();
+            if (!s_preset_mode && (int)s_control_names.size() > 1) {
+                if (s_modifier_view && !s_modifier_names.empty()) {
+                    std::string key = s_control_names[s_base_index] + s_modifier_names[s_modifier_index];
+                    Control *mod = getSetting(key);
+                    int current = mod ? (int)(mod->value + 0.5f) : 0;
+                    if (setModifierValue(current + d3)) {
+                        s_needs_redraw = true;
+                    }
+                } else if (!s_modifier_view) {
+                    Control *base = getSetting(s_control_names[s_base_index]);
+                    int current = base ? (int)(base->value + 0.5f) : 0;
+                    if (setBaseValue(current + d3)) s_needs_redraw = true;
+                }
+            }
+        }
+
+        if (d4 != 0) {
+            s_last_ui_input_ms = millis();
+            if (!s_preset_mode && (int)s_control_names.size() > 1 && !s_modifier_names.empty()) {
                 std::string key = s_control_names[s_base_index] + s_modifier_names[s_modifier_index];
                 Control *mod = getSetting(key);
                 int current = mod ? (int)(mod->value + 0.5f) : 0;
-                if (setModifierValue(current + d3)) {
+                if (setModifierValue(current + d4)) {
                     s_needs_redraw = true;
                 }
-            } else if (!s_modifier_view) {
-                Control *base = getSetting(s_control_names[s_base_index]);
-                int current = base ? (int)(base->value + 0.5f) : 0;
-                if (setBaseValue(current + d3)) s_needs_redraw = true;
-            }
-        }
-    }
-
-    if (d4 != 0) {
-        s_last_ui_input_ms = millis();
-        if (!s_preset_mode && (int)s_control_names.size() > 1 && !s_modifier_names.empty()) {
-            std::string key = s_control_names[s_base_index] + s_modifier_names[s_modifier_index];
-            Control *mod = getSetting(key);
-            int current = mod ? (int)(mod->value + 0.5f) : 0;
-            if (setModifierValue(current + d4)) {
-                s_needs_redraw = true;
             }
         }
     }
