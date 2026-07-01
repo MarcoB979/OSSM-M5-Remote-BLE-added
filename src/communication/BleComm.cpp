@@ -12,6 +12,7 @@
 #include "../config/debug.h"
 #include "../main.h"
 #include "../screens/ScreenHandler.h"
+#include "../ui/ui.h"
 
 
 namespace {
@@ -21,6 +22,10 @@ static const char* OSSM_BLE_SERVICE_UUID = "522b443a-4f53-534d-0001-420badbabe69
 static const char* OSSM_BLE_COMMAND_CHAR_UUID = "522b443a-4f53-534d-1000-420badbabe69";
 static const char* OSSM_BLE_SPEED_KNOB_CHAR_UUID = "522b443a-4f53-534d-1010-420badbabe69";
 static const char* OSSM_BLE_STATE_CHAR_UUID = "522b443a-4f53-534d-2000-420badbabe69";
+static const char* ADVANCED_STATUS_CHAR_UUID = "4F53534D-6164-7661-6E63-656473746174";
+static const char* ADVANCED_CONFIG_CHAR_UUID = "4F53534D-6164-7661-6E63-6564636F6E66";
+static const char* ADVANCED_CONTROL_CHAR_UUID = "4F53534D-6164-7661-6E63-6564636F6E74";
+static const char* ADVANCED_PRESETS_CHAR_UUID = "4F53534D-6164-7661-6E63-656470727374";
 
 static constexpr uint32_t BLE_STATE_POLL_MS = 20;
 static constexpr uint32_t STATE_FRESH_TIMEOUT_MS = 1200;
@@ -41,6 +46,10 @@ static NimBLEClient* g_client = nullptr;
 static NimBLERemoteCharacteristic* g_cmd = nullptr;
 static NimBLERemoteCharacteristic* g_speedKnob = nullptr;
 static NimBLERemoteCharacteristic* g_state = nullptr;
+static NimBLERemoteCharacteristic* g_adv_status = nullptr;
+static NimBLERemoteCharacteristic* g_adv_config = nullptr;
+static NimBLERemoteCharacteristic* g_adv_control = nullptr;
+static NimBLERemoteCharacteristic* g_adv_presets = nullptr;
 static SemaphoreHandle_t g_bleMutex = nullptr;
 static TaskHandle_t g_pollTask = nullptr;
 static TaskHandle_t g_txTask = nullptr;
@@ -82,6 +91,15 @@ enum ParamIdx { P_SPEED = 0, P_DEPTH = 1, P_STROKE = 2, P_SENSATION = 3, P_PATTE
 
 // Forward declaration (definition is below)
 static bool bleReadStateOnce();
+static bool ensureAdvancedCharacteristics(bool needConfig, bool needStatus, bool needControl, bool needPresets);
+
+static bool canAdvancedRead(const NimBLERemoteCharacteristic* characteristic) {
+  return characteristic && characteristic->canRead();
+}
+
+static bool canAdvancedWrite(const NimBLERemoteCharacteristic* characteristic) {
+  return characteristic && (characteristic->canWrite() || characteristic->canWriteNoResponse());
+}
 
 static void pumpUiDuringModeWait() {
   // Keep status icons and screen rendering responsive while mode gating loops.
@@ -93,6 +111,10 @@ static void bleResetClient() {
   g_cmd = nullptr;
   g_speedKnob = nullptr;
   g_state = nullptr;
+  g_adv_status = nullptr;
+  g_adv_config = nullptr;
+  g_adv_control = nullptr;
+  g_adv_presets = nullptr;
 
   if (!g_client) return;
 
@@ -101,6 +123,39 @@ static void bleResetClient() {
   }
   NimBLEDevice::deleteClient(g_client);
   g_client = nullptr;
+}
+
+static bool ensureAdvancedCharacteristics(bool needConfig, bool needStatus, bool needControl, bool needPresets) {
+  if (!g_client || !g_client->isConnected()) return false;
+  const bool alreadyReady =
+      (!needConfig || canAdvancedRead(g_adv_config)) &&
+      (!needStatus || canAdvancedRead(g_adv_status)) &&
+      (!needControl || canAdvancedWrite(g_adv_control)) &&
+      (!needPresets || (canAdvancedRead(g_adv_presets) || canAdvancedWrite(g_adv_presets)));
+  if (alreadyReady) return true;
+
+  // Runtime service refresh (getServices(true)) is unsafe while poll/read tasks are active,
+  // so AP readiness is evaluated against pointers discovered during connect.
+  const bool ready =
+      (!needConfig || canAdvancedRead(g_adv_config)) &&
+      (!needStatus || canAdvancedRead(g_adv_status)) &&
+      (!needControl || canAdvancedWrite(g_adv_control)) &&
+      (!needPresets || (canAdvancedRead(g_adv_presets) || canAdvancedWrite(g_adv_presets)));
+  if (!ready) {
+    static uint32_t s_lastAdvDiagLogMs = 0;
+    const uint32_t nowMs = millis();
+    if ((nowMs - s_lastAdvDiagLogMs) > 5000U) {
+      LogDebugFormatted(
+          "[AP] Advanced characteristics missing/unsupported cfg=%d st=%d ctl=%d pst=%d\n",
+          canAdvancedRead(g_adv_config) ? 1 : 0,
+          canAdvancedRead(g_adv_status) ? 1 : 0,
+          canAdvancedWrite(g_adv_control) ? 1 : 0,
+          (canAdvancedRead(g_adv_presets) || canAdvancedWrite(g_adv_presets)) ? 1 : 0);
+      s_lastAdvDiagLogMs = nowMs;
+    }
+  }
+
+  return ready;
 }
 
 static float extractValueAfterKey(const String& text, const String& key) {
@@ -224,6 +279,39 @@ static bool bleWriteCommand(const String& cmd) {
   if (!g_cmd || !g_client || !g_client->isConnected()) return false;
   if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
   bool ok = g_cmd->writeValue((uint8_t*)cmd.c_str(), cmd.length(), false);
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+  return ok;
+}
+
+static bool bleReadRawCharacteristic(NimBLERemoteCharacteristic* characteristic, String* outValue) {
+  if (!outValue || !characteristic || !g_client || !g_client->isConnected() || !characteristic->canRead()) {
+    return false;
+  }
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  std::string raw = characteristic->readValue();
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+
+  *outValue = String(raw.c_str());
+  return true;
+}
+
+static bool bleWriteRawCharacteristic(NimBLERemoteCharacteristic* characteristic, const String& payload) {
+  if (!characteristic || !g_client || !g_client->isConnected() || !characteristic->canWrite()) {
+    if (!characteristic || !g_client || !g_client->isConnected()) return false;
+    const bool supportsWrite = characteristic->canWrite();
+    const bool supportsWriteNoResp = characteristic->canWriteNoResponse();
+    if (!supportsWrite && !supportsWriteNoResp) return false;
+  }
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  bool ok = false;
+  if (characteristic->canWriteNoResponse()) {
+    ok = characteristic->writeValue((uint8_t*)payload.c_str(), payload.length(), false);
+  }
+  if (!ok && characteristic->canWrite()) {
+    ok = characteristic->writeValue((uint8_t*)payload.c_str(), payload.length(), true);
+  }
   if (g_bleMutex) xSemaphoreGive(g_bleMutex);
   return ok;
 }
@@ -631,16 +719,32 @@ bool bleCommTryConnect() {
     return false;
   }
 
-  NimBLERemoteService* service = g_client->getService(NimBLEUUID(OSSM_BLE_SERVICE_UUID));
-  if (!service) {
+  const std::vector<NimBLERemoteService*>& services = g_client->getServices(true);
+  if (services.empty()) {
     bleResetClient();
     xSemaphoreGive(g_connectMutex);
     return false;
   }
 
-  g_cmd = service->getCharacteristic(NimBLEUUID(OSSM_BLE_COMMAND_CHAR_UUID));
-  g_speedKnob = service->getCharacteristic(NimBLEUUID(OSSM_BLE_SPEED_KNOB_CHAR_UUID));
-  g_state = service->getCharacteristic(NimBLEUUID(OSSM_BLE_STATE_CHAR_UUID));
+  g_cmd = nullptr;
+  g_speedKnob = nullptr;
+  g_state = nullptr;
+  g_adv_status = nullptr;
+  g_adv_config = nullptr;
+  g_adv_control = nullptr;
+  g_adv_presets = nullptr;
+
+  for (NimBLERemoteService* service : services) {
+    if (!service) continue;
+    if (!g_cmd) g_cmd = service->getCharacteristic(NimBLEUUID(OSSM_BLE_COMMAND_CHAR_UUID));
+    if (!g_speedKnob) g_speedKnob = service->getCharacteristic(NimBLEUUID(OSSM_BLE_SPEED_KNOB_CHAR_UUID));
+    if (!g_state) g_state = service->getCharacteristic(NimBLEUUID(OSSM_BLE_STATE_CHAR_UUID));
+
+    if (!g_adv_status) g_adv_status = service->getCharacteristic(NimBLEUUID(ADVANCED_STATUS_CHAR_UUID));
+    if (!g_adv_config) g_adv_config = service->getCharacteristic(NimBLEUUID(ADVANCED_CONFIG_CHAR_UUID));
+    if (!g_adv_control) g_adv_control = service->getCharacteristic(NimBLEUUID(ADVANCED_CONTROL_CHAR_UUID));
+    if (!g_adv_presets) g_adv_presets = service->getCharacteristic(NimBLEUUID(ADVANCED_PRESETS_CHAR_UUID));
+  }
 
   if (!g_cmd || !g_cmd->canWrite()) {
     bleResetClient();
@@ -706,6 +810,7 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
   (void)maxSpeedValue;
 
   if (!bleCommTryConnect()) return false;
+  bool SafeStartStop   = true; //default to true, but will be set to false if the checkbox is unchecked in the UI
 
   const bool isMotionControl =
       (appCommand == SPEED || appCommand == DEPTH || appCommand == STROKE ||
@@ -756,13 +861,28 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
     }
 
     if (requestedStroke > 0.001f && prevStroke <= 0.001f) {
+      SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
       float resume = bleGetUnpauseSpeed();
       if (resume > 0.001f) {
         bool ok1 = queueCommand(String("set:stroke:") + String(clampPercent(requestedStroke)), true);
-        bool ok2 = queueCommand(String("set:speed:") + String(clampPercent(resume)), true);
-        g_lastRequestedStroke = requestedStroke;
-        LogDebugFormatted("BLE: Resume speed %.1f after stroke %.1f\n", resume, requestedStroke); // TEST AFTER EAU COMMENTS
-        return ok1 && ok2;
+        if(!SafeStartStop) {
+          g_lastRequestedStroke = requestedStroke;
+          LogDebugFormatted("BLE: Resume speed %.1f after stroke %.1f\n", resume, requestedStroke); 
+          for (int currentSpeed = HOME_START_RAMP_THRESHOLD + 1; currentSpeed <= resume; ++currentSpeed) {
+            delay(HOME_START_RAMP_INTERVAL_MS);
+            bool ok2 = queueCommand(String("set:speed:") + String(clampPercent(currentSpeed)), true);
+            return ok1 && ok2;
+          }
+
+        }
+        else {
+          g_lastRequestedStroke = requestedStroke;
+          LogDebugFormatted("BLE: Resume speed %.1f after stroke %.1f\n", resume, requestedStroke); // TEST AFTER EAU COMMENTS
+          bool ok2 = queueCommand(String("set:speed:") + String(clampPercent(resume)), true);
+          return ok1 && ok2;
+        }
+
+
       }
     }
 
@@ -849,4 +969,42 @@ bool bleCommSendStreamCommand(int position, int durationMs) {
   if (position > 100) position = 100;
   String cmd = String("stream:") + String(position) + String(":") + String(durationMs) + "\n";
   return queueCommand(cmd, true);
+}
+
+bool bleCommReadAdvancedConfig(String* outConfig) {
+  if (!outConfig) return false;
+  outConfig->remove(0);
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(true, false, false, false)) return false;
+  return bleReadRawCharacteristic(g_adv_config, outConfig);
+}
+
+bool bleCommReadAdvancedStatus(String* outStatus) {
+  if (!outStatus) return false;
+  outStatus->remove(0);
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(false, true, false, false)) return false;
+  return bleReadRawCharacteristic(g_adv_status, outStatus);
+}
+
+bool bleCommReadAdvancedPresets(String* outPresets) {
+  if (!outPresets) return false;
+  outPresets->remove(0);
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(false, false, false, true)) return false;
+  return bleReadRawCharacteristic(g_adv_presets, outPresets);
+}
+
+bool bleCommWriteAdvancedControl(const String& payload) {
+  if (payload.length() == 0) return false;
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(false, false, true, false)) return false;
+  return bleWriteRawCharacteristic(g_adv_control, payload);
+}
+
+bool bleCommWriteAdvancedPresets(const String& payload) {
+  if (payload.length() == 0) return false;
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(false, false, false, true)) return false;
+  return bleWriteRawCharacteristic(g_adv_presets, payload);
 }

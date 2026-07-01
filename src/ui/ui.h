@@ -112,6 +112,7 @@ extern lv_obj_t * ui_AddonsButtonR;
 extern lv_obj_t * ui_AddonsItem0;
 extern lv_obj_t * ui_AddonsItem1;
 extern lv_obj_t * ui_AddonsItem2;
+extern lv_obj_t * ui_AddonsItem3;
 extern lv_obj_t * ui_LogoAddons;
 extern lv_group_t * ui_g_addons;
 extern lv_obj_t * ui_FistIT;
@@ -180,7 +181,7 @@ extern lv_obj_t * ui_ejectaddon;
 extern lv_obj_t * ui_strokeinvert;
 extern lv_obj_t * ui_forceHome;
 extern lv_obj_t * ui_vibrate;
-extern lv_obj_t * ui_lefty;
+extern lv_obj_t * ui_safeStartStop;
 extern lv_group_t * ui_g_settings;
 
 void screenmachine(lv_event_t * e);

@@ -4,8 +4,8 @@
 2. Connect your M5 device with a USB cable.
 3. Click **Connect** and pick the correct COM port.
 4. Select the matching firmware file for your device:
-   - `OSSM-M5-Remote_m5stack-core2_TEST-v0-92.bin`
-   - `OSSM-M5-Remote_m5stack-cores3_TEST-v0-92.bin`
+   - OSSM-M5-Remote_m5stack-**core2**_xxxxx.bin
+   - OSSM-M5-Remote_m5stack-**cores3**_xxxxx.bin
 5. For Flash Address choose 0x0 (flash offset `0x0000`).
 6. Click **Program / Flash** and wait until it finishes.
 

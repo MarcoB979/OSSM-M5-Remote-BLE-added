@@ -13,6 +13,7 @@
 #include "../buttonhandlers/ButtonHandlers.h"
 #include "../addons/Eject.h"
 #include "../addons/FistIT.h"
+#include "../addons/AP-mode.h"
 #include "../addons/addonsStreaming.h"
 #include "../communication/EspNowComm.h"
 #include "../communication/CommManager.h"
@@ -82,7 +83,8 @@ bool vibrate_mode   = true;
 bool touch_home     = false;
 bool strokeinvert_mode = false;
 bool ble_force_homeing = false;
-bool touch_disabled = false;
+bool touch_disabled = true;  // TOUCH TEMPRARILY DISABLED BECAUSE OF PROBLEMS IN CODE (FAKE MX CLICKS)
+bool SafeStartStop   = false;
 bool onoff          = false;
 bool rstate         = false;
 bool EJECT_On       = false;
@@ -110,7 +112,7 @@ static int           maxRamp    = 10;
 static int           encId      = 0;
 static int           activeEncId = 0;
 
-static constexpr int EJECT_ICON_W = 12;
+static constexpr int EJECT_ICON_W = 14;
 static constexpr int EJECT_ICON_H = 20;
 static constexpr int FIST_ICON_W = 17;
 static constexpr int FIST_ICON_H = 18;
@@ -120,26 +122,26 @@ static constexpr int ESP_ICON_W = 21;
 static constexpr int ESP_ICON_H = 18;
 
 static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
-".###.........",
-".####.....###",
-"..###....##..",
-". ..##...#...",
-"...##.......",
-"...###..###.",
-"............",
-"............",
-"....##......",
-"...#..#.....",
-"..######....",
-".#########..",
-"##########..",
-".########...",
-"..######....",
-"..######....",
-"..######....",
-"..######....",
-"..######....",
-"..######...."
+"...###.........",
+"...####.....###",
+"....###....##..",
+".....##...#....",
+".....##.......",
+".....###..###.",
+"..............",
+"..............",
+".....###......",
+"...########...",
+"..##########..",
+".############.",
+".############.",
+"...########...",
+"....######....",
+"....######....",
+"....######....",
+"....######....",
+"....######....",
+"....######...."
 };
 
 static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
@@ -160,7 +162,7 @@ static const char* const FIST_ICON_MASK[FIST_ICON_H] = {
 "......#.........#",
 "......#.........#",
 ".....##.......##.",
-"......#######....",
+"......########...",
 "................."
   };
 
@@ -282,7 +284,7 @@ static void updateStatusStrip() {
         ui_Colors,
         ui_FistIT,
         ui_Stroke,
-        nullptr,
+        APModeGetScreen(),
     };
 
     for (size_t i = 0; i < 12; ++i) {
@@ -777,44 +779,43 @@ static const char* battery_symbol_for_level(int level, bool isCharging)
 
 static void update_battery_icons_all_screens(int level, bool isCharging)
 {
-    static bool batteryUiInitialized = false;
     const int valueLabelX = isCharging ? -25 : -40;
 
     lv_obj_t *batteryTitleLabels[] = {
         ui_Batt, ui_Batt1, ui_Batt2, ui_Batt3, ui_Batt4,
-        ui_Batt5, ui_Batt6, ui_Batt7, ui_Batt8, ui_Batt9
+        ui_Batt5, ui_Batt6, ui_Batt7, ui_Batt8, ui_Batt9,
+        APModeGetBatteryTitleLabel()
     };
     lv_obj_t *batteryValueLabels[] = {
         ui_BattValue, ui_BattValue1, ui_BattValue2, ui_BattValue3, ui_BattValue4,
-        ui_BattValue5, ui_BattValue6, ui_BattValue7, ui_BattValue8, ui_BattValue9
+        ui_BattValue5, ui_BattValue6, ui_BattValue7, ui_BattValue8, ui_BattValue9,
+        APModeGetBatteryValueLabel()
     };
     lv_obj_t *batteryBars[] = {
         ui_Battery, ui_Battery1, ui_Battery2, ui_Battery3, ui_Battery4,
-        ui_Battery5, ui_Battery6, ui_Battery7, ui_Battery8, ui_Battery9
+        ui_Battery5, ui_Battery6, ui_Battery7, ui_Battery8, ui_Battery9,
+        APModeGetBatteryBar()
     };
 
-    if (!batteryUiInitialized) {
-        for (lv_obj_t *label : batteryValueLabels) {
-            if (label != nullptr) {
-                lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_set_align(label, LV_ALIGN_RIGHT_MID);
-                lv_obj_set_y(label, 0);
-                lv_obj_set_style_text_color(label, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
-            }
+    for (lv_obj_t *label : batteryValueLabels) {
+        if (label != nullptr) {
+            lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_align(label, LV_ALIGN_RIGHT_MID);
+            lv_obj_set_y(label, 0);
+            lv_obj_set_style_text_color(label, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
         }
-        for (lv_obj_t *bar : batteryBars) {
-            if (bar != nullptr) {
-                lv_obj_add_flag(bar, LV_OBJ_FLAG_HIDDEN);
-            }
+    }
+    for (lv_obj_t *bar : batteryBars) {
+        if (bar != nullptr) {
+            lv_obj_add_flag(bar, LV_OBJ_FLAG_HIDDEN);
         }
-        for (lv_obj_t *label : batteryTitleLabels) {
-            if (label != nullptr) {
-                lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN | LV_STATE_DEFAULT);
-                lv_obj_set_style_text_font(label, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
-            }
+    }
+    for (lv_obj_t *label : batteryTitleLabels) {
+        if (label != nullptr) {
+            lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_font(label, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
         }
-        batteryUiInitialized = true;
     }
 
     const char *symbol = battery_symbol_for_level(level, isCharging);
@@ -1101,8 +1102,8 @@ void screenInit() {
     Preferences prefs;
     prefs.begin("m5-ctnr", false);
     eject_status = prefs.getBool("ejectAddon", false);
-    vibrate_mode = prefs.getBool("Vibrate",    true);
-    touch_home   = prefs.getBool("Lefty",      false);
+    vibrate_mode = prefs.getBool("Vibrate", true);
+    SafeStartStop   = prefs.getBool("SafeStartStop", true);
     strokeinvert_mode = prefs.getBool("StrokeInvert", true);
     ble_force_homeing = prefs.getBool("BleForceHomeing", true);
     int brightness = prefs.getInt("Brightness", 180);
@@ -1120,7 +1121,7 @@ void screenInit() {
         lv_obj_clear_state(ui_HomeButtonL, LV_STATE_DISABLED);
     }
     if (vibrate_mode) { lv_obj_add_state(ui_vibrate,  LV_STATE_CHECKED); }
-    if (touch_home)   { lv_obj_add_state(ui_lefty,    LV_STATE_CHECKED); }
+    if (SafeStartStop)   { lv_obj_add_state(ui_safeStartStop,    LV_STATE_CHECKED); }
     if (strokeinvert_mode && ui_strokeinvert) { lv_obj_add_state(ui_strokeinvert, LV_STATE_CHECKED); }
     if (ble_force_homeing && ui_forceHome)    { lv_obj_add_state(ui_forceHome, LV_STATE_CHECKED); }
     if (ui_brightness_slider) {
@@ -1234,23 +1235,24 @@ void screenmachine(lv_event_t * e) {
         addonsSyncSelectionVisual();
     } else if (lv_scr_act() == ui_FistIT) {
         st_screens = ST_UI_FISTIT;
+    } else if (APModeOwnsActiveScreen()) {
+        st_screens = ST_UI_APMODE;
     }
 }
 
 void savesettings(lv_event_t * e) {
     Preferences prefs;
     prefs.begin("m5-ctnr", false);
-
     if (lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED) == 1) {
         prefs.putBool("Vibrate", true);
     } else {
         prefs.putBool("Vibrate", false);
     }
 
-    if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-        prefs.putBool("Lefty", true);
+    if (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("SafeStartStop", true);
     } else {
-        prefs.putBool("Lefty", false);
+        prefs.putBool("SafeStartStop", false);
     }
 
     if (ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED) == 1) {
@@ -1267,12 +1269,6 @@ void savesettings(lv_event_t * e) {
     } else {
         prefs.putBool("BleForceHomeing", false);
         ble_force_homeing = false;
-    }
-
-    if (lv_obj_has_state(ui_ejectaddon, LV_STATE_CHECKED) == 1) {
-        prefs.putBool("ejectAddon", true);
-    } else {
-        prefs.putBool("ejectAddon", false);
     }
 
     if (ui_brightness_slider) {
@@ -1393,8 +1389,39 @@ static void updateHomeButtonMState() {
     }
 }
 
-static constexpr int HOME_START_RAMP_THRESHOLD = 10;
-static constexpr uint32_t HOME_START_RAMP_INTERVAL_MS = 12;
+
+static void syncHomeMotionUi(bool invertStroke)
+{
+    if (ui_homedepthslider) {
+        lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
+    }
+    if (ui_homedepthvalue) {
+        char depth_v[7];
+        dtostrf(depth, 6, 0, depth_v);
+        lv_label_set_text(ui_homedepthvalue, depth_v);
+    }
+
+    if (ui_homestrokeslider) {
+        if (invertStroke) {
+            if (lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_RANGE) {
+                lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_RANGE);
+            }
+            lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
+            lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
+        } else {
+            if (lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_NORMAL) {
+                lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_NORMAL);
+            }
+            lv_bar_set_start_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
+            lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
+        }
+    }
+    if (ui_homestrokevalue) {
+        char stroke_v[7];
+        dtostrf(stroke, 6, 0, stroke_v);
+        lv_label_set_text(ui_homestrokevalue, stroke_v);
+    }
+}
 
 static void rampHomeStartSpeed(int targetSpeed)
 {
@@ -1414,25 +1441,36 @@ static void rampHomeStopSpeed(int startSpeed)
 
 void homebuttonmevent(lv_event_t * e) {
     //LogDebug("HomeButton");
+        SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
     if (OSSM_On == false) {
         if (speed == 0 || stroke == 0 || depth == 0) return;
         applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
         lv_refr_now(NULL);
         const int targetSpeed = (int)(speed + 0.5f);
         const int startSpeed = (targetSpeed > HOME_START_RAMP_THRESHOLD) ? HOME_START_RAMP_THRESHOLD : targetSpeed;
-        LogDebug("Starting OSSM");
-        SendCommand(ON, (float)startSpeed, OSSM_ID);
-        if (targetSpeed > HOME_START_RAMP_THRESHOLD) {
-            rampHomeStartSpeed(targetSpeed);
+        LogDebugFormatted("Starting OSSM Safe start is active: %s\n", SafeStartStop ? "true" : "false");
+        if (SafeStartStop) {
+            SendCommand(ON, (float)startSpeed, OSSM_ID);
+            if (targetSpeed > HOME_START_RAMP_THRESHOLD) {
+                rampHomeStartSpeed(targetSpeed);
+            }
+        } else {
+            SendCommand(ON, (float)targetSpeed, OSSM_ID);
+            SendCommand(SPEED, (float)targetSpeed, OSSM_ID);
         }
     } else {
         const int resumeSpeed = (int)(speed + 0.5f);
-        LogDebug("Stopping OSSM");
+        LogDebugFormatted("Stopping OSSM Safe start is active: %s\n", SafeStartStop ? "true" : "false");
         LogDebugFormatted("BLE: Unpause speed %.1f\n", bleCommGetUnpauseSpeed());
         applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
         lv_refr_now(NULL);
-        if (resumeSpeed > HOME_START_RAMP_THRESHOLD) {
-            rampHomeStopSpeed(resumeSpeed);
+        if (SafeStartStop) {
+            if (resumeSpeed > HOME_START_RAMP_THRESHOLD) {
+//                rampHomeStopSpeed(resumeSpeed);
+                SendCommand(SPEED, (float)resumeSpeed, OSSM_ID);
+            }
+        } else {
+            SendCommand(SPEED, (float)resumeSpeed, OSSM_ID);
         }
         SendCommand(OFF, 0.0, OSSM_ID);
         bleCommSetUnpauseSpeed(resumeSpeed);
@@ -1478,8 +1516,17 @@ static void flushMotionCommands(float motionSpeed,
         if (speedChanged) { SendCommand(SPEED, motionSpeed, OSSM_ID); }
         if (depthChanged) { SendCommand(DEPTH, motionDepth, OSSM_ID); }
         if (strokeChanged) { SendCommand(STROKE, motionStroke, OSSM_ID); }
+        if(speedChanged ) {
+            LogDebugFormatted("BLE: flushMotionCommands speed %.1f depth %.1f stroke %.1f\n Previous speed: %.1f. Speed changed: %s", motionSpeed, motionDepth, motionStroke, s_last_motion_speed, speedChanged ? "true" : "false");
+            if (s_last_motion_speed == 0.0f && motionSpeed > 0.0f) {
+                LogDebugFormatted("BLE: Unpause speed %.1f\n", bleCommGetUnpauseSpeed());
+                homebuttonmevent(nullptr); // simulate a press of the HomeButtonM to resume motion
+//            SendCommand(ON, bleCommGetUnpauseSpeed(), OSSM_ID);
+            }
+        }
 
         syncMotionCommandCache(motionSpeed, motionDepth, motionStroke);
+
     }
 }
 // -------------------------------------------------------
@@ -1609,9 +1656,9 @@ void handleScreens() {
 
     case ST_UI_START:
     {
-        if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-            touch_disabled = true;
-        }
+//        if (lv_obj_has_state(ui_TouchDisable, LV_STATE_CHECKED) == 1) {
+//            touch_disabled = true;
+//        }
         if (click2_short_waspressed) {
             lv_obj_send_event(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {
@@ -1628,9 +1675,12 @@ void handleScreens() {
 
     case ST_UI_HOME:
     {
-        if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-            touch_disabled = true;
-        }
+//        if (lv_obj_has_state(ui_TouchDisable, LV_STATE_CHECKED) == 1) {
+//            touch_disabled = true;
+//        }
+        const bool invertStroke = ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED);
+        const bool depthSliderDragged = lv_slider_is_dragged(ui_homedepthslider);
+        const bool strokeSliderDragged = lv_slider_is_dragged(ui_homestrokeslider);
 
         const bool wasMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         bool homeMotionValueChanged = false;
@@ -1685,6 +1735,8 @@ void handleScreens() {
             }
         } else if (lv_slider_get_value(ui_homespeedslider) != speed) {
             speed = lv_slider_get_value(ui_homespeedslider);
+            changed = true;
+            
             //updateMXbutton=true;
         }
         homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homespeedslider) != speed);
@@ -1692,7 +1744,7 @@ void handleScreens() {
         lv_label_set_text(ui_homespeedvalue, speed_v);
 
         // Encoder 2 — Depth
-        if (lv_slider_is_dragged(ui_homedepthslider) == false) {
+        if (!depthSliderDragged) {
             changed = false;
             const float prevDepth = depth;
             const float prevStroke = stroke;
@@ -1714,24 +1766,24 @@ void handleScreens() {
             if (changed && (depth != prevDepth || stroke != prevStroke)) {
                 lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
             }
-        } else if (lv_slider_get_value(ui_homedepthslider) != depth) {
-            depth = lv_slider_get_value(ui_homedepthslider);
-            if(stroke > depth) {
-                stroke = depth; 
-                lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF); 
-                lv_label_set_text(ui_homestrokevalue, std::to_string((int)depth).c_str());
+        } else {
+            const float touchDepth = lv_slider_get_value(ui_homedepthslider);
+            if (touchDepth != depth) {
+                depth = touchDepth;
+                changed = true;
+            }
+            if (stroke > depth) {
+                stroke = depth;
+                changed = true;
             }
         }
         homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homedepthslider) != depth);
-        char depth_v[7]; dtostrf(depth, 6, 0, depth_v);
-        lv_label_set_text(ui_homedepthvalue, depth_v);
 
         // Encoder 3 — Stroke
-        if (lv_slider_is_dragged(ui_homestrokeslider) == false) {
+        if (!strokeSliderDragged) {
             changed = false;
             const float prevDepth = depth;
             const float prevStroke = stroke;
-            bool invertStroke = ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED);
             if (encoder3.getCount() >= 2) {
                 changed = true; stroke += invertStroke ? -rampValue : rampValue;
                 encoder3.setCount(0); rampMs = millis(); encId = 3;
@@ -1757,22 +1809,22 @@ void handleScreens() {
             }
 
             if (changed && (depth != prevDepth || stroke != prevStroke)) {
-                LogDebug("Possible error 3");
+                //LogDebug("Possible error 3");
             }
-        } else if (lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke) {
-            stroke = depth - lv_slider_get_left_value(ui_homestrokeslider);
-        } else if (lv_slider_get_value(ui_homestrokeslider) != depth) {
-            depth = lv_slider_get_value(ui_homestrokeslider);
+        } else {
+            const float touchStroke = invertStroke ? (depth - lv_slider_get_left_value(ui_homestrokeslider))
+                                                   : lv_slider_get_value(ui_homestrokeslider);
+            if (touchStroke != stroke) {
+                stroke = touchStroke;
+                changed = true;
+            }
         }
         if (stroke > depth) {
-             changed = true; 
-             depth = stroke; 
-             lv_slider_set_value(ui_homedepthslider, stroke, LV_ANIM_OFF);
-             lv_label_set_text(ui_homedepthvalue, std::to_string((int)depth).c_str());
+             changed = true;
+             depth = stroke;
         }
-        homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_left_value(ui_homestrokeslider) != depth - stroke) || (lv_slider_get_value(ui_homestrokeslider) != depth);
-        char stroke_v[7]; dtostrf(stroke, 6, 0, stroke_v);
-        lv_label_set_text(ui_homestrokevalue, stroke_v);
+        homeMotionValueChanged = homeMotionValueChanged || changed;
+        syncHomeMotionUi(invertStroke);
 
         // Encoder 4 — Sensation
         if (lv_slider_is_dragged(ui_homesensationslider) == false) {
@@ -1834,6 +1886,10 @@ void handleScreens() {
 
         if (!homeMotionValueChanged && !wasMotionReady && isMotionReady && !OSSM_On) {
             homebuttonmevent(nullptr);
+            LogDebug ("HomeButtonM auto-started OSSM due to motion values being set");
+        } else if (!homeMotionValueChanged && wasMotionReady && !isMotionReady && OSSM_On) {
+            homebuttonmevent(nullptr);
+            LogDebug ("HomeButtonM auto-stopped OSSM due to motion values being cleared");
         }
 
         updateHomeButtonMState();
@@ -1850,9 +1906,9 @@ void handleScreens() {
 
     case ST_UI_MENU:
     {
-        if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-            touch_disabled = true;
-        }
+//        if (lv_obj_has_state(ui_ui_TouchDisable, LV_STATE_CHECKED) == 1) {
+//           touch_disabled = true;
+//        }
         if (encoder4.getCount() > encoder4_enc + 1) {
             lv_group_focus_next(ui_g_menu);
             encoder4_enc = encoder4.getCount();
@@ -1930,9 +1986,9 @@ void handleScreens() {
 
     case ST_UI_PATTERN:
     {
-        if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-            touch_disabled = true;
-        }
+//        if (lv_obj_has_state(ui_TouchDisable, LV_STATE_CHECKED) == 1) {
+//            touch_disabled = true;
+//        }
         if (encoder4.getCount() > encoder4_enc + 2) {
             //LogDebug("next");
             uint32_t t = LV_KEY_DOWN;
@@ -1958,9 +2014,9 @@ void handleScreens() {
 
     case ST_UI_Torqe:
     {
-        if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-            touch_disabled = true;
-        }
+//        if (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1) {
+//            touch_disabled = true;
+//        }
 
         // Encoder 1 — Torque Out
         if (lv_slider_is_dragged(ui_outtroqeslider) == false) {
@@ -2032,6 +2088,18 @@ void handleScreens() {
     }
     break;
 
+    case ST_UI_APMODE:
+    {
+        touch_disabled = false;
+        ButtonEvents events = {
+            click2_short_waspressed,
+            mxclick_short_waspressed,
+            click3_short_waspressed
+        };
+        APModeHandleScreen(events);
+    }
+    break;
+
     case ST_UI_SETTINGS:
     {
         touch_disabled = false;
@@ -2077,7 +2145,7 @@ void handleScreens() {
         } else if (click3_short_waspressed) {
             lv_obj_t *focused = ui_g_settings ? lv_group_get_focused(ui_g_settings) : NULL;
             if (focused) {
-                bool isToggle = (focused == ui_vibrate || focused == ui_lefty ||
+                bool isToggle = (focused == ui_vibrate || focused == ui_safeStartStop ||
                                  focused == ui_strokeinvert || focused == ui_forceHome);
                 if (isToggle) {
                     if (lv_obj_has_state(focused, LV_STATE_CHECKED)) {

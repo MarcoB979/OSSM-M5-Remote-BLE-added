@@ -22,6 +22,7 @@ typedef enum NotificationResult {
 #define ST_UI_STREAMING     16
 #define ST_UI_ADDONS        17
 #define ST_UI_FISTIT        18
+#define ST_UI_APMODE        19
 #define ST_UI_SETTINGS      20
 
 // ---- Shared screen state (defined in ScreenHandler.cpp) ----
@@ -84,5 +85,8 @@ void menuRestartAction(void);
 #ifdef __cplusplus
 }
 #endif
+
+static int HOME_START_RAMP_THRESHOLD = 10;
+static uint32_t HOME_START_RAMP_INTERVAL_MS = 10;
 
 

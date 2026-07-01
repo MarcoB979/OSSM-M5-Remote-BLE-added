@@ -278,6 +278,7 @@ void applyColorScheme(int index) {
     rs_btnPrimary(ui_AddonsItem0, COLOR_SCHEMES[index].button_l);
     rs_btnPrimary(ui_AddonsItem1, COLOR_SCHEMES[index].button_l);
     rs_btnPrimary(ui_AddonsItem2, COLOR_SCHEMES[index].button_l);
+    rs_btnPrimary(ui_AddonsItem3, COLOR_SCHEMES[index].button_l);
 
     // Colors screen back button
     rs_btnPrimary(s_backBtn, COLOR_SCHEMES[index].button_l);

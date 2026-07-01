@@ -96,6 +96,7 @@ lv_obj_t * ui_AddonsButtonR        = NULL;
 lv_obj_t * ui_AddonsItem0           = NULL;
 lv_obj_t * ui_AddonsItem1           = NULL;
 lv_obj_t * ui_AddonsItem2           = NULL;
+lv_obj_t * ui_AddonsItem3           = NULL;
 lv_obj_t * ui_LogoAddons            = NULL;
 lv_obj_t * ui_brightness_slider     = NULL;
 lv_obj_t * ui_Pattern;
@@ -162,7 +163,7 @@ lv_obj_t * ui_ejectaddon;
 lv_obj_t * ui_strokeinvert;
 lv_obj_t * ui_forceHome;
 lv_obj_t * ui_vibrate;
-lv_obj_t * ui_lefty;
+lv_obj_t * ui_safeStartStop;
 lv_group_t * ui_g_settings;
 
 
@@ -452,6 +453,7 @@ static void ui_event_SettingsButtonL(lv_event_t * e)
     lv_obj_t * ta = lv_event_get_target(e);
     if(event == LV_EVENT_CLICKED) {
         savesettings(e);
+        printf("Settings saved\n");
     }
 }
 static void ui_event_SettingsButtonM(lv_event_t * e)
@@ -1994,7 +1996,7 @@ void ui_Settings_screen_init(void)
 
     // ui_ejectaddon
 
-    ui_ejectaddon = lv_checkbox_create(ui_Settings);
+/*    ui_ejectaddon = lv_checkbox_create(ui_Settings);
     lv_checkbox_set_text(ui_ejectaddon, T_EJECT);
 
     lv_obj_set_width(ui_ejectaddon, LV_SIZE_CONTENT);
@@ -2013,7 +2015,7 @@ void ui_Settings_screen_init(void)
     applyCheckboxStyles(ui_ejectaddon);
     // Legacy checkbox kept for backward compatibility, but hidden in new settings UI.
     lv_obj_add_flag(ui_ejectaddon, LV_OBJ_FLAG_HIDDEN);
-
+*/
     // ui_vibrate
 
     ui_vibrate = lv_checkbox_create(ui_Settings);
@@ -2032,23 +2034,23 @@ void ui_Settings_screen_init(void)
     lv_obj_set_style_text_font(ui_vibrate, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyCheckboxStyles(ui_vibrate);
 
-    // ui_lefty
+    // ui_safeStartStop
 
-    ui_lefty = lv_checkbox_create(ui_Settings);
-    lv_checkbox_set_text(ui_lefty, T_TOUCHSETTING);
+    ui_safeStartStop = lv_checkbox_create(ui_Settings);
+    lv_checkbox_set_text(ui_safeStartStop, T_SAFESTARTSTOP);
 
-    lv_obj_set_width(ui_lefty, LV_SIZE_CONTENT);
-    lv_obj_set_height(ui_lefty, LV_SIZE_CONTENT);
+    lv_obj_set_width(ui_safeStartStop, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_safeStartStop, LV_SIZE_CONTENT);
 
-    lv_obj_set_x(ui_lefty, 11);
-    lv_obj_set_y(ui_lefty, -30);
+    lv_obj_set_x(ui_safeStartStop, 11);
+    lv_obj_set_y(ui_safeStartStop, -30);
 
-    lv_obj_set_align(ui_lefty, LV_ALIGN_LEFT_MID);
+    lv_obj_set_align(ui_safeStartStop, LV_ALIGN_LEFT_MID);
 
-    lv_obj_add_flag(ui_lefty, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_flag(ui_safeStartStop, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
 
-    lv_obj_set_style_text_font(ui_lefty, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
-    applyCheckboxStyles(ui_lefty);
+    lv_obj_set_style_text_font(ui_safeStartStop, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
+    applyCheckboxStyles(ui_safeStartStop);
 
     // ui_strokeinvert
 
@@ -2130,7 +2132,7 @@ void ui_Settings_screen_init(void)
     }
     ui_g_settings = lv_group_create();
     lv_group_add_obj(ui_g_settings, ui_vibrate);
-    lv_group_add_obj(ui_g_settings, ui_lefty);
+    lv_group_add_obj(ui_g_settings, ui_safeStartStop);
     lv_group_add_obj(ui_g_settings, ui_strokeinvert);
     lv_group_add_obj(ui_g_settings, ui_forceHome);
     lv_group_focus_obj(ui_vibrate);

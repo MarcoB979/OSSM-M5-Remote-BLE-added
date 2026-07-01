@@ -131,9 +131,6 @@ void refreshStrokeStartStopUi() {
 }
 
 void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
-    if (lv_obj_has_state(ui_lefty, LV_STATE_CHECKED) == 1) {
-        touch_disabled = true;
-    }
 
     bool changed = false;
     bool motionValueChanged = false;

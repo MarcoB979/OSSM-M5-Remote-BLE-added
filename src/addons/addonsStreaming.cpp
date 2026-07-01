@@ -9,6 +9,7 @@
 #include "buttonhandlers/ButtonHandlers.h"
 #include "addons/Eject.h"
 #include "addons/FistIT.h"
+#include "addons/AP-mode.h"
 #include "communication/EspNowComm.h"
 #include "communication/BleComm.h"
 #include "../screens/ScreenHandler.h"
@@ -44,7 +45,9 @@ static lv_obj_t *s_addons_btn_r_text = nullptr;
 static lv_obj_t *s_addons_item0_text = nullptr;
 static lv_obj_t *s_addons_item1_text = nullptr;
 static lv_obj_t *s_addons_item2_text = nullptr;
+static lv_obj_t *s_addons_item3_text = nullptr;
 static int s_addons_selected = 0;
+static constexpr int ADDONS_VISIBLE_ROWS = 4;
 
 // ── Addon registry ───────────────────────────────────────────────────────────
 // Each entry: display name, enabled flag, and activation callback.
@@ -62,22 +65,24 @@ extern lv_obj_t *g_addon_return_screen;
 static void activateEject()     { g_addon_return_screen = lv_scr_act(); EjectPrepareScreen(); _ui_screen_change(EjectGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateFistIT()    { g_addon_return_screen = lv_scr_act(); FistITPrepareScreen(); _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateStreaming() { _ui_screen_change(ui_Streaming,       LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
+static void activateAPMode()    { g_addon_return_screen = lv_scr_act(); APModePrepareScreen(); _ui_screen_change(APModeGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 
 //new addons should be defined here with their screen activation function, and the function should be implemented above. The screen they activate should also be added to ui.h and ui.c, and implemented in a new .cpp file in the addons folder. See Eject and FistIT for examples.
 //new addons should also be added to the language file with T_ADDONS_NAME, and to the ui with a button in the addons carousel and an event handler that calls the appropriate activate function above. See ui.c for examples.
 static AddonDef s_addon_defs[] = {
     { "Eject",     true, activateEject     },
     { "Fist-IT",   true, activateFistIT    },
+    { "Advanced Penetration",   true, activateAPMode    },
     { "Streaming", true, activateStreaming },
 };
-//increment NUM_ADDONS at the top of this file if you add more entries here
-static const int NUM_ADDONS = 3;
+// Keep this in sync with s_addon_defs[] entries above.
+static constexpr int NUM_ADDONS = (int)(sizeof(s_addon_defs) / sizeof(s_addon_defs[0]));
 static const int EJECT_ADDON_INDEX = 0;
 static const int FISTIT_ADDON_INDEX = 1;
 
 static bool s_addons_manage_mode = false;  // true = visibility-management mode
 static int  s_addons_offset      = 0;      // index of first visible item in carousel
-static int  s_enabled_indices[3];          // subset of s_addon_defs[] that are enabled
+static int  s_enabled_indices[NUM_ADDONS]; // subset of s_addon_defs[] that are enabled
 static int  s_enabled_count      = 0;
 
 static lv_obj_t *s_fist_btn_l = nullptr;
@@ -233,11 +238,11 @@ static void exitManageMode() {
     if (s_addons_btn_r_text) lv_label_set_text(s_addons_btn_r_text, T_SELECT);
 }
 static void refresh_addons_labels() {
-    lv_obj_t *rows[3]  = { ui_AddonsItem0, ui_AddonsItem1, ui_AddonsItem2 };
-    lv_obj_t *texts[3] = { s_addons_item0_text, s_addons_item1_text, s_addons_item2_text };
+    lv_obj_t *rows[ADDONS_VISIBLE_ROWS]  = { ui_AddonsItem0, ui_AddonsItem1, ui_AddonsItem2, ui_AddonsItem3 };
+    lv_obj_t *texts[ADDONS_VISIBLE_ROWS] = { s_addons_item0_text, s_addons_item1_text, s_addons_item2_text, s_addons_item3_text };
     const int count = s_addons_manage_mode ? NUM_ADDONS : s_enabled_count;
 
-    for (int row = 0; row < 3; row++) {
+    for (int row = 0; row < ADDONS_VISIBLE_ROWS; row++) {
         if (!rows[row]) continue;
         int listPos = s_addons_offset + row;
         if (listPos < count) {
@@ -285,6 +290,7 @@ void addonsSyncSelectionVisual(void) {
         if (ui_AddonsItem0) lv_obj_add_flag(ui_AddonsItem0, LV_OBJ_FLAG_HIDDEN);
         if (ui_AddonsItem1) lv_obj_add_flag(ui_AddonsItem1, LV_OBJ_FLAG_HIDDEN);
         if (ui_AddonsItem2) lv_obj_add_flag(ui_AddonsItem2, LV_OBJ_FLAG_HIDDEN);
+        if (ui_AddonsItem3) lv_obj_add_flag(ui_AddonsItem3, LV_OBJ_FLAG_HIDDEN);
         return;
     }
 
@@ -294,7 +300,7 @@ void addonsSyncSelectionVisual(void) {
 
     // Scroll carousel so the selected item is always visible
     if (s_addons_selected < s_addons_offset)        s_addons_offset = s_addons_selected;
-    if (s_addons_selected >= s_addons_offset + 3)   s_addons_offset = s_addons_selected - 2;
+    if (s_addons_selected >= s_addons_offset + ADDONS_VISIBLE_ROWS)   s_addons_offset = s_addons_selected - (ADDONS_VISIBLE_ROWS - 1);
     if (s_addons_offset < 0) s_addons_offset = 0;
 
     // Focus the row button that corresponds to the selected item
@@ -304,6 +310,7 @@ void addonsSyncSelectionVisual(void) {
         if      (focusRow == 0 && ui_AddonsItem0) focusTarget = ui_AddonsItem0;
         else if (focusRow == 1 && ui_AddonsItem1) focusTarget = ui_AddonsItem1;
         else if (focusRow == 2 && ui_AddonsItem2) focusTarget = ui_AddonsItem2;
+        else if (focusRow == 3 && ui_AddonsItem3) focusTarget = ui_AddonsItem3;
         if (focusTarget) lv_group_focus_obj(focusTarget);
     }
 
@@ -792,6 +799,13 @@ static void event_addons_item2(lv_event_t *e) {
     }
 }
 
+static void event_addons_item3(lv_event_t *e) {
+    if (lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED) {
+        s_addons_selected = s_addons_offset + 3;
+        addonsActivateSelection();
+    }
+}
+
 static void event_fist_screen(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
         screenmachine(e);
@@ -1057,6 +1071,16 @@ void ui_Addons_screen_init(void) {
     lv_obj_center(s_addons_item2_text);
     lv_obj_set_style_text_font(s_addons_item2_text, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
 
+    ui_AddonsItem3 = lv_btn_create(ui_Addons);
+    lv_obj_set_size(ui_AddonsItem3, 300, 34);
+    lv_obj_set_align(ui_AddonsItem3, LV_ALIGN_TOP_MID);
+    lv_obj_set_y(ui_AddonsItem3, 165);
+    applyAddonRowStyle(ui_AddonsItem3, 3);
+    lv_obj_add_event_cb(ui_AddonsItem3, event_addons_item3, LV_EVENT_SHORT_CLICKED, NULL);
+    s_addons_item3_text = lv_label_create(ui_AddonsItem3);
+    lv_obj_center(s_addons_item3_text);
+    lv_obj_set_style_text_font(s_addons_item3_text, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+
     ui_AddonsButtonL = lv_btn_create(ui_Addons);
     lv_obj_set_size(ui_AddonsButtonL, 100, 30);
     lv_obj_set_align(ui_AddonsButtonL, LV_ALIGN_BOTTOM_LEFT);
@@ -1095,6 +1119,7 @@ void ui_Addons_screen_init(void) {
     lv_group_add_obj(ui_g_addons, ui_AddonsItem0);
     lv_group_add_obj(ui_g_addons, ui_AddonsItem1);
     lv_group_add_obj(ui_g_addons, ui_AddonsItem2);
+    lv_group_add_obj(ui_g_addons, ui_AddonsItem3);
 
     addonsSyncSelectionVisual();
 }

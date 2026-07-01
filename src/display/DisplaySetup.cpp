@@ -78,19 +78,21 @@ static uint32_t my_tick_function() {
 }
 
 static void my_touchpad_read(lv_indev_t *drv, lv_indev_data_t *data) {
+  (void)drv;
   M5.update();
+  data->state = LV_INDEV_STATE_RELEASED;
   auto count = M5.Touch.getCount();
 
-  if (touch_disabled != true) {
-    screensaver_check_activity();
-    if (count == 0) {
-      data->state = LV_INDEV_STATE_RELEASED;
-    } else {
-      auto touch = M5.Touch.getDetail(0);
-      data->state   = LV_INDEV_STATE_PRESSED;
-      data->point.x = touch.x;
-      data->point.y = touch.y;
-    }
+  if (touch_disabled == true) {
+    return;
+  }
+
+  screensaver_check_activity();
+  if (count > 0) {
+    auto touch = M5.Touch.getDetail(0);
+    data->state   = LV_INDEV_STATE_PRESSED;
+    data->point.x = touch.x;
+    data->point.y = touch.y;
   }
 }
 

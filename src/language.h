@@ -57,6 +57,7 @@
 //#define T_DARKM             "Dark Mode"
 #define T_VIBRATE           "Vibrate"
 #define T_TOUCHSETTING      "Touch Disabled"
+#define T_SAFESTARTSTOP     "Slow Start/Stop"
 #define T_STROKEINVERT      "Stroke inverted"
 #define T_SLEEP             "Sleep"
 #define T_ESP_NOW           "ESP-NOW"

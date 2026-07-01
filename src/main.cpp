@@ -12,6 +12,7 @@
 #include "buttonhandlers/ButtonHandlers.h"
 #include "addons/Eject.h"
 #include "addons/FistIT.h"
+#include "addons/AP-mode.h"
 #include "communication/EspNowComm.h"
 #include "communication/CommManager.h"
 #include "screens/ScreenHandler.h"
@@ -41,6 +42,7 @@ void setup(){
   espNowInit();
   EjectSetAddonEnabled(true);
   FistITSetAddonEnabled(true);
+  APModeSetAddonEnabled(true);
   commInit();
   displayInit();  // display, LVGL, touchpad
   ui_init();

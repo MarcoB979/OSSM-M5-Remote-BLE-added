@@ -32,3 +32,10 @@ String bleCommGetMachineStateName(bool lowerCase);
 
 // Unified BLE streaming command bridge.
 bool bleCommSendStreamCommand(int position, int durationMs);
+
+// Advanced Penetration characteristic bridge.
+bool bleCommReadAdvancedConfig(String* outConfig);
+bool bleCommReadAdvancedStatus(String* outStatus);
+bool bleCommReadAdvancedPresets(String* outPresets);
+bool bleCommWriteAdvancedControl(const String& payload);
+bool bleCommWriteAdvancedPresets(const String& payload);
