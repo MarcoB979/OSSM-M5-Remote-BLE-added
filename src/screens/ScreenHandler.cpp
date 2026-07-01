@@ -1659,6 +1659,8 @@ void handleScreens() {
 //        if (lv_obj_has_state(ui_TouchDisable, LV_STATE_CHECKED) == 1) {
 //            touch_disabled = true;
 //        }
+        touch_disabled = false;
+
         if (click2_short_waspressed) {
             lv_obj_send_event(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {
@@ -1678,6 +1680,7 @@ void handleScreens() {
 //        if (lv_obj_has_state(ui_TouchDisable, LV_STATE_CHECKED) == 1) {
 //            touch_disabled = true;
 //        }
+        touch_disabled = true;
         const bool invertStroke = ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED);
         const bool depthSliderDragged = lv_slider_is_dragged(ui_homedepthslider);
         const bool strokeSliderDragged = lv_slider_is_dragged(ui_homestrokeslider);
@@ -1909,6 +1912,7 @@ void handleScreens() {
 //        if (lv_obj_has_state(ui_ui_TouchDisable, LV_STATE_CHECKED) == 1) {
 //           touch_disabled = true;
 //        }
+        touch_disabled = false;
         if (encoder4.getCount() > encoder4_enc + 1) {
             lv_group_focus_next(ui_g_menu);
             encoder4_enc = encoder4.getCount();
@@ -1930,6 +1934,8 @@ void handleScreens() {
 
     case ST_UI_STROKE:
     {
+        touch_disabled = false;
+
         const bool shouldRehome = (s_prev_st_screens != ST_UI_STROKE && s_prev_st_screens != ST_UI_HOME && s_prev_st_screens != ST_UI_PATTERN) && (
             (s_prev_st_screens == ST_UI_START || s_prev_st_screens < 0) ||
             (s_prev_st_screens == ST_UI_STREAMING) ||
@@ -1942,6 +1948,7 @@ void handleScreens() {
 
     case ST_UI_COLORS:
     {
+        touch_disabled = false;
         if (encoder4.getCount() > encoder4_enc + 2) {
             colorsScrollFocus(1);
             encoder4_enc = encoder4.getCount();
@@ -1959,6 +1966,7 @@ void handleScreens() {
 
     case ST_UI_STREAMING:
     {
+        touch_disabled = true;
         const bool firstEntry = (s_prev_st_screens != ST_UI_STREAMING);
         streamingScreenHandle(firstEntry);
     }
@@ -1966,6 +1974,7 @@ void handleScreens() {
 
     case ST_UI_ADDONS:
     {
+        touch_disabled = false;
         if (encoder4.getCount() > encoder4_enc + 2) {
             addonsMoveSelection(1);
             encoder4_enc = encoder4.getCount();
@@ -1989,6 +1998,7 @@ void handleScreens() {
 //        if (lv_obj_has_state(ui_TouchDisable, LV_STATE_CHECKED) == 1) {
 //            touch_disabled = true;
 //        }
+        touch_disabled = false;
         if (encoder4.getCount() > encoder4_enc + 2) {
             //LogDebug("next");
             uint32_t t = LV_KEY_DOWN;
@@ -2068,6 +2078,7 @@ void handleScreens() {
 
     case ST_UI_EJECTSETTINGS:
     {
+        touch_disabled = true;
         ButtonEvents events = {
             click2_short_waspressed,
             mxclick_short_waspressed,
@@ -2079,6 +2090,7 @@ void handleScreens() {
 
     case ST_UI_FISTIT:
     {
+        touch_disabled = true;
         ButtonEvents events = {
             click2_short_waspressed,
             mxclick_short_waspressed,
@@ -2090,7 +2102,7 @@ void handleScreens() {
 
     case ST_UI_APMODE:
     {
-        touch_disabled = false;
+        touch_disabled = true;
         ButtonEvents events = {
             click2_short_waspressed,
             mxclick_short_waspressed,

@@ -111,6 +111,33 @@ static lv_color_t colorFrom565(uint16_t c) {
     return lv_color_make(r, g, b);
 }
 
+static uint16_t controlColor565ForIndex(int index) {
+    if (index < 0) index = 0;
+    if (index >= (int)(sizeof(s_ap_colors_565) / sizeof(s_ap_colors_565[0]))) {
+        index = (int)(sizeof(s_ap_colors_565) / sizeof(s_ap_colors_565[0])) - 1;
+    }
+    return s_ap_colors_565[index];
+}
+
+static uint16_t controlColor565ForName(const std::string &name, int fallbackIndex = 0) {
+    if (name == "Max Depth" || name == "Top") return controlColor565ForIndex(0);
+    if (name == "Min Depth" || name == "Bottom") return controlColor565ForIndex(1);
+    if (name == "In Speed" || name == "Rise") return controlColor565ForIndex(2);
+    if (name == "Out Speed" || name == "Fall") return controlColor565ForIndex(3);
+    if (name == "In Accel" || name == "CurveIn") return controlColor565ForIndex(4);
+    if (name == "Out Accel" || name == "CurveOut") return controlColor565ForIndex(5);
+    if (name == "SP") return controlColor565ForIndex(6);
+    return controlColor565ForIndex(fallbackIndex);
+}
+
+static int selectedPairStartIndex() {
+    if (s_control_names.size() < 2) return 0;
+    int index = s_base_index;
+    if (index < 0) index = 0;
+    if (index >= (int)s_control_names.size() - 1) index = (int)s_control_names.size() - 2;
+    return (index / 2) * 2;
+}
+
 static bool ensureModifierCanvasBuffer(int canvasW, int canvasH) {
     if (canvasW <= 0 || canvasH <= 0) return false;
 
@@ -718,7 +745,8 @@ static void handleRightShortAction() {
     LogDebug("[AP] Right button short press");
     s_last_ui_input_ms = millis();
     if (s_preset_mode) {
-        s_preset_mode = false;
+        //s_preset_mode = false;
+        leaveApToAddons();
         s_needs_redraw = true;
         LogDebug("[AP] Exiting preset mode");
     } else if (s_modifier_view) {
@@ -1181,7 +1209,16 @@ static void drawApScreen() {
     const int focusedValue = s_modifier_view ? modInt : baseInt;
     lv_label_set_text(s_title_label, focusedName.c_str());
     lv_label_set_text_fmt(s_state_label, "Speed %d", speedInt);
-//    lv_label_set_text(s_transport_label, "Enc1 speed");
+
+    if (s_transport_label) {
+        if (s_modifier_view && !baseName.empty()) {
+            lv_label_set_text(s_transport_label, baseName.c_str());
+            lv_obj_clear_flag(s_transport_label, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_label_set_text(s_transport_label, "");
+            lv_obj_add_flag(s_transport_label, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
 
     for (int i = 0; i < 6; ++i) {
         if (!s_tabs[i] || !s_tab_labels[i]) continue;
@@ -1195,8 +1232,9 @@ static void drawApScreen() {
 
             const bool active = (!s_preset_mode && ((s_modifier_view && s_modifier_index == i) ||
                                                     (!s_modifier_view && s_base_index == i)));
-            lv_color_t c = active ? colorFrom565(s_ap_colors_565[i]) : lv_color_hex(0x3A3A3A);
+            lv_color_t c = active ? colorFrom565(controlColor565ForName(baseName, s_base_index)) : lv_color_hex(0x3A3A3A);
             lv_obj_set_style_bg_color(s_tabs[i], c, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_set_style_text_color(s_tab_labels[i], active ? lv_color_hex(0x000000) : lv_color_hex(0xDDE6F0), LV_PART_MAIN | LV_STATE_DEFAULT);
         } else {
             lv_obj_add_flag(s_tabs[i], LV_OBJ_FLAG_HIDDEN);
         }
@@ -1204,19 +1242,29 @@ static void drawApScreen() {
 
     updateCurvePreview(baseName);
 
+    const int pairStart = selectedPairStartIndex();
+    const std::string leftMeterName = (pairStart >= 0 && pairStart < (int)s_control_names.size()) ? s_control_names[pairStart] : std::string();
+    const std::string rightMeterName = (pairStart + 1 >= 0 && pairStart + 1 < (int)s_control_names.size()) ? s_control_names[pairStart + 1] : std::string();
+    const float leftMeterValue = leftMeterName.empty() ? 0.0f : getSettingValue(leftMeterName, 0.0f);
+    const float rightMeterValue = rightMeterName.empty() ? 0.0f : getSettingValue(rightMeterName, 0.0f);
+
     if (s_left_meter_fill && s_left_meter_bg) {
         const int meterH = lv_obj_get_height(s_left_meter_bg) - 4;
-        int fill = (meterH * speedInt) / 100;
+        int fill = (int)((meterH * leftMeterValue) / 100.0f);
         if (fill < 2) fill = 2;
         if (fill > meterH) fill = meterH;
+        lv_obj_set_style_bg_color(s_left_meter_fill, colorFrom565(controlColor565ForName(leftMeterName, pairStart)), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(s_left_meter_fill, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_height(s_left_meter_fill, fill);
         lv_obj_set_y(s_left_meter_fill, (lv_obj_get_height(s_left_meter_bg) - 2) - fill);
     }
     if (s_right_meter_fill && s_right_meter_bg) {
         const int meterH = lv_obj_get_height(s_right_meter_bg) - 4;
-        int fill = (meterH * focusedValue) / 100;
+        int fill = (int)((meterH * rightMeterValue) / 100.0f);
         if (fill < 2) fill = 2;
         if (fill > meterH) fill = meterH;
+        lv_obj_set_style_bg_color(s_right_meter_fill, colorFrom565(controlColor565ForName(rightMeterName, pairStart + 1)), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_opa(s_right_meter_fill, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_height(s_right_meter_fill, fill);
         lv_obj_set_y(s_right_meter_fill, (lv_obj_get_height(s_right_meter_bg) - 2) - fill);
     }
@@ -1253,11 +1301,11 @@ static void drawApScreen() {
         if (s_preset_mode) {
             lv_label_set_text(s_btn_l_label, "Back");
             lv_label_set_text(s_btn_m_label, "Select");
-            lv_label_set_text(s_btn_r_label, "Back");
+            lv_label_set_text(s_btn_r_label, "Close");
         } else if (s_modifier_view) {
             lv_label_set_text(s_btn_l_label, "Back");
             lv_label_set_text(s_btn_m_label, s_running ? "Pause" : "Run");
-            lv_label_set_text(s_btn_r_label, "Return");
+            lv_label_set_text(s_btn_r_label, "Close");
         } else {
             lv_label_set_text(s_btn_l_label, "Presets");
             lv_label_set_text(s_btn_m_label, s_running ? "Pause" : "Run");
@@ -1318,8 +1366,8 @@ static void createScreenIfNeeded() {
     s_title_label = lv_label_create(s_screen);
     lv_obj_set_align(s_title_label, LV_ALIGN_TOP_LEFT);
     lv_obj_set_x(s_title_label, 92);
-    lv_obj_set_y(s_title_label, 4);
-    lv_obj_set_style_text_font(s_title_label, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_y(s_title_label, 6); //was 4
+    lv_obj_set_style_text_font(s_title_label, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(s_title_label, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_text(s_title_label, "AP");
 
@@ -1361,6 +1409,8 @@ static void createScreenIfNeeded() {
     lv_obj_set_x(s_transport_label, 8);
     lv_obj_set_y(s_transport_label, 54);
     lv_obj_set_style_text_font(s_transport_label, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_label_set_text(s_transport_label, "");
+    lv_obj_add_flag(s_transport_label, LV_OBJ_FLAG_HIDDEN);
 
     const int tabsY = 32;
     const int tabGap = 4;
@@ -1376,6 +1426,7 @@ static void createScreenIfNeeded() {
         s_tab_labels[i] = lv_label_create(s_tabs[i]);
         lv_obj_center(s_tab_labels[i]);
         lv_obj_set_style_text_font(s_tab_labels[i], &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_color(s_tab_labels[i], lv_color_hex(0xDDE6F0), LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_label_set_text(s_tab_labels[i], "0");
     }
 
@@ -1466,6 +1517,7 @@ static void createScreenIfNeeded() {
     lv_obj_set_x(s_left_meter_fill, 2);
     lv_obj_set_y(s_left_meter_fill, 100);
     lv_obj_set_style_bg_color(s_left_meter_fill, lv_color_hex(0xF8FAFC), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(s_left_meter_fill, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(s_left_meter_fill, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_radius(s_left_meter_fill, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_clear_flag(s_left_meter_fill, LV_OBJ_FLAG_SCROLLABLE);
@@ -1485,6 +1537,7 @@ static void createScreenIfNeeded() {
     lv_obj_set_x(s_right_meter_fill, 2);
     lv_obj_set_y(s_right_meter_fill, 100);
     lv_obj_set_style_bg_color(s_right_meter_fill, lv_color_hex(0xF97316), LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_set_style_bg_opa(s_right_meter_fill, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(s_right_meter_fill, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_radius(s_right_meter_fill, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_clear_flag(s_right_meter_fill, LV_OBJ_FLAG_SCROLLABLE);
@@ -1504,7 +1557,7 @@ static void createScreenIfNeeded() {
     lv_obj_set_style_text_color(s_warning_label, lv_color_hex(0xF59E0B), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(s_warning_label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_long_mode(s_warning_label, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(s_warning_label, "");
+    lv_label_set_text(s_warning_label, "warning label");
     lv_obj_add_flag(s_warning_label, LV_OBJ_FLAG_HIDDEN);
 
     s_btn_l = lv_btn_create(s_screen);
@@ -1553,7 +1606,8 @@ static void createScreenIfNeeded() {
     lv_obj_set_style_text_font(s_help_label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(s_help_label, lv_color_hex(0x94A3B8), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_long_mode(s_help_label, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(s_help_label, "AP-Mode loading...");
+//    lv_label_set_text(s_help_label, "AP-Mode loading...");
+    lv_label_set_text(s_help_label, "");
 }
 
 static void resetLocalEncoders() {
@@ -1744,12 +1798,18 @@ void APModeHandleScreen(const ButtonEvents &events) {
 
         if (d4 != 0) {
             s_last_ui_input_ms = millis();
-            if (!s_preset_mode && (int)s_control_names.size() > 1 && !s_modifier_names.empty()) {
-                std::string key = s_control_names[s_base_index] + s_modifier_names[s_modifier_index];
-                Control *mod = getSetting(key);
-                int current = mod ? (int)(mod->value + 0.5f) : 0;
-                if (setModifierValue(current + d4)) {
-                    s_needs_redraw = true;
+            if (!s_preset_mode && (int)s_control_names.size() > 1) {
+                if (s_modifier_view && !s_modifier_names.empty()) {
+                    std::string key = s_control_names[s_base_index] + s_modifier_names[s_modifier_index];
+                    Control *mod = getSetting(key);
+                    int current = mod ? (int)(mod->value + 0.5f) : 0;
+                    if (setModifierValue(current + d4 * 5)) {
+                        s_needs_redraw = true;
+                    }
+                } else if (!s_modifier_view) {
+                    Control *base = getSetting(s_control_names[s_base_index]);
+                    int current = base ? (int)(base->value + 0.5f) : 0;
+                    if (setBaseValue(current + d4 * 5)) s_needs_redraw = true;
                 }
             }
         }
