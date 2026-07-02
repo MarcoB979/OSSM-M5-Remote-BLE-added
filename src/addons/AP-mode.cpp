@@ -103,6 +103,9 @@ static long s_enc2 = 0;
 static long s_enc3 = 0;
 static long s_enc4 = 0;
 static const uint16_t s_ap_colors_565[7] = {0xf860, 0xfc00, 0xffe0, 0x07e0, 0x001f, 0xa87d, 0xf81f};
+static constexpr float k_graph_plot_x_margin = 2.0f;
+static constexpr float k_graph_plot_y_top_margin = -12.0f;
+static constexpr float k_graph_plot_y_bottom_margin = 17.0f;
 
 static lv_color_t colorFrom565(uint16_t c) {
     uint8_t r = (uint8_t)((((c >> 11) & 0x1F) * 255U) / 31U);
@@ -788,7 +791,6 @@ static void event_btn_r(lv_event_t *e) {
 static void setHorizontalGuide(lv_obj_t *line, int x, int y, int width, uint16_t color) {
     if (!line) return;
     if (x < 0) x = 0;
-    if (y < 0) y = 0;
     lv_obj_set_size(line, width, 2);
     lv_obj_set_x(line, x);
     lv_obj_set_y(line, y);
@@ -798,7 +800,6 @@ static void setHorizontalGuide(lv_obj_t *line, int x, int y, int width, uint16_t
 static void setVerticalGuide(lv_obj_t *line, int x, int y, int height, uint16_t color) {
     if (!line) return;
     if (x < 0) x = 0;
-    if (y < 0) y = 0;
     lv_obj_set_size(line, 2, height);
     lv_obj_set_x(line, x);
     lv_obj_set_y(line, y);
@@ -900,9 +901,22 @@ static void drawSingleModifierTrace(int controlIndex, int traceIndex, bool highl
     int segmentIndex = 0;
     int segment = 0;
     int guard = 0;
+    int zeroStepGuard = 0;
     while (startX < (xMin + xSpan) && guard < 96 && segmentIndex < k_modifier_trace_segments) {
         const int stepIndex = std::min(segment + 1, modCount - 1);
-        const float step = std::max(1.0f, getSettingValue(controlName + s_modifier_names[stepIndex], 1.0f)) * stepWidth;
+        const float rawStep = getSettingValue(controlName + s_modifier_names[stepIndex], 0.0f);
+        const float step = std::max(0.0f, rawStep) * stepWidth;
+
+        // Keep phase/offset behavior stable when "steps at min/max" is zero.
+        // Zero-length segments should be skipped (instant transition), not drawn as holds.
+        if (step <= 0.0f) {
+            segment = (segment + 1) % 4;
+            ++zeroStepGuard;
+            if (zeroStepGuard >= 8) break;
+            continue;
+        }
+        zeroStepGuard = 0;
+
         const float endX = startX + step;
 
         float y0 = baseY;
@@ -960,12 +974,17 @@ static void updateModifierPreview() {
         if (modSteps > maxSteps) maxSteps = modSteps;
     }
 
+    const float plotX = k_graph_plot_x_margin;
+    const float plotY = k_graph_plot_y_top_margin;
+    const float plotW = std::max(2.0f, (float)panelW - (k_graph_plot_x_margin * 2.0f));
+    const float plotH = std::max(2.0f, (float)panelH - (k_graph_plot_y_top_margin + k_graph_plot_y_bottom_margin));
+
     for (int c = 0; c < traceCount; ++c) {
-        drawSingleModifierTrace(c, c, c == s_base_index, 0, 300, 0, 150, maxSteps);
+        drawSingleModifierTrace(c, c, false, plotX, plotW, plotY, plotH, maxSteps);
     }
-    drawSingleModifierTrace(s_base_index, s_base_index, true, 0, 300, 0, 150, maxSteps);
-    drawSingleModifierTrace(s_base_index, s_base_index, true, 1, 300, 0, 150, maxSteps);
-    drawSingleModifierTrace(s_base_index, s_base_index, true, 1, 301, 1, 151, maxSteps);
+    drawSingleModifierTrace(s_base_index, s_base_index, true, plotX, plotW, plotY, plotH, maxSteps);
+    drawSingleModifierTrace(s_base_index, s_base_index, true, plotX + 1.0f, plotW, plotY, plotH, maxSteps);
+    drawSingleModifierTrace(s_base_index, s_base_index, true, plotX + 1.0f, plotW, plotY + 1.0f, plotH, maxSteps);
 }
 
 static void updateCurvePreview(const std::string &baseName) {
@@ -975,10 +994,10 @@ static void updateCurvePreview(const std::string &baseName) {
     const int panelH = lv_obj_get_height(s_graph_panel);
     if (panelW < 6 || panelH < 6) return;
 
-    const float xMin = 1.0f;
-    const float xSpan = (float)(panelW - 4);
-    const float yMin = 1.0f;
-    const float ySpan = (float)(panelH - 4);
+    const float xMin = k_graph_plot_x_margin;
+    const float xSpan = std::max(2.0f, (float)panelW - (k_graph_plot_x_margin * 2.0f));
+    const float yMin = k_graph_plot_y_top_margin;
+    const float ySpan = std::max(2.0f, (float)panelH - (k_graph_plot_y_top_margin + k_graph_plot_y_bottom_margin));
 
     const int sampleMain = (int)(sizeof(s_curve_main_pts) / sizeof(s_curve_main_pts[0]));
     const int sampleMod = (int)(sizeof(s_curve_mod_pts) / sizeof(s_curve_mod_pts[0]));
@@ -1272,13 +1291,15 @@ static void drawApScreen() {
     if (!s_modifier_view && s_control_names.size() >= 2) {
         const int panelW = lv_obj_get_width(s_graph_panel);
         const int panelH = lv_obj_get_height(s_graph_panel);
-        const int innerW = panelW - 2;
+        const int innerW = (int)std::max(2.0f, (float)panelW - (k_graph_plot_x_margin * 2.0f));
+        const float yMin = k_graph_plot_y_top_margin;
+        const float ySpan = std::max(2.0f, (float)panelH - (k_graph_plot_y_top_margin + k_graph_plot_y_bottom_margin));
         const float topValue = getSettingValue(s_control_names[0], 50.0f);
         const float bottomValue = getSettingValue(s_control_names[1], 50.0f);
-        const int topY = 1 + (int)((1.0f - topValue / 100.0f) * (float)(panelH - 4));
-        const int bottomY = 1 + (int)((1.0f - bottomValue / 100.0f) * (float)(panelH - 4));
-        setHorizontalGuide(s_top_line, 1, topY, innerW, 0xF860);
-        setHorizontalGuide(s_bottom_line, 1, bottomY, innerW, 0xFC00);
+        const int topY = (int)(yMin + (1.0f - topValue / 100.0f) * ySpan);
+        const int bottomY = (int)(yMin + (1.0f - bottomValue / 100.0f) * ySpan);
+        setHorizontalGuide(s_top_line, (int)k_graph_plot_x_margin, topY, innerW, 0xF860);
+        setHorizontalGuide(s_bottom_line, (int)k_graph_plot_x_margin, bottomY, innerW, 0xFC00);
         lv_obj_clear_flag(s_top_line, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(s_bottom_line, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -1364,9 +1385,9 @@ static void createScreenIfNeeded() {
     lv_obj_add_event_cb(s_hdr_r, event_hdr_r, LV_EVENT_SHORT_CLICKED, nullptr);
 */
     s_title_label = lv_label_create(s_screen);
-    lv_obj_set_align(s_title_label, LV_ALIGN_TOP_LEFT);
-    lv_obj_set_x(s_title_label, 92);
-    lv_obj_set_y(s_title_label, 6); //was 4
+    lv_obj_set_align(s_title_label, LV_ALIGN_TOP_MID);
+    lv_obj_set_x(s_title_label, 0);
+    lv_obj_set_y(s_title_label, 8); //was 4
     lv_obj_set_style_text_font(s_title_label, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(s_title_label, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_text(s_title_label, "AP");
