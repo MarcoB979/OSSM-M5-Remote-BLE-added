@@ -22,6 +22,8 @@ static const char* OSSM_BLE_SERVICE_UUID = "522b443a-4f53-534d-0001-420badbabe69
 static const char* OSSM_BLE_COMMAND_CHAR_UUID = "522b443a-4f53-534d-1000-420badbabe69";
 static const char* OSSM_BLE_SPEED_KNOB_CHAR_UUID = "522b443a-4f53-534d-1010-420badbabe69";
 static const char* OSSM_BLE_STATE_CHAR_UUID = "522b443a-4f53-534d-2000-420badbabe69";
+static const char* OSSM_BLE_PATTERNS_CHAR_UUID = "522b443a-4f53-534d-3000-420badbabe69";
+static const char* OSSM_BLE_PATTERN_DATA_CHAR_UUID = "522b443a-4f53-534d-3010-420badbabe69";
 static const char* ADVANCED_STATUS_CHAR_UUID = "4F53534D-6164-7661-6E63-656473746174";
 static const char* ADVANCED_CONFIG_CHAR_UUID = "4F53534D-6164-7661-6E63-6564636F6E66";
 static const char* ADVANCED_CONTROL_CHAR_UUID = "4F53534D-6164-7661-6E63-6564636F6E74";
@@ -46,6 +48,8 @@ static NimBLEClient* g_client = nullptr;
 static NimBLERemoteCharacteristic* g_cmd = nullptr;
 static NimBLERemoteCharacteristic* g_speedKnob = nullptr;
 static NimBLERemoteCharacteristic* g_state = nullptr;
+static NimBLERemoteCharacteristic* g_patterns = nullptr;
+static NimBLERemoteCharacteristic* g_patternData = nullptr;
 static NimBLERemoteCharacteristic* g_adv_status = nullptr;
 static NimBLERemoteCharacteristic* g_adv_config = nullptr;
 static NimBLERemoteCharacteristic* g_adv_control = nullptr;
@@ -68,6 +72,7 @@ static MachineMode g_machineMode = MachineMode::Unknown;
 static String g_machineStateName;
 static uint32_t g_lastStateUpdateMs = 0;
 static uint32_t g_lastPollInfoMs = 0;
+static uint32_t g_lastRawStateLogMs = 0;
 static uint32_t g_pollReadOkCount = 0;
 static uint32_t g_pollReadFailCount = 0;
 static float g_unpauseSpeed = 0.0f;
@@ -80,6 +85,7 @@ struct ConfirmedMachineState {
   MachineMode mode = MachineMode::Unknown;
   float speed = 0.0f;
   float depth = 0.0f;
+  float position = -1.0f;
   float stroke = 0.0f;
   float sensation = 0.0f;
   float pattern = 0.0f;
@@ -101,16 +107,81 @@ static bool canAdvancedWrite(const NimBLERemoteCharacteristic* characteristic) {
   return characteristic && (characteristic->canWrite() || characteristic->canWriteNoResponse());
 }
 
+static float extractJsonNumberValue(const String& text, const String& key) {
+  String pattern = String("\"") + key + String("\"");
+  int keyPos = text.indexOf(pattern);
+  if (keyPos < 0) return -1.0f;
+
+  int colonPos = text.indexOf(':', keyPos + pattern.length());
+  if (colonPos < 0) return -1.0f;
+
+  int pos = colonPos + 1;
+  while (pos < text.length()) {
+    char c = text.charAt(pos);
+    if ((c >= '0' && c <= '9') || c == '-' || c == '.') break;
+    ++pos;
+  }
+  if (pos >= text.length()) return -1.0f;
+
+  int end = pos;
+  while (end < text.length()) {
+    char c = text.charAt(end);
+    if (!((c >= '0' && c <= '9') || c == '.' || c == '-')) break;
+    ++end;
+  }
+  if (end <= pos) return -1.0f;
+
+  return text.substring(pos, end).toFloat();
+}
+
 static void pumpUiDuringModeWait() {
   // Keep status icons and screen rendering responsive while mode gating loops.
   screenForceStatusStripRefreshNow();
   lv_task_handler();
 }
 
+static int extractPatternOptionsFromJson(const String& json, String* outOptions) {
+  if (!outOptions) return 0;
+  outOptions->remove(0);
+
+  int count = 0;
+  int searchPos = 0;
+  while (searchPos < json.length()) {
+    int nameKeyPos = json.indexOf("\"name\"", searchPos);
+    if (nameKeyPos < 0) break;
+
+    int colonPos = json.indexOf(':', nameKeyPos + 6);
+    if (colonPos < 0) break;
+
+    int startQuote = json.indexOf('"', colonPos + 1);
+    if (startQuote < 0) break;
+
+    int endQuote = json.indexOf('"', startQuote + 1);
+    if (endQuote < 0) break;
+
+    String name = json.substring(startQuote + 1, endQuote);
+    name.trim();
+    name.replace("\r", " ");
+    name.replace("\n", " ");
+
+    if (name.length() > 0) {
+      if (outOptions->length() > 0) outOptions->concat("\n");
+      outOptions->concat(name);
+      ++count;
+    }
+
+    searchPos = endQuote + 1;
+  }
+
+  return count;
+}
+
 static void bleResetClient() {
   g_cmd = nullptr;
   g_speedKnob = nullptr;
   g_state = nullptr;
+  g_patterns = nullptr;
+  g_patternData = nullptr;
   g_adv_status = nullptr;
   g_adv_config = nullptr;
   g_adv_control = nullptr;
@@ -238,11 +309,12 @@ static void updateCachedMachineState(const String& stateRaw) {
     g_machineMode = parseMachineMode(parsedStateName);
   }
 
-  float parsedSpeed = extractValueAfterKey(stateRaw, "speed");
-  float parsedStroke = extractValueAfterKey(stateRaw, "stroke");
-  float parsedSensation = extractValueAfterKey(stateRaw, "sensation");
-  float parsedDepth = extractValueAfterKey(stateRaw, "depth");
-  float parsedPattern = extractValueAfterKey(stateRaw, "pattern");
+  float parsedSpeed = extractJsonNumberValue(stateRaw, "speed");
+  float parsedStroke = extractJsonNumberValue(stateRaw, "stroke");
+  float parsedSensation = extractJsonNumberValue(stateRaw, "sensation");
+  float parsedDepth = extractJsonNumberValue(stateRaw, "depth");
+  float parsedPattern = extractJsonNumberValue(stateRaw, "pattern");
+  float parsedPosition = extractJsonNumberValue(stateRaw, "position");
 
   g_confirmedState.valid = true;
   g_confirmedState.raw = stateRaw;
@@ -250,6 +322,7 @@ static void updateCachedMachineState(const String& stateRaw) {
   g_confirmedState.mode = g_machineMode;
   if (parsedSpeed >= 0.0f) g_confirmedState.speed = parsedSpeed;
   if (parsedDepth >= 0.0f) g_confirmedState.depth = parsedDepth;
+  if (parsedPosition >= 0.0f) g_confirmedState.position = parsedPosition;
   if (parsedStroke >= 0.0f) g_confirmedState.stroke = parsedStroke;
   if (parsedSensation >= 0.0f) g_confirmedState.sensation = parsedSensation;
   if (parsedPattern >= 0.0f) g_confirmedState.pattern = parsedPattern;
@@ -294,6 +367,25 @@ static bool bleReadRawCharacteristic(NimBLERemoteCharacteristic* characteristic,
 
   *outValue = String(raw.c_str());
   return true;
+}
+
+static void logAdvancedSnapshotOnConnect() {
+  String payload;
+
+  auto logReadableChar = [&](const char* tag, NimBLERemoteCharacteristic* characteristic) {
+    if (canAdvancedRead(characteristic) && bleReadRawCharacteristic(characteristic, &payload) && payload.length() > 0) {
+      Serial.printf("%s %s\n", tag, payload.c_str());
+    } else {
+      Serial.printf("%s <unavailable>\n", tag);
+    }
+  };
+
+  logReadableChar("[BLE][CHAR_STATE]", g_state);
+  logReadableChar("[BLE][CHAR_CMD]", g_cmd);
+  logReadableChar("[BLE][CHAR_SPEED_KNOB]", g_speedKnob);
+
+  logReadableChar("[BLE][ADV_CONFIG]", g_adv_config);
+  logReadableChar("[BLE][ADV_STATUS]", g_adv_status);
 }
 
 static bool bleWriteRawCharacteristic(NimBLERemoteCharacteristic* characteristic, const String& payload) {
@@ -528,18 +620,31 @@ static void blePollTask(void*) {
       }
     }
 
+    /*{
+      const uint32_t now = millis();
+      if ((now - g_lastRawStateLogMs) >= 1000U) {
+        if (g_confirmedState.raw.length() > 0) {
+          Serial.printf("[BLE][RAW] %s\n", g_confirmedState.raw.c_str());
+        } else {
+          Serial.println("[BLE][RAW] <empty>");
+        }
+        g_lastRawStateLogMs = now;
+      }
+    }*/
+
     //if (showBlePollSerial) {
     #ifdef SHOWBLEPOLL
       uint32_t now = millis();
-      if ((now - g_lastPollInfoMs) >= 1000) {
+      if ((now - g_lastPollInfoMs) >= 200) {
         size_t qSize = 0;
         if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
         qSize = g_txQueue.size();
         if (g_bleMutex) xSemaphoreGive(g_bleMutex);
 
         uint32_t stateAgeMs = (g_lastStateUpdateMs == 0) ? 0 : (now - g_lastStateUpdateMs);
+        const float confirmedPosMm = g_confirmedState.position;
         Serial.printf(
-          "[BLE] poll mode=%d state=%s fresh=%d age=%lums connected=%d queue=%u ok=%lu fail=%lu speed=%.1f depth=%.1f stroke=%.1f sensation=%.1f pattern=%d running=%d maxDepth=%.1f maxSpeed=%.1f\n",
+          "[BLE] poll mode=%d state=%s fresh=%d age=%lums connected=%d queue=%u ok=%lu fail=%lu speed=%.1f depth=%.1f stroke=%.1f sensation=%.1f posMm=%.1f pattern=%d running=%d maxDepth=%.1f maxSpeed=%.1f\n",
           (int)g_machineMode,
           g_machineStateName.length() ? g_machineStateName.c_str() : "<none>",
           hasFreshState() ? 1 : 0,
@@ -552,6 +657,7 @@ static void blePollTask(void*) {
           depth,
           stroke,
           sensation,
+          confirmedPosMm,
           pattern,
           OSSM_On ? 1 : 0,
           maxdepthinmm,
@@ -617,7 +723,12 @@ static void bleTxTask(void*) {
 
 }  // namespace
 
+bool newPatternIsReadFromOSSM = false;
+String patternString;
+
 void bleCommInit() {
+  newPatternIsReadFromOSSM = false;
+
   if (!g_bleInit) {
     if (!NimBLEDevice::isInitialized()) {
       NimBLEDevice::init("M5-OSSM-Remote");
@@ -733,12 +844,16 @@ bool bleCommTryConnect() {
   g_adv_config = nullptr;
   g_adv_control = nullptr;
   g_adv_presets = nullptr;
+  g_patterns = nullptr;
+  g_patternData = nullptr;
 
   for (NimBLERemoteService* service : services) {
     if (!service) continue;
     if (!g_cmd) g_cmd = service->getCharacteristic(NimBLEUUID(OSSM_BLE_COMMAND_CHAR_UUID));
     if (!g_speedKnob) g_speedKnob = service->getCharacteristic(NimBLEUUID(OSSM_BLE_SPEED_KNOB_CHAR_UUID));
     if (!g_state) g_state = service->getCharacteristic(NimBLEUUID(OSSM_BLE_STATE_CHAR_UUID));
+    if (!g_patterns) g_patterns = service->getCharacteristic(NimBLEUUID(OSSM_BLE_PATTERNS_CHAR_UUID));
+    if (!g_patternData) g_patternData = service->getCharacteristic(NimBLEUUID(OSSM_BLE_PATTERN_DATA_CHAR_UUID));
 
     if (!g_adv_status) g_adv_status = service->getCharacteristic(NimBLEUUID(ADVANCED_STATUS_CHAR_UUID));
     if (!g_adv_config) g_adv_config = service->getCharacteristic(NimBLEUUID(ADVANCED_CONFIG_CHAR_UUID));
@@ -762,6 +877,7 @@ bool bleCommTryConnect() {
   }
   g_lastStateUpdateMs = 0;
   const bool stateOk = bleReadStateOnce();
+  logAdvancedSnapshotOnConnect();
   xSemaphoreGive(g_connectMutex);
   return stateOk || bleCommIsConnected();
 }
@@ -772,10 +888,17 @@ bool bleCommIsConnected() {
 
 void bleCommSetEnabled(bool enabled) {
   g_bleEnabled = enabled;
+  if (!enabled) {
+    newPatternIsReadFromOSSM = false;
+  }
 }
 
 bool bleCommIsEnabled() {
   return g_bleEnabled;
+}
+
+bool bleCommHasFreshState() {
+  return hasFreshState();
 }
 
 bool bleCommIsHoming() {
@@ -791,6 +914,12 @@ int bleCommGetHomingDirection() {
   return 0;
 }
 
+float bleCommGetConfirmedPosition() {
+  if (!g_confirmedState.valid) return -1.0f;
+  if (!hasFreshState()) return -1.0f;
+  return g_confirmedState.position;
+}
+
 int bleCommSetUnpauseSpeed(float speedValue) {
   g_unpauseSpeed = (float)clampPercent(speedValue);
   return (int)g_unpauseSpeed;
@@ -798,6 +927,43 @@ int bleCommSetUnpauseSpeed(float speedValue) {
 
 int bleCommGetUnpauseSpeed() {
   return (int)g_unpauseSpeed;
+}
+
+void bleCommResetPatternReadState() {
+  newPatternIsReadFromOSSM = false;
+}
+
+bool readPatternsFromOSSM() {
+  if (!bleCommTryConnect()) {
+    newPatternIsReadFromOSSM = false;
+    return false;
+  }
+
+  if (!g_patterns || !g_patterns->canRead()) {
+    newPatternIsReadFromOSSM = false;
+    return false;
+  }
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  std::string raw = g_patterns->readValue();
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+
+  if (raw.empty()) {
+    newPatternIsReadFromOSSM = false;
+    return false;
+  }
+
+  String rawJson(raw.c_str());
+  String options;
+  const int parsedCount = extractPatternOptionsFromJson(rawJson, &options);
+  if (parsedCount <= 0 || options.length() == 0) {
+    newPatternIsReadFromOSSM = false;
+    return false;
+  }
+
+  patternString = options;
+  newPatternIsReadFromOSSM = true;
+  return true;
 }
 
 
@@ -909,7 +1075,6 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
     case PATTERN: {
       int idx = (int)(value + 0.5f);
       if (idx < 0) idx = 0;
-      if (idx > 6) idx = 6;
       cmd = String("set:pattern:") + String(idx) + "\n";
       break;
     }

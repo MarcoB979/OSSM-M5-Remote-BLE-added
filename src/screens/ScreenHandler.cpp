@@ -25,6 +25,7 @@
 #include "../screens/icons.h"
 #include "language.h"
 #include <M5Unified.h>
+#include <cmath>
 #include <string>
 
 // Screen resolution constants (same as backup firmware main.h)
@@ -76,6 +77,38 @@ static bool  s_motion_command_cache_valid = false;
 static float s_last_motion_speed = 0.0f;
 static float s_last_motion_depth = 0.0f;
 static float s_last_motion_stroke = 0.0f;
+static bool  s_zero_stroke_depth_jog_active = false;
+static float s_zero_stroke_depth_target = 0.0f;
+static int   s_zero_stroke_depth_direction = 0;
+static bool  s_visual_speed_lock = false;
+static bool  s_visual_speed_ratio_valid = false;
+static float s_visual_speed_stroke_product = 0.0f;
+static bool  s_stroke_influences_depth = false;
+static float s_manual_rail_length_mm = 0.0f;
+static uint32_t s_zero_stroke_depth_jog_start_ms = 0;
+static uint32_t s_zero_stroke_debug_log_ms = 0;
+static uint32_t s_visual_speed_log_ms = 0;
+static constexpr float ZERO_STROKE_DEPTH_TOLERANCE = 1.0f;
+static constexpr uint32_t ZERO_STROKE_DEPTH_JOG_TIMEOUT_MS = 25000;
+static constexpr int SETTINGS_CAROUSEL_VISIBLE_COUNT = 4;
+static int s_settings_focus_index = 0;
+static int s_settings_scroll_offset = 0;
+static lv_obj_t* s_settings_position_label = nullptr;
+static lv_obj_t* s_manual_rail_length_setting = nullptr;
+static bool s_manual_rail_length_ui_syncing = false;
+static void resetVisualSpeedRatioState();
+static void updateVisualSpeedRatioFromUi(bool uiSpeedChanged, float uiSpeed, float uiStroke);
+static float resolveVisualCompensatedSpeed(float uiSpeed, float uiStroke);
+static void ensureManualRailLengthSetting();
+static int collectSettingsOptionObjects(lv_obj_t** outObjects, int maxObjects);
+static void refreshSettingsCarousel();
+static lv_obj_t* getSettingsFocusedObject();
+
+static void syncManualRailLengthSettingUi();
+static void persistManualRailLengthSetting();
+static void runManualRailLengthCalibrationWorkflow();
+static void manualRailLengthSetting_event_cb(lv_event_t* e);
+static float getDefaultManualRailLengthMm();
 
 bool dynamicStroke  = false;
 bool eject_status   = false;
@@ -107,8 +140,8 @@ static int           rampMs     = 0;
 static bool          rampEnabled = true;
 static int           rampValue  = 1;
 static int           rampUpValue = 2;
-static int           rampTime   = 95;
-static int           maxRamp    = 10;
+static int           rampTime   = 75;
+static int           maxRamp    = 5;
 static int           encId      = 0;
 static int           activeEncId = 0;
 
@@ -452,7 +485,8 @@ static void syncHomeSensationSliderToTransport() {
     if (!ui_homesensationslider) return;
 
     const bool bleMode = commIsBleMode();
-    const int desiredMin = bleMode ? 0 : -100;
+//    const int desiredMin = bleMode ? 0 : -100;
+    const int desiredMin = -100;
     const int desiredMax = 100;
     const lv_slider_mode_t desiredMode = bleMode ? LV_SLIDER_MODE_NORMAL : LV_SLIDER_MODE_SYMMETRICAL;
 
@@ -1099,6 +1133,8 @@ extern "C" void menuRestartAction(void)
 }
 
 void screenInit() {
+    bleCommResetPatternReadState();
+
     Preferences prefs;
     prefs.begin("m5-ctnr", false);
     eject_status = prefs.getBool("ejectAddon", false);
@@ -1106,6 +1142,12 @@ void screenInit() {
     SafeStartStop   = prefs.getBool("SafeStartStop", true);
     strokeinvert_mode = prefs.getBool("StrokeInvert", true);
     ble_force_homeing = prefs.getBool("BleForceHomeing", true);
+    s_visual_speed_lock = prefs.getBool("VisualSpeedLock", false);
+    s_stroke_influences_depth = prefs.getBool("DepthToStroke", false);
+    s_manual_rail_length_mm = getDefaultManualRailLengthMm();
+    if (prefs.isKey("RailLengthMm")) {
+        s_manual_rail_length_mm = prefs.getFloat("RailLengthMm", s_manual_rail_length_mm);
+    }
     int brightness = prefs.getInt("Brightness", 180);
     if (brightness < 5) brightness = 5;
     if (brightness > 255) brightness = 255;
@@ -1124,6 +1166,10 @@ void screenInit() {
     if (SafeStartStop)   { lv_obj_add_state(ui_safeStartStop,    LV_STATE_CHECKED); }
     if (strokeinvert_mode && ui_strokeinvert) { lv_obj_add_state(ui_strokeinvert, LV_STATE_CHECKED); }
     if (ble_force_homeing && ui_forceHome)    { lv_obj_add_state(ui_forceHome, LV_STATE_CHECKED); }
+    if (s_visual_speed_lock && ui_visualSpeedLock) { lv_obj_add_state(ui_visualSpeedLock, LV_STATE_CHECKED); }
+    if (s_stroke_influences_depth && ui_strokeDepthLink) { lv_obj_add_state(ui_strokeDepthLink, LV_STATE_CHECKED); }
+    ensureManualRailLengthSetting();
+    syncManualRailLengthSettingUi();
     if (ui_brightness_slider) {
         lv_slider_set_value(ui_brightness_slider, brightness, LV_ANIM_OFF);
     }
@@ -1211,6 +1257,23 @@ void screenmachine(lv_event_t * e) {
         st_screens = ST_UI_MENU;
     } else if (lv_scr_act() == ui_Pattern) {
         st_screens = ST_UI_PATTERN;
+
+        if (commIsBleMode()) {
+            if (readPatternsFromOSSM() && newPatternIsReadFromOSSM && patternString.length() > 0) {
+                lv_roller_set_options(ui_PatternS, patternString.c_str(), LV_ROLLER_MODE_NORMAL);
+                uint16_t optionCount = (uint16_t)lv_roller_get_option_count(ui_PatternS);
+                if (optionCount > 0) {
+                    if (pattern < 0 || pattern >= (int)optionCount) {
+                        pattern = 0;
+                    }
+                    lv_roller_set_selected(ui_PatternS, pattern, LV_ANIM_OFF);
+                }
+                newPatternIsReadFromOSSM = false;
+            }
+        } else {
+            // Keep ESP-NOW flow on default UI-defined patterns.
+            newPatternIsReadFromOSSM = false;
+        }
     } else if (lv_scr_act() == ui_Torqe) {
         st_screens = ST_UI_Torqe;
         torqe_f = lv_slider_get_value(ui_outtroqeslider);
@@ -1223,6 +1286,9 @@ void screenmachine(lv_event_t * e) {
         st_screens = ST_UI_EJECTSETTINGS;
     } else if (lv_scr_act() == ui_Settings) {
         st_screens = ST_UI_SETTINGS;
+        s_settings_focus_index = 0;
+        s_settings_scroll_offset = 0;
+        refreshSettingsCarousel();
     } else if (lv_scr_act() == ui_Stroke) {
         st_screens = ST_UI_STROKE;
         refreshStrokeStartStopUi();
@@ -1270,6 +1336,29 @@ void savesettings(lv_event_t * e) {
         prefs.putBool("BleForceHomeing", false);
         ble_force_homeing = false;
     }
+
+    if (ui_visualSpeedLock && lv_obj_has_state(ui_visualSpeedLock, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("VisualSpeedLock", true);
+        s_visual_speed_lock = true;
+        if (stroke > 0.001f) {
+            s_visual_speed_stroke_product = speed * stroke;
+            s_visual_speed_ratio_valid = true;
+        }
+    } else {
+        prefs.putBool("VisualSpeedLock", false);
+        s_visual_speed_lock = false;
+        resetVisualSpeedRatioState();
+    }
+
+    if (ui_strokeDepthLink && lv_obj_has_state(ui_strokeDepthLink, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("DepthToStroke", true);
+        s_stroke_influences_depth = true;
+    } else {
+        prefs.putBool("DepthToStroke", false);
+        s_stroke_influences_depth = false;
+    }
+
+    prefs.putFloat("RailLengthMm", s_manual_rail_length_mm);
 
     if (ui_brightness_slider) {
         int brightness = lv_slider_get_value(ui_brightness_slider);
@@ -1500,6 +1589,377 @@ static void syncMotionCommandCache(float motionSpeed, float motionDepth, float m
     s_motion_command_cache_valid = true;
 }
 
+static void persistManualRailLengthSetting()
+{
+    Preferences prefs;
+    prefs.begin("m5-ctnr", false);
+    prefs.putFloat("RailLengthMm", s_manual_rail_length_mm);
+    prefs.end();
+}
+
+static float getDefaultManualRailLengthMm()
+{
+#ifdef RAIL_LENGTH
+    return (float)RAIL_LENGTH;
+#else
+    return 0.0f;
+#endif
+}
+
+static void updateManualRailLengthSettingLabel()
+{
+    if (!s_manual_rail_length_setting) return;
+
+    char label[64];
+    if (s_manual_rail_length_mm > 0.0f) {
+        snprintf(label, sizeof(label), "Set Rail length : %.0f", s_manual_rail_length_mm);
+    } else {
+        snprintf(label, sizeof(label), "Set Rail length");
+    }
+    lv_checkbox_set_text(s_manual_rail_length_setting, label);
+}
+
+static void syncManualRailLengthSettingUi()
+{
+    if (!s_manual_rail_length_setting) return;
+
+    s_manual_rail_length_ui_syncing = true;
+    updateManualRailLengthSettingLabel();
+    if (s_manual_rail_length_mm > 0.0f) {
+        lv_obj_add_state(s_manual_rail_length_setting, LV_STATE_CHECKED);
+    } else {
+        lv_obj_clear_state(s_manual_rail_length_setting, LV_STATE_CHECKED);
+    }
+    s_manual_rail_length_ui_syncing = false;
+}
+
+static void ensureManualRailLengthSetting()
+{
+    if (!ui_Settings || s_manual_rail_length_setting) return;
+
+    s_manual_rail_length_setting = lv_checkbox_create(ui_Settings);
+    lv_checkbox_set_text(s_manual_rail_length_setting, "Set manual Rail length");
+    lv_obj_set_width(s_manual_rail_length_setting, LV_SIZE_CONTENT);
+    lv_obj_set_height(s_manual_rail_length_setting, LV_SIZE_CONTENT);
+    lv_obj_set_x(s_manual_rail_length_setting, 10);
+    lv_obj_set_y(s_manual_rail_length_setting, 120);
+    lv_obj_set_align(s_manual_rail_length_setting, LV_ALIGN_LEFT_MID);
+    lv_obj_add_flag(s_manual_rail_length_setting, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_set_style_text_font(s_manual_rail_length_setting, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    uiApplyCheckboxStyles(s_manual_rail_length_setting);
+    lv_obj_add_event_cb(s_manual_rail_length_setting, manualRailLengthSetting_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    syncManualRailLengthSettingUi();
+}
+
+static void manualRailLengthSetting_event_cb(lv_event_t* e)
+{
+    if (!e || s_manual_rail_length_ui_syncing) return;
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED || !s_manual_rail_length_setting) return;
+
+    const bool checked = lv_obj_has_state(s_manual_rail_length_setting, LV_STATE_CHECKED);
+    if (!checked) {
+        s_manual_rail_length_mm = 0.0f;
+        persistManualRailLengthSetting();
+        syncManualRailLengthSettingUi();
+        refreshSettingsCarousel();
+        lv_refr_now(NULL);
+        return;
+    }
+
+    runManualRailLengthCalibrationWorkflow();
+}
+
+static void runManualRailLengthCalibrationWorkflow()
+{
+    if (!bleCommIsConnected() && !bleCommTryConnect()) {
+        showNotification("Moving to MAX", "BLE is not connected, so calibration cannot start.", 0, true, "OK", false, nullptr, false);
+        syncManualRailLengthSettingUi();
+        refreshSettingsCarousel();
+        lv_refr_now(NULL);
+        return;
+    }
+
+    while (true) {
+        const int startResult = showNotification(
+            "Moving to MAX",
+            "The OSSM will now move to max depth and store this as a setting. Move away from your OSSM and press start",
+            0,
+            true,  "Cancel",
+            true,  "Start",
+            false);
+
+        if (startResult == NOTIFICATION_RESULT_LEFT) {
+            syncManualRailLengthSettingUi();
+            refreshSettingsCarousel();
+            lv_refr_now(NULL);
+            return;
+        }
+        if (startResult != NOTIFICATION_RESULT_RIGHT) {
+            syncManualRailLengthSettingUi();
+            refreshSettingsCarousel();
+            lv_refr_now(NULL);
+            return;
+        }
+
+        SendCommand(DEPTH, 100.0f, OSSM_ID);
+        SendCommand(STROKE, 1.0f, OSSM_ID);
+        SendCommand(SPEED, 5.0f, OSSM_ID);
+        SendCommand(SENSATION, 0.0f, OSSM_ID);
+        SendCommand(ON, 5.0f, OSSM_ID);
+
+        const uint32_t moveStartMs = millis();
+        while ((millis() - moveStartMs) < 10000U) {
+            M5.update();
+            lv_task_handler();
+            vTaskDelay(pdMS_TO_TICKS(20));
+        }
+
+        SendCommand(OFF, 0.0f, OSSM_ID);
+        vTaskDelay(pdMS_TO_TICKS(250));
+
+        const int confirmResult = showNotification(
+            "Confirm max depth",
+            "Confirm if your OSSM is indeed at the maximum position",
+            0,
+            true,  "Confirm",
+            true,  "Retry",
+            false);
+
+        if (confirmResult == NOTIFICATION_RESULT_RIGHT) {
+            continue;
+        }
+
+        if (confirmResult == NOTIFICATION_RESULT_LEFT) {
+            const float confirmedPosition = bleCommGetConfirmedPosition();
+            if (confirmedPosition > 0.0f) {
+                s_manual_rail_length_mm = confirmedPosition;
+                persistManualRailLengthSetting();
+                syncManualRailLengthSettingUi();
+                refreshSettingsCarousel();
+                lv_refr_now(NULL);
+            }
+            return;
+        }
+
+        return;
+    }
+}
+
+static void resetVisualSpeedRatioState()
+{
+    s_visual_speed_ratio_valid = false;
+    s_visual_speed_stroke_product = 0.0f;
+}
+
+static void updateVisualSpeedRatioFromUi(bool uiSpeedChanged, float uiSpeed, float uiStroke)
+{
+    if (!s_visual_speed_lock) {
+        resetVisualSpeedRatioState();
+        return;
+    }
+
+    if (uiStroke <= 0.001f) return;
+
+    if (uiSpeedChanged || !s_visual_speed_ratio_valid) {
+        s_visual_speed_stroke_product = uiSpeed * uiStroke;
+        s_visual_speed_ratio_valid = true;
+    }
+}
+
+static float resolveVisualCompensatedSpeed(float uiSpeed, float uiStroke)
+{
+    if (!s_visual_speed_lock) return uiSpeed;
+    if (!s_visual_speed_ratio_valid) return uiSpeed;
+    if (uiStroke <= 0.001f) return uiSpeed;
+
+    float compensatedSpeed = s_visual_speed_stroke_product / uiStroke;
+    if (compensatedSpeed < 0.0f) compensatedSpeed = 0.0f;
+    if (compensatedSpeed > speedlimit) compensatedSpeed = speedlimit;
+    return compensatedSpeed;
+}
+
+static int collectSettingsOptionObjects(lv_obj_t** outObjects, int maxObjects)
+{
+    if (!outObjects || maxObjects <= 0) return 0;
+
+    ensureManualRailLengthSetting();
+
+    int count = 0;
+    auto addObj = [&](lv_obj_t* obj) {
+        if (!obj || count >= maxObjects) return;
+        outObjects[count++] = obj;
+    };
+
+    addObj(ui_vibrate);
+    addObj(ui_safeStartStop);
+    addObj(ui_strokeinvert);
+    addObj(ui_forceHome);
+    addObj(ui_visualSpeedLock);
+    addObj(ui_strokeDepthLink);
+    addObj(s_manual_rail_length_setting);
+    return count;
+}
+
+static void refreshSettingsCarousel()
+{
+    lv_obj_t* options[8] = {};
+    const int optionCount = collectSettingsOptionObjects(options, 8);
+    if (optionCount <= 0) return;
+
+    if (!s_settings_position_label && ui_Settings) {
+        s_settings_position_label = lv_label_create(ui_Settings);
+        lv_obj_set_align(s_settings_position_label, LV_ALIGN_LEFT_MID);
+        lv_obj_set_x(s_settings_position_label, 12);
+        lv_obj_set_y(s_settings_position_label, 88);
+        lv_obj_set_style_text_font(s_settings_position_label, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_text_color(s_settings_position_label, lv_color_hex(getActiveTextSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_clear_flag(s_settings_position_label, LV_OBJ_FLAG_CLICKABLE);
+    }
+
+    if (s_settings_focus_index < 0) s_settings_focus_index = 0;
+    if (s_settings_focus_index >= optionCount) s_settings_focus_index = optionCount - 1;
+
+    if (s_settings_focus_index < s_settings_scroll_offset) {
+        s_settings_scroll_offset = s_settings_focus_index;
+    }
+    if (s_settings_focus_index >= (s_settings_scroll_offset + SETTINGS_CAROUSEL_VISIBLE_COUNT)) {
+        s_settings_scroll_offset = s_settings_focus_index - SETTINGS_CAROUSEL_VISIBLE_COUNT + 1;
+    }
+
+    if (s_settings_scroll_offset < 0) s_settings_scroll_offset = 0;
+    const int maxOffset = (optionCount > SETTINGS_CAROUSEL_VISIBLE_COUNT)
+                          ? (optionCount - SETTINGS_CAROUSEL_VISIBLE_COUNT)
+                          : 0;
+    if (s_settings_scroll_offset > maxOffset) s_settings_scroll_offset = maxOffset;
+
+    const int slotY[SETTINGS_CAROUSEL_VISIBLE_COUNT] = {-60, -30, 0, 30};
+    for (int i = 0; i < optionCount; ++i) {
+        lv_obj_t* obj = options[i];
+        if (!obj) continue;
+
+        const bool visible = (i >= s_settings_scroll_offset) &&
+                             (i < (s_settings_scroll_offset + SETTINGS_CAROUSEL_VISIBLE_COUNT));
+        if (visible) {
+            const int slot = i - s_settings_scroll_offset;
+            lv_obj_set_y(obj, slotY[slot]);
+            lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+        }
+
+        if (i == s_settings_focus_index) {
+            lv_obj_add_state(obj, LV_STATE_FOCUSED);
+        } else {
+            lv_obj_clear_state(obj, LV_STATE_FOCUSED);
+        }
+    }
+
+    if (s_settings_position_label) {
+        char indicator[12];
+        snprintf(indicator, sizeof(indicator), "%d/%d", s_settings_focus_index + 1, optionCount);
+        lv_label_set_text(s_settings_position_label, indicator);
+        lv_obj_set_style_text_color(s_settings_position_label, lv_color_hex(getActiveTextSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+    }
+}
+
+static lv_obj_t* getSettingsFocusedObject()
+{
+    lv_obj_t* options[8] = {};
+    const int optionCount = collectSettingsOptionObjects(options, 8);
+    if (optionCount <= 0) return nullptr;
+
+    if (s_settings_focus_index < 0) s_settings_focus_index = 0;
+    if (s_settings_focus_index >= optionCount) s_settings_focus_index = optionCount - 1;
+    return options[s_settings_focus_index];
+}
+
+static void startZeroStrokeDepthJog(float previousDepth, float targetDepth)
+{
+    s_zero_stroke_depth_jog_active = true;
+    s_zero_stroke_depth_target = targetDepth;
+    s_zero_stroke_depth_jog_start_ms = millis();
+    s_zero_stroke_debug_log_ms = 0;
+    if (targetDepth > previousDepth) {
+        s_zero_stroke_depth_direction = 1;
+    } else if (targetDepth < previousDepth) {
+        s_zero_stroke_depth_direction = -1;
+    } else {
+        s_zero_stroke_depth_direction = 0;
+    }
+}
+
+static void stopZeroStrokeDepthJog()
+{
+    s_zero_stroke_depth_jog_active = false;
+    s_zero_stroke_depth_target = 0.0f;
+    s_zero_stroke_depth_jog_start_ms = 0;
+    s_zero_stroke_debug_log_ms = 0;
+    s_zero_stroke_depth_direction = 0;
+}
+
+static void serviceZeroStrokeDepthJog()
+{
+    if (!s_zero_stroke_depth_jog_active) return;
+
+    if (s_manual_rail_length_mm <= 0.0f) {
+        LogDebugFormatted("Error depth jogging - no rail length set\n");
+        SendCommand(STROKE, 0.0f, OSSM_ID);
+        SendCommand(SPEED, 0.0f, OSSM_ID);
+        stopZeroStrokeDepthJog();
+        return;
+    }
+    bleCommGetConfirmedPosition(); // refresh BLE state
+    const bool stillEligible = commIsBleMode() && speed > 0.5f && stroke <= 0.001f && depth > 0.0f && s_manual_rail_length_mm > 0.0f;
+    if (!stillEligible) {
+        SendCommand(STROKE, 0.0f, OSSM_ID);
+        stopZeroStrokeDepthJog();
+        return;
+    }
+
+    const bool timedOut = s_zero_stroke_depth_jog_start_ms != 0 &&
+                          (millis() - s_zero_stroke_depth_jog_start_ms) > ZERO_STROKE_DEPTH_JOG_TIMEOUT_MS;
+    const float currentPositionMm = bleCommGetConfirmedPosition();
+    float targetMm = (s_zero_stroke_depth_target * s_manual_rail_length_mm) / 100.0f;
+    bool reachedDepth = false;
+    if (bleCommHasFreshState() && currentPositionMm >= 0.0f) {
+        if (s_zero_stroke_depth_direction > 0) {
+//            reachedDepth = currentPositionMm >= targetMm;
+            float targetMm = ((s_zero_stroke_depth_target-1) * s_manual_rail_length_mm) / 100.0f;
+            reachedDepth = currentPositionMm >= targetMm;
+        } else if (s_zero_stroke_depth_direction < 0) {
+//            reachedDepth = currentPositionMm <= targetMm;
+            float targetMm = ((s_zero_stroke_depth_target+1) * s_manual_rail_length_mm) / 100.0f;
+            reachedDepth = currentPositionMm <= targetMm;
+        } else {
+            reachedDepth = fabsf(currentPositionMm - targetMm) <= ZERO_STROKE_DEPTH_TOLERANCE;
+        }
+    }
+
+    const uint32_t nowMs = millis();
+    if ((nowMs - s_zero_stroke_debug_log_ms) >= 1000U) {
+        const char* dir = (s_zero_stroke_depth_direction > 0) ? "out" :
+                          (s_zero_stroke_depth_direction < 0) ? "in" : "none";
+        LogDebugFormatted(
+            "BLE: zero-stroke jog dir=%s targetDepth=%.1f targetMm=%.1f currentMm=%.1f reached=%d timeout=%d\n",
+            dir,
+            s_zero_stroke_depth_target,
+            targetMm,
+            currentPositionMm,
+            reachedDepth ? 1 : 0,
+            timedOut ? 1 : 0);
+        s_zero_stroke_debug_log_ms = nowMs;
+    }
+
+    if (reachedDepth || timedOut) {
+        const float targetDepth = s_zero_stroke_depth_target;
+        SendCommand(STROKE, 0.0f, OSSM_ID);
+        stopZeroStrokeDepthJog();
+        if (timedOut) {
+            LogDebugFormatted("BLE: zero-stroke depth jog timeout at target %.1f\n", targetDepth);
+        }
+    }
+}
+
 static void flushMotionCommands(float motionSpeed,
                                 float motionDepth,
                                 float motionStroke,
@@ -1509,23 +1969,58 @@ static void flushMotionCommands(float motionSpeed,
     if (!motionValueChanged) return;
 
     if (allowSend && motionValueChanged) {
-        const bool speedChanged = !s_motion_command_cache_valid || motionSpeed != s_last_motion_speed;
+        const float commandedSpeed = resolveVisualCompensatedSpeed(motionSpeed, motionStroke);
+        const bool speedChanged = !s_motion_command_cache_valid || commandedSpeed != s_last_motion_speed;
         const bool depthChanged = !s_motion_command_cache_valid || motionDepth != s_last_motion_depth;
         const bool strokeChanged = !s_motion_command_cache_valid || motionStroke != s_last_motion_stroke;
+        const bool wantsZeroStrokeJog = commIsBleMode() && motionSpeed > 0.5f && motionStroke <= 0.001f && motionDepth > 0.0f && depthChanged;
 
-        if (speedChanged) { SendCommand(SPEED, motionSpeed, OSSM_ID); }
+        if (wantsZeroStrokeJog && s_manual_rail_length_mm <= 0.0f) {
+            LogDebugFormatted("Error depth jogging - no rail length set\n");
+            SendCommand(STROKE, 0.0f, OSSM_ID);
+            SendCommand(SPEED, 0.0f, OSSM_ID);
+            stopZeroStrokeDepthJog();
+            syncMotionCommandCache(0.0f, motionDepth, 0.0f);
+            return;
+        }
+
+        const bool zeroStrokeDepthJog = commIsBleMode() && motionSpeed > 0.5f && motionStroke <= 0.001f &&
+                        motionDepth > 0.0f && s_manual_rail_length_mm > 0.0f && depthChanged;
+        const bool forceRunForZeroStrokeJog = zeroStrokeDepthJog && !OSSM_On;
+        const float previousDepth = s_motion_command_cache_valid ? s_last_motion_depth : 0.0f;
+
+        if (forceRunForZeroStrokeJog) {
+            SendCommand(ON, commandedSpeed, OSSM_ID);
+            LogDebugFormatted("BLE: zero-stroke depth jog forcing ON at speed %.1f\n", commandedSpeed);
+        } else if (speedChanged) {
+            SendCommand(SPEED, commandedSpeed, OSSM_ID);
+        }
         if (depthChanged) { SendCommand(DEPTH, motionDepth, OSSM_ID); }
-        if (strokeChanged) { SendCommand(STROKE, motionStroke, OSSM_ID); }
+        if (zeroStrokeDepthJog) {
+            SendCommand(STROKE, 1.0f, OSSM_ID);
+            startZeroStrokeDepthJog(previousDepth, motionDepth);
+        } else if (strokeChanged) {
+            SendCommand(STROKE, motionStroke, OSSM_ID);
+            stopZeroStrokeDepthJog();
+        }
         if(speedChanged ) {
             LogDebugFormatted("BLE: flushMotionCommands speed %.1f depth %.1f stroke %.1f\n Previous speed: %.1f. Speed changed: %s", motionSpeed, motionDepth, motionStroke, s_last_motion_speed, speedChanged ? "true" : "false");
-            if (s_last_motion_speed == 0.0f && motionSpeed > 0.0f) {
+            if (s_visual_speed_lock && s_visual_speed_ratio_valid && motionStroke > 0.001f) {
+                const uint32_t nowMs = millis();
+                if ((nowMs - s_visual_speed_log_ms) >= 250U) {
+                    LogDebugFormatted("VSL: uiSpeed=%.2f stroke=%.2f cmdSpeed=%.2f\n",
+                                      motionSpeed, motionStroke, commandedSpeed);
+                    s_visual_speed_log_ms = nowMs;
+                }
+            }
+            if (s_last_motion_speed == 0.0f && commandedSpeed > 0.0f) {
                 LogDebugFormatted("BLE: Unpause speed %.1f\n", bleCommGetUnpauseSpeed());
                 homebuttonmevent(nullptr); // simulate a press of the HomeButtonM to resume motion
 //            SendCommand(ON, bleCommGetUnpauseSpeed(), OSSM_ID);
             }
         }
 
-        syncMotionCommandCache(motionSpeed, motionDepth, motionStroke);
+        syncMotionCommandCache(commandedSpeed, motionDepth, motionStroke);
 
     }
 }
@@ -1610,6 +2105,11 @@ static void checkBleDisconnectError()
 void handleScreens() {
     checkBleDisconnectError();
 
+    if (s_zero_stroke_depth_jog_active && st_screens != ST_UI_HOME) {
+        SendCommand(STROKE, 0.0f, OSSM_ID);
+        stopZeroStrokeDepthJog();
+    }
+
     {
         static bool s_prev_ble_connected = false;
         static bool s_prev_espnow_paired = false;
@@ -1687,6 +2187,8 @@ void handleScreens() {
 
         const bool wasMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         bool homeMotionValueChanged = false;
+    bool homeSpeedValueChanged = false;
+    bool homeStrokeValueChanged = false;
 
         // On first entry from a non-strokeEngine screen, tell OSSM to switch to strokeEngine.
         // Only re-home when we know it is needed:
@@ -1743,6 +2245,7 @@ void handleScreens() {
             //updateMXbutton=true;
         }
         homeMotionValueChanged = homeMotionValueChanged || changed || (lv_slider_get_value(ui_homespeedslider) != speed);
+            homeSpeedValueChanged = homeSpeedValueChanged || changed;
         char speed_v[7]; dtostrf(speed, 6, 0, speed_v);
         lv_label_set_text(ui_homespeedvalue, speed_v);
 
@@ -1822,12 +2325,20 @@ void handleScreens() {
                 changed = true;
             }
         }
-        if (stroke > depth) {
-             changed = true;
-             depth = stroke;
-        }
-        homeMotionValueChanged = homeMotionValueChanged || changed;
+        if (s_stroke_influences_depth) {
+            if (stroke > depth) {
+                changed = true;
+                depth = stroke;
+            }
+        }    
+            homeMotionValueChanged = homeMotionValueChanged || changed;
+            homeStrokeValueChanged = homeStrokeValueChanged || changed;
         syncHomeMotionUi(invertStroke);
+
+        if (homeStrokeValueChanged && stroke <= 0.001f) {
+            resetVisualSpeedRatioState();
+        }
+        updateVisualSpeedRatioFromUi(homeSpeedValueChanged, speed, stroke);
 
         // Encoder 4 — Sensation
         if (lv_slider_is_dragged(ui_homesensationslider) == false) {
@@ -1840,7 +2351,7 @@ void handleScreens() {
                 changed = true; sensation -= 2;
                 encoder4.setCount(0); rampMs = millis(); encId = 4;
             }
-            if (sensation < 0)   { changed = true; sensation = 0; }
+            if (sensation < -100)   { changed = true; sensation = -100; }
             if (sensation > 100) { changed = true; sensation = 100; }
             if (changed) { SendCommand(SENSATION, sensation, OSSM_ID); }
         } else if (lv_slider_get_value(ui_homesensationslider) != sensation) {
@@ -1886,11 +2397,12 @@ void handleScreens() {
         }
         const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         flushMotionCommands(speed, depth, stroke, homeMotionValueChanged, true);
+        serviceZeroStrokeDepthJog();
 
-        if (!homeMotionValueChanged && !wasMotionReady && isMotionReady && !OSSM_On) {
+        if (homeMotionValueChanged && !wasMotionReady && isMotionReady && !OSSM_On) {
             homebuttonmevent(nullptr);
             LogDebug ("HomeButtonM auto-started OSSM due to motion values being set");
-        } else if (!homeMotionValueChanged && wasMotionReady && !isMotionReady && OSSM_On) {
+        } else if (homeMotionValueChanged && wasMotionReady && !isMotionReady && OSSM_On) {
             homebuttonmevent(nullptr);
             LogDebug ("HomeButtonM auto-stopped OSSM due to motion values being cleared");
         }
@@ -2115,6 +2627,7 @@ void handleScreens() {
     case ST_UI_SETTINGS:
     {
         touch_disabled = false;
+        refreshSettingsCarousel();
         if (encoder3.getCount() > encoder3_enc + 2) {
             if (ui_brightness_slider) {
                 int val = lv_slider_get_value(ui_brightness_slider);
@@ -2142,12 +2655,18 @@ void handleScreens() {
         }
 
         if (encoder4.getCount() > encoder4_enc + 2) {
-            //LogDebug("next");
-            if (ui_g_settings) lv_group_focus_next(ui_g_settings);
+            lv_obj_t* options[8] = {};
+            const int optionCount = collectSettingsOptionObjects(options, 8);
+            if (optionCount > 0 && s_settings_focus_index < (optionCount - 1)) {
+                ++s_settings_focus_index;
+            }
+            refreshSettingsCarousel();
             encoder4_enc = encoder4.getCount();
         } else if (encoder4.getCount() < encoder4_enc - 2) {
-            if (ui_g_settings) lv_group_focus_prev(ui_g_settings);
-            //LogDebug("Preview");
+            if (s_settings_focus_index > 0) {
+                --s_settings_focus_index;
+            }
+            refreshSettingsCarousel();
             encoder4_enc = encoder4.getCount();
         }
         if (click2_short_waspressed) {
@@ -2155,10 +2674,12 @@ void handleScreens() {
         } else if (mxclick_short_waspressed) {
             lv_obj_send_event(ui_SettingsButtonM, LV_EVENT_CLICKED, NULL);
         } else if (click3_short_waspressed) {
-            lv_obj_t *focused = ui_g_settings ? lv_group_get_focused(ui_g_settings) : NULL;
+            lv_obj_t *focused = getSettingsFocusedObject();
             if (focused) {
                 bool isToggle = (focused == ui_vibrate || focused == ui_safeStartStop ||
-                                 focused == ui_strokeinvert || focused == ui_forceHome);
+                                 focused == ui_strokeinvert || focused == ui_forceHome ||
+                                 focused == ui_visualSpeedLock || focused == ui_strokeDepthLink ||
+                                 focused == s_manual_rail_length_setting);
                 if (isToggle) {
                     if (lv_obj_has_state(focused, LV_STATE_CHECKED)) {
                         lv_obj_clear_state(focused, LV_STATE_CHECKED);

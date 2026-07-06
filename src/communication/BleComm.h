@@ -19,7 +19,9 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
 void bleCommSetEnabled(bool enabled);
 bool bleCommIsEnabled();
 bool bleCommIsHoming();
+bool bleCommHasFreshState();
 int bleCommGetHomingDirection();
+float bleCommGetConfirmedPosition();
 int bleCommSetUnpauseSpeed(float speedValue);
 int bleCommGetUnpauseSpeed();
 // Mode/query helpers used by UI streaming flow.
@@ -39,3 +41,9 @@ bool bleCommReadAdvancedStatus(String* outStatus);
 bool bleCommReadAdvancedPresets(String* outPresets);
 bool bleCommWriteAdvancedControl(const String& payload);
 bool bleCommWriteAdvancedPresets(const String& payload);
+
+// BLE pattern catalog bridge (OSSM patterns characteristic)
+extern bool newPatternIsReadFromOSSM;
+extern String patternString;
+bool readPatternsFromOSSM();
+void bleCommResetPatternReadState();

@@ -162,6 +162,8 @@ lv_obj_t * ui_Battery1;
 lv_obj_t * ui_ejectaddon;
 lv_obj_t * ui_strokeinvert;
 lv_obj_t * ui_forceHome;
+lv_obj_t * ui_visualSpeedLock;
+lv_obj_t * ui_strokeDepthLink;
 lv_obj_t * ui_vibrate;
 lv_obj_t * ui_safeStartStop;
 lv_group_t * ui_g_settings;
@@ -221,6 +223,11 @@ static void applyCheckboxStyles(lv_obj_t *obj)
     lv_obj_add_style(obj, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(obj, &style_checkbox_indicator, LV_PART_INDICATOR | LV_STATE_DEFAULT);
     lv_obj_add_style(obj, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+}
+
+void uiApplyCheckboxStyles(lv_obj_t *obj)
+{
+    applyCheckboxStyles(obj);
 }
 
 ///////////////////// ANIMATIONS ////////////////////
@@ -2088,6 +2095,42 @@ void ui_Settings_screen_init(void)
     lv_obj_set_style_text_font(ui_forceHome, &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
     applyCheckboxStyles(ui_forceHome);
 
+    // ui_visualSpeedLock
+
+    ui_visualSpeedLock = lv_checkbox_create(ui_Settings);
+    lv_checkbox_set_text(ui_visualSpeedLock, T_VISUALSPEEDLOCK);
+
+    lv_obj_set_width(ui_visualSpeedLock, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_visualSpeedLock, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_visualSpeedLock, 10);
+    lv_obj_set_y(ui_visualSpeedLock, 60);
+
+    lv_obj_set_align(ui_visualSpeedLock, LV_ALIGN_LEFT_MID);
+
+    lv_obj_add_flag(ui_visualSpeedLock, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+    lv_obj_set_style_text_font(ui_visualSpeedLock, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    applyCheckboxStyles(ui_visualSpeedLock);
+
+    // ui_strokeDepthLink
+
+    ui_strokeDepthLink = lv_checkbox_create(ui_Settings);
+    lv_checkbox_set_text(ui_strokeDepthLink, T_STROKEDEPTHLINK);
+
+    lv_obj_set_width(ui_strokeDepthLink, LV_SIZE_CONTENT);
+    lv_obj_set_height(ui_strokeDepthLink, LV_SIZE_CONTENT);
+
+    lv_obj_set_x(ui_strokeDepthLink, 10);
+    lv_obj_set_y(ui_strokeDepthLink, 90);
+
+    lv_obj_set_align(ui_strokeDepthLink, LV_ALIGN_LEFT_MID);
+
+    lv_obj_add_flag(ui_strokeDepthLink, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+
+    lv_obj_set_style_text_font(ui_strokeDepthLink, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    applyCheckboxStyles(ui_strokeDepthLink);
+
     // ui_brightness_icon
 
     ui_brightness_icon = lv_label_create(ui_Settings);
@@ -2135,6 +2178,8 @@ void ui_Settings_screen_init(void)
     lv_group_add_obj(ui_g_settings, ui_safeStartStop);
     lv_group_add_obj(ui_g_settings, ui_strokeinvert);
     lv_group_add_obj(ui_g_settings, ui_forceHome);
+    lv_group_add_obj(ui_g_settings, ui_visualSpeedLock);
+    lv_group_add_obj(ui_g_settings, ui_strokeDepthLink);
     lv_group_focus_obj(ui_vibrate);
 
 }

@@ -180,6 +180,8 @@ extern lv_obj_t * ui_Battery1;
 extern lv_obj_t * ui_ejectaddon;
 extern lv_obj_t * ui_strokeinvert;
 extern lv_obj_t * ui_forceHome;
+extern lv_obj_t * ui_visualSpeedLock;
+extern lv_obj_t * ui_strokeDepthLink;
 extern lv_obj_t * ui_vibrate;
 extern lv_obj_t * ui_safeStartStop;
 extern lv_group_t * ui_g_settings;
@@ -195,6 +197,7 @@ void setupdepthF(lv_event_t * e);
 void savepattern(lv_event_t * e);
 void savesettings(lv_event_t * e);
 void brightness_slider_event_cb(lv_event_t * e);
+void uiApplyCheckboxStyles(lv_obj_t *obj);
 
 // ---- New screen inits (called from ui_init) ----
 void ui_Stroke_screen_init(void);

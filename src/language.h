@@ -59,6 +59,8 @@
 #define T_TOUCHSETTING      "Touch Disabled"
 #define T_SAFESTARTSTOP     "Slow Start/Stop"
 #define T_STROKEINVERT      "Stroke inverted"
+#define T_VISUALSPEEDLOCK   "Natural speed behaviour"
+#define T_STROKEDEPTHLINK   "Stroke affects depth"
 #define T_SLEEP             "Sleep"
 #define T_ESP_NOW           "ESP-NOW"
 #define T_CHARGING_WARNING_TITLE "Caution - Charging"
