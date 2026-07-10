@@ -292,21 +292,12 @@ static float bleGetUnpauseSpeed() {
 }
 
 static MachineMode parseMachineMode(const String& stateName) {
-  String normalized = stateName;
-  normalized.toLowerCase();
-
-  if (normalized.startsWith("menu")) return MachineMode::Menu;
-  if (normalized.startsWith("homing")) return MachineMode::Homing;
-  if (normalized.startsWith("strokeengine")) return MachineMode::StrokeEngine;
-  if (normalized.startsWith("simplepenetration")) return MachineMode::SimplePenetration;
-  if (normalized.startsWith("streaming")) return MachineMode::Streaming;
-
-  // Rust OSSM BLE state names report run-ready as ready/playing/paused.
-  if (normalized.startsWith("ready") || normalized.startsWith("playing") || normalized.startsWith("paused")) {
-    return MachineMode::StrokeEngine;
-  }
-
-  if (normalized.length() == 0) return MachineMode::Unknown;
+  if (stateName.startsWith("menu")) return MachineMode::Menu;
+  if (stateName.startsWith("homing")) return MachineMode::Homing;
+  if (stateName.startsWith("strokeEngine")) return MachineMode::StrokeEngine;
+  if (stateName.startsWith("simplePenetration")) return MachineMode::SimplePenetration;
+  if (stateName.startsWith("streaming")) return MachineMode::Streaming;
+  if (stateName.length() == 0) return MachineMode::Unknown;
   return MachineMode::Other;
 }
 
@@ -659,7 +650,7 @@ static void blePollTask(void*) {
     //if (showBlePollSerial) {
     #ifdef SHOWBLEPOLL
       uint32_t now = millis();
-      if ((now - g_lastPollInfoMs) >= 1000) {
+      if ((now - g_lastPollInfoMs) >= 200) {
         size_t qSize = 0;
         if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
         qSize = g_txQueue.size();
@@ -1023,7 +1014,7 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
       }
       queueCommand("set:speed:0", true);
     }
-/*  CHECK MARCO*/
+
 //    if (requestedStroke > 0.001f && prevStroke <= 0.001f && OSSM_On) {
     if (requestedStroke > 0.001f && prevStroke <= 0.001f) {
       SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
@@ -1051,9 +1042,7 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
       }
     }
 
-
-//*/
-  g_lastRequestedStroke = requestedStroke;
+    g_lastRequestedStroke = requestedStroke;
   }
 
   String cmd;

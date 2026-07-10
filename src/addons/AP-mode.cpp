@@ -107,6 +107,22 @@ static constexpr float k_graph_plot_x_margin = 2.0f;
 static constexpr float k_graph_plot_y_top_margin = -12.0f;
 static constexpr float k_graph_plot_y_bottom_margin = 17.0f;
 
+struct GraphPlotBounds {
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 2.0f;
+    float h = 2.0f;
+};
+
+static GraphPlotBounds computeGraphPlotBounds(int panelW, int panelH) {
+    GraphPlotBounds bounds;
+    bounds.x = k_graph_plot_x_margin;
+    bounds.y = k_graph_plot_y_top_margin;
+    bounds.w = std::max(2.0f, (float)panelW - (k_graph_plot_x_margin * 2.0f));
+    bounds.h = std::max(2.0f, (float)panelH - (k_graph_plot_y_top_margin + k_graph_plot_y_bottom_margin));
+    return bounds;
+}
+
 static lv_color_t colorFrom565(uint16_t c) {
     uint8_t r = (uint8_t)((((c >> 11) & 0x1F) * 255U) / 31U);
     uint8_t g = (uint8_t)((((c >> 5) & 0x3F) * 255U) / 63U);
@@ -861,10 +877,12 @@ static void setModifierLineSegment(int traceIndex, int segmentIndex, float x0, f
     lv_obj_t *line = ensureModifierTraceLine(traceIndex, segmentIndex);
     if (!line) return;
 
-    s_modifier_trace_line_pts[traceIndex][segmentIndex][0].x = (int32_t)x0;
-    s_modifier_trace_line_pts[traceIndex][segmentIndex][0].y = (int32_t)y0;
-    s_modifier_trace_line_pts[traceIndex][segmentIndex][1].x = (int32_t)x1;
-    s_modifier_trace_line_pts[traceIndex][segmentIndex][1].y = (int32_t)y1;
+    lv_obj_set_pos(line, (int32_t)xMin, (int32_t)yMin);
+
+    s_modifier_trace_line_pts[traceIndex][segmentIndex][0].x = (int32_t)(x0 - xMin);
+    s_modifier_trace_line_pts[traceIndex][segmentIndex][0].y = (int32_t)(y0 - yMin);
+    s_modifier_trace_line_pts[traceIndex][segmentIndex][1].x = (int32_t)(x1 - xMin);
+    s_modifier_trace_line_pts[traceIndex][segmentIndex][1].y = (int32_t)(y1 - yMin);
 
     lv_line_set_points(line, s_modifier_trace_line_pts[traceIndex][segmentIndex], 2);
     lv_obj_set_style_line_width(line, highlight ? 3 : 2, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -974,17 +992,13 @@ static void updateModifierPreview() {
         if (modSteps > maxSteps) maxSteps = modSteps;
     }
 
-    const float plotX = k_graph_plot_x_margin;
-    const float plotY = k_graph_plot_y_top_margin;
-    const float plotW = std::max(2.0f, (float)panelW - (k_graph_plot_x_margin * 2.0f));
-    const float plotH = std::max(2.0f, (float)panelH - (k_graph_plot_y_top_margin + k_graph_plot_y_bottom_margin));
+    // Use one shared mapping source for preset and modifier to keep exact parity.
+    const GraphPlotBounds plot = computeGraphPlotBounds(panelW, panelH);
 
     for (int c = 0; c < traceCount; ++c) {
-        drawSingleModifierTrace(c, c, false, plotX, plotW, plotY, plotH, maxSteps);
+        drawSingleModifierTrace(c, c, false, plot.x, plot.w, plot.y, plot.h, maxSteps);
     }
-    drawSingleModifierTrace(s_base_index, s_base_index, true, plotX, plotW, plotY, plotH, maxSteps);
-    drawSingleModifierTrace(s_base_index, s_base_index, true, plotX + 1.0f, plotW, plotY, plotH, maxSteps);
-    drawSingleModifierTrace(s_base_index, s_base_index, true, plotX + 1.0f, plotW, plotY + 1.0f, plotH, maxSteps);
+    drawSingleModifierTrace(s_base_index, s_base_index, true, plot.x, plot.w, plot.y, plot.h, maxSteps);
 }
 
 static void updateCurvePreview(const std::string &baseName) {
@@ -994,10 +1008,11 @@ static void updateCurvePreview(const std::string &baseName) {
     const int panelH = lv_obj_get_height(s_graph_panel);
     if (panelW < 6 || panelH < 6) return;
 
-    const float xMin = k_graph_plot_x_margin;
-    const float xSpan = std::max(2.0f, (float)panelW - (k_graph_plot_x_margin * 2.0f));
-    const float yMin = k_graph_plot_y_top_margin;
-    const float ySpan = std::max(2.0f, (float)panelH - (k_graph_plot_y_top_margin + k_graph_plot_y_bottom_margin));
+    const GraphPlotBounds plot = computeGraphPlotBounds(panelW, panelH);
+    const float xMin = plot.x;
+    const float xSpan = plot.w;
+    const float yMin = plot.y;
+    const float ySpan = plot.h;
 
     const int sampleMain = (int)(sizeof(s_curve_main_pts) / sizeof(s_curve_main_pts[0]));
     const int sampleMod = (int)(sizeof(s_curve_mod_pts) / sizeof(s_curve_mod_pts[0]));
@@ -1231,7 +1246,7 @@ static void drawApScreen() {
 
     if (s_transport_label) {
         if (s_modifier_view && !baseName.empty()) {
-            lv_label_set_text(s_transport_label, baseName.c_str());
+            lv_label_set_text_fmt(s_transport_label, "Mod for: %s", baseName.c_str());
             lv_obj_clear_flag(s_transport_label, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_label_set_text(s_transport_label, "");
@@ -1278,28 +1293,58 @@ static void drawApScreen() {
         lv_obj_set_y(s_left_meter_fill, (lv_obj_get_height(s_left_meter_bg) - 2) - fill);
     }
     if (s_right_meter_fill && s_right_meter_bg) {
-        const int meterH = lv_obj_get_height(s_right_meter_bg) - 4;
-        int fill = (int)((meterH * rightMeterValue) / 100.0f);
-        if (fill < 2) fill = 2;
+        int meterW = lv_obj_get_content_width(s_right_meter_bg);
+        int meterH = lv_obj_get_content_height(s_right_meter_bg);
+        if (meterW < 1) meterW = lv_obj_get_width(s_right_meter_bg) - 4;
+        if (meterH < 1) meterH = lv_obj_get_height(s_right_meter_bg) - 4;
+        if (meterW < 1) meterW = 1;
+        if (meterH < 1) meterH = 1;
+        float activeValue = 0.0f;
+        std::string activeColorName;
+        int activeColorFallback = 0;
+
+        if (s_modifier_view && hasBase && hasMod) {
+            activeValue = modValue;
+            activeColorName = baseName;
+            activeColorFallback = s_base_index;
+        } else {
+            activeValue = baseValue;
+            activeColorName = baseName;
+            activeColorFallback = s_base_index;
+        }
+
+        if (activeValue < 0.0f) activeValue = 0.0f;
+        if (activeValue > 100.0f) activeValue = 100.0f;
+
+        int fill = (int)((meterH * activeValue) / 100.0f + 0.5f);
+        if (fill < 0) fill = 0;
         if (fill > meterH) fill = meterH;
-        lv_obj_set_style_bg_color(s_right_meter_fill, colorFrom565(controlColor565ForName(rightMeterName, pairStart + 1)), LV_PART_MAIN | LV_STATE_DEFAULT);
+
+        lv_obj_set_style_bg_color(s_right_meter_fill,
+                                  colorFrom565(controlColor565ForName(activeColorName, activeColorFallback)),
+                                  LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_bg_opa(s_right_meter_fill, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_width(s_right_meter_fill, meterW);
         lv_obj_set_height(s_right_meter_fill, fill);
-        lv_obj_set_y(s_right_meter_fill, (lv_obj_get_height(s_right_meter_bg) - 2) - fill);
+        lv_obj_set_x(s_right_meter_fill, 0);
+        lv_obj_set_y(s_right_meter_fill, meterH - fill);
+        lv_obj_clear_flag(s_right_meter_fill, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_invalidate(s_right_meter_fill);
     }
 
     if (!s_modifier_view && s_control_names.size() >= 2) {
         const int panelW = lv_obj_get_width(s_graph_panel);
         const int panelH = lv_obj_get_height(s_graph_panel);
-        const int innerW = (int)std::max(2.0f, (float)panelW - (k_graph_plot_x_margin * 2.0f));
-        const float yMin = k_graph_plot_y_top_margin;
-        const float ySpan = std::max(2.0f, (float)panelH - (k_graph_plot_y_top_margin + k_graph_plot_y_bottom_margin));
+        const GraphPlotBounds plot = computeGraphPlotBounds(panelW, panelH);
+        const int innerW = (int)plot.w;
+        const float yMin = plot.y;
+        const float ySpan = plot.h;
         const float topValue = getSettingValue(s_control_names[0], 50.0f);
         const float bottomValue = getSettingValue(s_control_names[1], 50.0f);
         const int topY = (int)(yMin + (1.0f - topValue / 100.0f) * ySpan);
         const int bottomY = (int)(yMin + (1.0f - bottomValue / 100.0f) * ySpan);
-        setHorizontalGuide(s_top_line, (int)k_graph_plot_x_margin, topY, innerW, 0xF860);
-        setHorizontalGuide(s_bottom_line, (int)k_graph_plot_x_margin, bottomY, innerW, 0xFC00);
+        setHorizontalGuide(s_top_line, (int)plot.x, topY, innerW, 0xF860);
+        setHorizontalGuide(s_bottom_line, (int)plot.x, bottomY, innerW, 0xFC00);
         lv_obj_clear_flag(s_top_line, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(s_bottom_line, LV_OBJ_FLAG_HIDDEN);
     } else {
@@ -1547,6 +1592,7 @@ static void createScreenIfNeeded() {
     lv_obj_set_size(s_right_meter_bg, 8, 124);
     lv_obj_set_x(s_right_meter_bg, 306);
     lv_obj_set_y(s_right_meter_bg, 74);
+    lv_obj_set_style_pad_all(s_right_meter_bg, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_color(s_right_meter_bg, lv_color_hex(0x0F172A), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_color(s_right_meter_bg, lv_color_hex(0xF8FAFC), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_border_width(s_right_meter_bg, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -1555,7 +1601,7 @@ static void createScreenIfNeeded() {
 
     s_right_meter_fill = lv_obj_create(s_right_meter_bg);
     lv_obj_set_size(s_right_meter_fill, 4, 20);
-    lv_obj_set_x(s_right_meter_fill, 2);
+    lv_obj_set_x(s_right_meter_fill, 0);
     lv_obj_set_y(s_right_meter_fill, 100);
     lv_obj_set_style_bg_color(s_right_meter_fill, lv_color_hex(0xF97316), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_bg_opa(s_right_meter_fill, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);

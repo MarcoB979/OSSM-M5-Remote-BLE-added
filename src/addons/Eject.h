@@ -46,5 +46,7 @@ bool EjectSendCommand(int command, float value);
 void EjectToggle();        // Toggle on/off (uses internal state)
 bool EjectIsPaired();
 void EjectSetAddonEnabled(bool enabled);
+const uint8_t* EjectGetTxAddress();
+bool EjectEnsureTxPeer();
 lv_obj_t *EjectGetBatteryTitleLabel();
 lv_obj_t *EjectGetBatteryValueLabel();

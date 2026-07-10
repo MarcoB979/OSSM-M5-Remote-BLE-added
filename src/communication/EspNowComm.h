@@ -58,7 +58,7 @@ extern struct_message     incomingcontrol;
 extern esp_now_peer_info_t peerInfo;
 extern uint8_t            OSSM_Address[6];
 extern bool               Ossm_paired;
-extern bool               OSSM_On;
+extern volatile bool      OSSM_On;
 extern TaskHandle_t       eRemote_t;
 extern int pattern;
 extern float speedlimit;

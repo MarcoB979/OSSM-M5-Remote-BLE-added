@@ -16,6 +16,10 @@
 #include "buttonhandlers/ButtonHandlers.h"
 #include "screens/ScreenHandler.h"
 #include "config/debug.h"
+#include "communication/FistComm.h"
+#ifdef FIST_ID
+#undef FIST_ID
+#endif
 // Single-definition of FIST_ID (C linkage so C code can reference it)
 extern "C" const int FIST_ID = 3;
 
@@ -534,6 +538,17 @@ bool FistITIsPaired()
   return s_addon_enabled && s_is_paired;
 }
 
+const uint8_t* FistITGetTxAddress()
+{
+  if (!s_addon_enabled) return BROADCAST_ADDR;
+  return s_is_paired ? s_fist_addr : BROADCAST_ADDR;
+}
+
+bool FistITEnsureTxPeer()
+{
+  return ensurePeer(FistITGetTxAddress());
+}
+
 void FistITSetAddonEnabled(bool enabled)
 {
   s_addon_enabled = enabled;
@@ -658,4 +673,41 @@ extern "C" void FistITHandleScreen(const struct ButtonEvents *events)
 {
   if (events == nullptr) return;
   FistITHandleScreen(*events);
+}
+
+bool fistCommIsFrame(const struct_message& msg)
+{
+  const int announcedId = (int)(msg.esp_value + (msg.esp_value >= 0 ? 0.5f : -0.5f));
+  return (msg.esp_target == FIST_ID ||
+          msg.esp_command == FIST_SPEED ||
+          msg.esp_command == FIST_ROTATION ||
+          msg.esp_command == FIST_PAUSE ||
+          msg.esp_command == FIST_ACCEL ||
+          ((msg.esp_command == CONNECT || msg.esp_command == CONN || msg.esp_command == HEARTBEAT) &&
+           announcedId == FIST_ID));
+}
+
+void fistCommHandleFrame(const uint8_t* mac, const struct_message& msg)
+{
+  (void)FistITHandleIncomingEspNowFrame(mac,
+                                        msg.esp_target,
+                                        msg.esp_sender,
+                                        msg.esp_command,
+                                        msg.esp_value,
+                                        msg.esp_heartbeat);
+}
+
+bool fistCommIsConnected()
+{
+  return FistITIsPaired();
+}
+
+const uint8_t* fistCommGetTxAddress()
+{
+  return FistITGetTxAddress();
+}
+
+bool fistCommEnsureTxPeer()
+{
+  return FistITEnsureTxPeer();
 }

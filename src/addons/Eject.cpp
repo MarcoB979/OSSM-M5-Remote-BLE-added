@@ -18,6 +18,7 @@
 #include "config/debug.h"
 #include "addons/addonsStreaming.h"
 #include "language.h"
+#include "communication/EjectComm.h"
 
 // Single-definition of EJECT_ID (C linkage so C code can reference it)
 extern "C" const int EJECT_ID = 2;
@@ -525,6 +526,17 @@ bool EjectIsPaired()
   return e_addon_enabled && e_is_paired;
 }
 
+const uint8_t* EjectGetTxAddress()
+{
+  if (!e_addon_enabled) return BROADCAST_ADDR;
+  return e_is_paired ? e_eject_addr : BROADCAST_ADDR;
+}
+
+bool EjectEnsureTxPeer()
+{
+  return ensurePeer(EjectGetTxAddress());
+}
+
 void EjectSetAddonEnabled(bool enabled)
 {
   e_addon_enabled = enabled;
@@ -659,4 +671,42 @@ extern "C" void EjectHandleScreen(const struct ButtonEvents *events)
 {
   if (events == nullptr) return;
   EjectHandleScreen(*events);
+}
+
+bool ejectCommIsFrame(const struct_message& msg)
+{
+  const int announcedId = (int)(msg.esp_value + (msg.esp_value >= 0 ? 0.5f : -0.5f));
+  return (msg.esp_target == CUM ||
+          msg.esp_target == CUM_ID ||
+          msg.esp_command == CUMSPEED ||
+          msg.esp_command == CUMTIME ||
+          msg.esp_command == CUMSIZE ||
+          msg.esp_command == CUMACCEL ||
+          ((msg.esp_command == CONNECT || msg.esp_command == CONN || msg.esp_command == HEARTBEAT) &&
+           announcedId == CUM_ID));
+}
+
+void ejectCommHandleFrame(const uint8_t* mac, const struct_message& msg)
+{
+  (void)EjectHandleIncomingEspNowFrame(mac,
+                                       msg.esp_target,
+                                       msg.esp_sender,
+                                       msg.esp_command,
+                                       msg.esp_value,
+                                       msg.esp_heartbeat);
+}
+
+bool ejectCommIsConnected()
+{
+  return EjectIsPaired();
+}
+
+const uint8_t* ejectCommGetTxAddress()
+{
+  return EjectGetTxAddress();
+}
+
+bool ejectCommEnsureTxPeer()
+{
+  return EjectEnsureTxPeer();
 }

@@ -97,7 +97,7 @@ struct_message incomingcontrol;
 esp_now_peer_info_t peerInfo;
 uint8_t OSSM_Address[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 bool Ossm_paired = false;
-bool OSSM_On = false;
+volatile bool OSSM_On = false;
 TaskHandle_t eRemote_t = nullptr;
 int ESP_NOW_CHANNEL = 1;
 

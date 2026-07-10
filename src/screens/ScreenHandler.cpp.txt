@@ -21,6 +21,7 @@
 #include "../display/colors.h"
 #include "../display/styles.h"
 #include "../addons/strokeMode.h"
+#include "../addons/addonsStreaming.h"
 #include "../screens/icons.h"
 #include "language.h"
 #include <M5Unified.h>
@@ -84,20 +85,9 @@ static bool  s_visual_speed_ratio_valid = false;
 static float s_visual_speed_stroke_product = 0.0f;
 static bool  s_stroke_influences_depth = false;
 static float s_manual_rail_length_mm = 0.0f;
-static bool s_home_speed_ramp_active = false;
-static int s_home_speed_ramp_current = 0;
-static int s_home_speed_ramp_target = 0;
-static int s_home_speed_ramp_step = 0;
-static uint32_t s_home_speed_ramp_interval_ms = 0;
-static uint32_t s_home_speed_ramp_next_ms = 0;
 static uint32_t s_zero_stroke_depth_jog_start_ms = 0;
 static uint32_t s_zero_stroke_debug_log_ms = 0;
 static uint32_t s_visual_speed_log_ms = 0;
-
-
-static constexpr bool ENABLE_ZERO_STROKE_DEPTH_JOG = false;
-
-
 static constexpr float ZERO_STROKE_DEPTH_TOLERANCE = 1.0f;
 static constexpr uint32_t ZERO_STROKE_DEPTH_JOG_TIMEOUT_MS = 25000;
 static constexpr int SETTINGS_CAROUSEL_VISIBLE_COUNT = 4;
@@ -255,10 +245,6 @@ static const char* const ESP_ICON_MASK[ESP_ICON_H] = {
 "......#########......"
 };
 
-
-// -------------------------------------------------------
-// Status Strip Rendering Helpers
-// -------------------------------------------------------
 
 static lv_obj_t* createStatusIconBase(lv_obj_t* parent, int width, int height) {
     if (!parent) return nullptr;
@@ -526,8 +512,10 @@ static void syncHomeSensationSliderToTransport() {
 }
 
 // -------------------------------------------------------
-// Power Management / Sleep Helpers
-// -------------------------------------------------------
+// screenInit() — load NVS settings and apply to UI
+// ---------------------------------------------------------------------------
+// Screensaver / Power management functions (ported from backup firmware)
+// ---------------------------------------------------------------------------
 
 void screensaver_check_activity()
 {
@@ -597,9 +585,9 @@ void enterDeepSleep()
     esp_deep_sleep_start();
 }
 
-// -------------------------------------------------------
-// Notification Overlay Helpers
-// -------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Notification overlay callbacks
+// ---------------------------------------------------------------------------
 static void notification_left_button_cb(lv_event_t *e)
 {
     (void)e;
@@ -792,9 +780,9 @@ int showNotification(const char *title,
     return result;
 }
 
-// -------------------------------------------------------
-// Battery UI Helpers
-// -------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Battery icon display (ported from backup firmware screen.cpp)
+// ---------------------------------------------------------------------------
 static const char* battery_symbol_for_level(int level, bool isCharging)
 {
     if (level < 0) level = 0;
@@ -880,9 +868,9 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
     }
 }
 
-// -------------------------------------------------------
-// Battery Sampling / Smoothing Helpers
-// -------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Battery level smoothing and charging detection (ported from backup firmware)
+// ---------------------------------------------------------------------------
 static bool detectChargingNow()
 {
     auto chargingState = M5.Power.isCharging();
@@ -1087,9 +1075,9 @@ static int getSmoothedBatteryLevel(bool isCharging)
     return displayedLevel;
 }
 
-// -------------------------------------------------------
-// Screen Power Tick
-// -------------------------------------------------------
+// ---------------------------------------------------------------------------
+// screen_power_tick() — called at top of loop() (ported from backup firmware)
+// ---------------------------------------------------------------------------
 void screen_power_tick()
 {
     if (encoder1.getCount() + encoder2.getCount() + encoder3.getCount() + encoder4.getCount() != 0) {
@@ -1111,9 +1099,9 @@ void screen_power_tick()
 #endif
 }
 
-// -------------------------------------------------------
-// Settings Menu Actions
-// -------------------------------------------------------
+// ---------------------------------------------------------------------------
+// Sleep / Restart confirmation actions — called from Settings screen UI
+// ---------------------------------------------------------------------------
 extern "C" void menuSleepAction(void)
 {
     const int result = showNotification(
@@ -1144,9 +1132,455 @@ extern "C" void menuRestartAction(void)
     }
 }
 
+void screenInit() {
+    bleCommResetPatternReadState();
+
+    Preferences prefs;
+    prefs.begin("m5-ctnr", false);
+    eject_status = prefs.getBool("ejectAddon", false);
+    vibrate_mode = prefs.getBool("Vibrate", true);
+    SafeStartStop   = prefs.getBool("SafeStartStop", true);
+    strokeinvert_mode = prefs.getBool("StrokeInvert", true);
+    ble_force_homeing = prefs.getBool("BleForceHomeing", true);
+    s_visual_speed_lock = prefs.getBool("VisualSpeedLock", false);
+    s_stroke_influences_depth = prefs.getBool("DepthToStroke", false);
+    s_manual_rail_length_mm = getDefaultManualRailLengthMm();
+    if (prefs.isKey("RailLengthMm")) {
+        s_manual_rail_length_mm = prefs.getFloat("RailLengthMm", s_manual_rail_length_mm);
+    }
+    int brightness = prefs.getInt("Brightness", 180);
+    if (brightness < 5) brightness = 5;
+    if (brightness > 255) brightness = 255;
+    prefs.end();
+
+    g_brightness_value = brightness;
+    last_activity_ms = millis();
+    M5.Display.setBrightness(brightness);
+    M5.Lcd.setBrightness(brightness);
+
+    if (eject_status) {
+        lv_obj_add_state(ui_ejectaddon,    LV_STATE_CHECKED);
+        lv_obj_clear_state(ui_HomeButtonL, LV_STATE_DISABLED);
+    }
+    if (vibrate_mode) { lv_obj_add_state(ui_vibrate,  LV_STATE_CHECKED); }
+    if (SafeStartStop)   { lv_obj_add_state(ui_safeStartStop,    LV_STATE_CHECKED); }
+    if (strokeinvert_mode && ui_strokeinvert) { lv_obj_add_state(ui_strokeinvert, LV_STATE_CHECKED); }
+    if (ble_force_homeing && ui_forceHome)    { lv_obj_add_state(ui_forceHome, LV_STATE_CHECKED); }
+    if (s_visual_speed_lock && ui_visualSpeedLock) { lv_obj_add_state(ui_visualSpeedLock, LV_STATE_CHECKED); }
+    if (s_stroke_influences_depth && ui_strokeDepthLink) { lv_obj_add_state(ui_strokeDepthLink, LV_STATE_CHECKED); }
+    ensureManualRailLengthSetting();
+    syncManualRailLengthSettingUi();
+    if (ui_brightness_slider) {
+        lv_slider_set_value(ui_brightness_slider, brightness, LV_ANIM_OFF);
+    }
+
+    lv_roller_set_selected(ui_PatternS, 2, LV_ANIM_OFF);
+    lv_roller_get_selected_str(ui_PatternS, patternstr, 0);
+    lv_label_set_text(ui_HomePatternLabel, patternstr);
+
+    colors_init();
+
+    // Initialise the battery icon display for all screens immediately so that
+    // the very first lv_task_handler() render (which runs before handleScreens()
+    // in loop()) already shows the icon + percentage instead of the old bar.
+    {
+        const bool c = detectChargingNow();
+        update_battery_icons_all_screens(readBatteryPercentForUi(c), c);
+    }
+}
+
+void brightness_slider_event_cb(lv_event_t *e)
+{
+    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED || !ui_brightness_slider) return;
+
+    int val = lv_slider_get_value(ui_brightness_slider);
+    if (val < 5) val = 5;
+    if (val > 255) val = 255;
+
+    g_brightness_value = val;
+    M5.Display.setBrightness(val);
+    M5.Lcd.setBrightness(val);
+
+    Preferences pref;
+    pref.begin("m5-ctnr", false);
+    pref.putInt("Brightness", val);
+    pref.end();
+}
+
 // -------------------------------------------------------
-// Motion / Manual-Rail Helper Utilities
+// Screen event callbacks (registered via ui.c / ui.h)
 // -------------------------------------------------------
+
+void screenmachine(lv_event_t * e) {
+    // Clear any lingering LVGL touch-press tracking from the previous screen.
+    // Without this, a button tap that causes a screen transition can leak into
+    // the new screen if a button there occupies the same pixel coordinates
+    // (e.g. PatternButtonM and HomeButtonM are both at lv_pct(0) / y=100).
+    lv_indev_t *_indev = lv_indev_get_next(NULL);
+    while (_indev) {
+        lv_indev_reset(_indev, NULL);
+        _indev = lv_indev_get_next(_indev);
+    }
+
+    if (lv_scr_act() == ui_Start) {
+        st_screens = ST_UI_START;
+    } else if (lv_scr_act() == ui_Home) {
+        st_screens = ST_UI_HOME;
+        syncHomeSliderRangesToLimits();
+        syncHomeSensationSliderToTransport();
+        speed = lv_slider_get_value(ui_homespeedslider);
+        //LogDebug(speedenc);
+        //LogDebug(speed);
+    } else if (lv_scr_act() == ui_Menu) {
+        // requestMenuEntryAction equivalent (mirrors backup firmware logic).
+        // At this point st_screens is STILL the PREVIOUS screen value.
+        {
+            const bool cameFromHome = (st_screens == ST_UI_HOME || st_screens == ST_UI_STROKE || st_screens == ST_UI_PATTERN);
+            const bool cameFromStreaming = (st_screens == ST_UI_STREAMING);
+            if (!bleCommIsConnected()) {
+                s_ble_menu_requires_stroke_reentry = false;
+            } else if (cameFromHome) {
+                // home/stroke → menu: OSSM stays in strokeEngine; suppress re-home on return.
+                s_ble_menu_requires_stroke_reentry = false;
+            } else if (cameFromStreaming) {
+                // streaming → menu: go:menu was already queued by SCREEN_UNLOAD_START;
+                // arm the flag so home screen re-homes after the mode change.
+                s_ble_menu_requires_stroke_reentry = true;
+            } else if (ble_force_homeing) {
+                // Force-homing enabled: navigated from a non-strokeEngine screen (settings, etc.)
+                bleCommGoToMenu();
+                s_ble_menu_requires_stroke_reentry = true;
+            } else {
+                s_ble_menu_requires_stroke_reentry = false;
+            }
+        }
+        st_screens = ST_UI_MENU;
+    } else if (lv_scr_act() == ui_Pattern) {
+        st_screens = ST_UI_PATTERN;
+
+        if (commIsBleMode()) {
+            if (readPatternsFromOSSM() && newPatternIsReadFromOSSM && patternString.length() > 0) {
+                lv_roller_set_options(ui_PatternS, patternString.c_str(), LV_ROLLER_MODE_NORMAL);
+                uint16_t optionCount = (uint16_t)lv_roller_get_option_count(ui_PatternS);
+                if (optionCount > 0) {
+                    if (pattern < 0 || pattern >= (int)optionCount) {
+                        pattern = 0;
+                    }
+                    lv_roller_set_selected(ui_PatternS, pattern, LV_ANIM_OFF);
+                }
+                newPatternIsReadFromOSSM = false;
+            }
+        } else {
+            // Keep ESP-NOW flow on default UI-defined patterns.
+            newPatternIsReadFromOSSM = false;
+        }
+    } else if (lv_scr_act() == ui_Torqe) {
+        st_screens = ST_UI_Torqe;
+        torqe_f = lv_slider_get_value(ui_outtroqeslider);
+        torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
+        encoder1.setCount(torqe_f_enc);
+        torqe_r = lv_slider_get_value(ui_introqeslider);
+        torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
+        encoder4.setCount(torqe_r_enc);
+    } else if (lv_scr_act() == ui_EJECTSettings) {
+        st_screens = ST_UI_EJECTSETTINGS;
+    } else if (lv_scr_act() == ui_Settings) {
+        st_screens = ST_UI_SETTINGS;
+        s_settings_focus_index = 0;
+        s_settings_scroll_offset = 0;
+        refreshSettingsCarousel();
+    } else if (lv_scr_act() == ui_Stroke) {
+        st_screens = ST_UI_STROKE;
+        refreshStrokeStartStopUi();
+    } else if (lv_scr_act() == ui_Colors) {
+        st_screens = ST_UI_COLORS;
+    } else if (lv_scr_act() == ui_Streaming) {
+        st_screens = ST_UI_STREAMING;
+    } else if (lv_scr_act() == ui_Addons) {
+        st_screens = ST_UI_ADDONS;
+        addonsSyncSelectionVisual();
+    } else if (lv_scr_act() == ui_FistIT) {
+        st_screens = ST_UI_FISTIT;
+    } else if (APModeOwnsActiveScreen()) {
+        st_screens = ST_UI_APMODE;
+    }
+}
+
+void savesettings(lv_event_t * e) {
+    Preferences prefs;
+    prefs.begin("m5-ctnr", false);
+    if (lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("Vibrate", true);
+    } else {
+        prefs.putBool("Vibrate", false);
+    }
+
+    if (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("SafeStartStop", true);
+    } else {
+        prefs.putBool("SafeStartStop", false);
+    }
+
+    if (ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("StrokeInvert", true);
+        strokeinvert_mode = true;
+    } else {
+        prefs.putBool("StrokeInvert", false);
+        strokeinvert_mode = false;
+    }
+
+    if (ui_forceHome && lv_obj_has_state(ui_forceHome, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("BleForceHomeing", true);
+        ble_force_homeing = true;
+    } else {
+        prefs.putBool("BleForceHomeing", false);
+        ble_force_homeing = false;
+    }
+
+    if (ui_visualSpeedLock && lv_obj_has_state(ui_visualSpeedLock, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("VisualSpeedLock", true);
+        s_visual_speed_lock = true;
+        if (stroke > 0.001f) {
+            s_visual_speed_stroke_product = speed * stroke;
+            s_visual_speed_ratio_valid = true;
+        }
+    } else {
+        prefs.putBool("VisualSpeedLock", false);
+        s_visual_speed_lock = false;
+        resetVisualSpeedRatioState();
+    }
+
+    if (ui_strokeDepthLink && lv_obj_has_state(ui_strokeDepthLink, LV_STATE_CHECKED) == 1) {
+        prefs.putBool("DepthToStroke", true);
+        s_stroke_influences_depth = true;
+    } else {
+        prefs.putBool("DepthToStroke", false);
+        s_stroke_influences_depth = false;
+    }
+
+    prefs.putFloat("RailLengthMm", s_manual_rail_length_mm);
+
+    if (ui_brightness_slider) {
+        int brightness = lv_slider_get_value(ui_brightness_slider);
+        if (brightness < 5) brightness = 5;
+        if (brightness > 255) brightness = 255;
+        prefs.putInt("Brightness", brightness);
+        M5.Display.setBrightness(brightness);
+        M5.Lcd.setBrightness(brightness);
+    }
+
+    prefs.end();
+    delay(100);
+    vibrate(225, 75);
+}
+
+void pullOut(lv_event_t * e) {
+    if (speed > 5) {
+        SendCommand(SPEED, 5, OSSM_ID);
+    }
+    SendCommand(DEPTH, 0, OSSM_ID);
+    SendCommand(STROKE, 0.1, OSSM_ID); // set a tiny stroke to ensure we exit the stroke pattern if active
+    speed = 0;
+    stroke = 0;
+    depth = 0;
+    lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
+    lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
+    lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
+    //std::string speedStr = std::to_string(speed);
+    lv_label_set_text(ui_homespeedvalue, "0");
+    //std::string strokeStr = std::to_string(stroke);
+    lv_label_set_text(ui_homestrokevalue, "0");
+    //std::string depthStr = std::to_string(depth);
+    lv_label_set_text(ui_homedepthvalue, "0");
+    showNotification(T_PULLING_OUT, T_PULLING_OUT_TEXT, 3000, false, nullptr, false, nullptr, false);
+    lv_refr_now(NULL);  // force immediate render — lv_task_handler() is re-entrant-blocked inside an event callback
+    SendCommand(SPEED, 0, OSSM_ID);
+    SendCommand(STROKE, 0, OSSM_ID);
+    screenmachine(e);
+}
+
+void emergencyStop(lv_event_t * e) {
+    pullOut(e);
+    EJECT_On = false;
+    
+    // turn off fist-it and send that command to Fist-IT, regardless of whatever screen we are in
+    SendCommand(OFF, 0.0, FIST_ID);
+    SendCommand(OFF, 0.0, OSSM_ID);
+    SendCommand(OFF, 0.0, EJECT_ID);    
+}
+
+void ejectcreampie(lv_event_t * e) {
+    if (EJECT_On == true) {
+        lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
+        SendCommand(ON, 0.0, EJECT_ID);    
+        EJECT_On = false;
+    } else {
+        lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
+//        depth  = 0;
+//        speed  = 0;
+//        stroke = 0;
+//        SendCommand(SETUP_D_I, 0.0, OSSM_ID);
+//        SendCommand(DEPTH, depth, OSSM_ID);
+//        screenmachine(e);
+        SendCommand(ON, 0.0, EJECT_ID);    
+        EJECT_On = true;
+    }
+}
+
+void toggleFistIT(lv_event_t * e) {
+    if (EJECT_On == true) {
+        lv_obj_clear_state(ui_HomeButtonR, LV_STATE_CHECKED);
+        SendCommand(ON, 0.0, EJECT_ID);    
+        EJECT_On = false;
+    } else {
+        lv_obj_clear_state(ui_HomeButtonR, LV_STATE_CHECKED);
+        SendCommand(ON, 0.0, EJECT_ID);    
+        EJECT_On = true;
+    }
+}
+
+void savepattern(lv_event_t * e) {
+    pattern = lv_roller_get_selected(ui_PatternS);
+    lv_roller_get_selected_str(ui_PatternS, patternstr, 0);
+    lv_label_set_text(ui_HomePatternLabel, patternstr);
+    if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
+    //LogDebug(pattern);
+    float patterns = pattern;
+    SendCommand(PATTERN, patterns, OSSM_ID);
+}
+
+static void applyHomeButtonMState(const char* text, lv_style_t* defaultStyle, lv_style_t* pressedStyle, bool forceFocused = false) {
+    if (!ui_HomeButtonM || !ui_HomeButtonMText) return;
+
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_running_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(ui_HomeButtonM, &style_button_stopped_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+
+    lv_obj_add_style(ui_HomeButtonM, defaultStyle, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(ui_HomeButtonM, pressedStyle, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_add_style(ui_HomeButtonM, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+    lv_label_set_text(ui_HomeButtonMText, text);
+    lv_obj_refresh_style(ui_HomeButtonM, LV_PART_MAIN, LV_STYLE_PROP_ANY);
+    lv_obj_invalidate(ui_HomeButtonM);
+}
+
+static void updateHomeButtonMState() {
+    bool isMoving = speed > 0 and stroke > 0 and depth > 0 and OSSM_On;
+    
+    if (isMoving) {
+        applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
+    } else {
+        applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
+    }
+}
+
+
+static void syncHomeMotionUi(bool invertStroke)
+{
+    if (ui_homedepthslider) {
+        lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
+    }
+    if (ui_homedepthvalue) {
+        char depth_v[7];
+        dtostrf(depth, 6, 0, depth_v);
+        lv_label_set_text(ui_homedepthvalue, depth_v);
+    }
+
+    if (ui_homestrokeslider) {
+        if (invertStroke) {
+            if (lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_RANGE) {
+                lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_RANGE);
+            }
+            lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
+            lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
+        } else {
+            if (lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_NORMAL) {
+                lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_NORMAL);
+            }
+            lv_bar_set_start_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
+            lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
+        }
+    }
+    if (ui_homestrokevalue) {
+        char stroke_v[7];
+        dtostrf(stroke, 6, 0, stroke_v);
+        lv_label_set_text(ui_homestrokevalue, stroke_v);
+    }
+}
+
+static void rampHomeStartSpeed(int targetSpeed)
+{
+    for (int currentSpeed = HOME_START_RAMP_THRESHOLD + 1; currentSpeed <= targetSpeed; ++currentSpeed) {
+        delay(HOME_START_RAMP_INTERVAL_MS);
+        SendCommand(SPEED, (float)currentSpeed, OSSM_ID);
+    }
+}
+
+static void rampHomeStopSpeed(int startSpeed)
+{
+    for (int currentSpeed = startSpeed - 1; currentSpeed >= HOME_START_RAMP_THRESHOLD; --currentSpeed) {
+        delay(HOME_START_RAMP_INTERVAL_MS/2);
+        SendCommand(SPEED, (float)currentSpeed, OSSM_ID);
+    }
+}
+
+void homebuttonmevent(lv_event_t * e) {
+    //LogDebug("HomeButton");
+        SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
+    if (OSSM_On == false) {
+        if (speed == 0 || stroke == 0 || depth == 0) return;
+        applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
+        lv_refr_now(NULL);
+        const int targetSpeed = (int)(speed + 0.5f);
+        const int startSpeed = (targetSpeed > HOME_START_RAMP_THRESHOLD) ? HOME_START_RAMP_THRESHOLD : targetSpeed;
+        LogDebugFormatted("Starting OSSM Safe start is active: %s\n", SafeStartStop ? "true" : "false");
+        if (SafeStartStop) {
+            SendCommand(ON, (float)startSpeed, OSSM_ID);
+            if (targetSpeed > HOME_START_RAMP_THRESHOLD) {
+                rampHomeStartSpeed(targetSpeed);
+            }
+        } else {
+            SendCommand(ON, (float)targetSpeed, OSSM_ID);
+            SendCommand(SPEED, (float)targetSpeed, OSSM_ID);
+        }
+    } else {
+        const int resumeSpeed = (int)(speed + 0.5f);
+        LogDebugFormatted("Stopping OSSM Safe start is active: %s\n", SafeStartStop ? "true" : "false");
+        LogDebugFormatted("BLE: Unpause speed %.1f\n", bleCommGetUnpauseSpeed());
+        applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
+        lv_refr_now(NULL);
+        if (SafeStartStop) {
+            if (resumeSpeed > HOME_START_RAMP_THRESHOLD) {
+//                rampHomeStopSpeed(resumeSpeed);
+                SendCommand(SPEED, (float)resumeSpeed, OSSM_ID);
+            }
+        } else {
+            SendCommand(SPEED, (float)resumeSpeed, OSSM_ID);
+        }
+        SendCommand(OFF, 0.0, OSSM_ID);
+        bleCommSetUnpauseSpeed(resumeSpeed);
+    }
+}
+
+void setupDepthInter(lv_event_t * e) {
+    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
+}
+
+void setupdepthF(lv_event_t * e) {
+    SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
+}
+
+void resetEncoderCounts() {
+    encoder1.setCount(0);
+    encoder2.setCount(0);
+    encoder3.setCount(0);
+    encoder4.setCount(0);
+}
+
 static void syncMotionCommandCache(float motionSpeed, float motionDepth, float motionStroke)
 {
     s_last_motion_speed = motionSpeed;
@@ -1439,498 +1873,6 @@ static lv_obj_t* getSettingsFocusedObject()
     return options[s_settings_focus_index];
 }
 
-// -------------------------------------------------------
-// Screen Lifecycle / Event Entry Points
-// -------------------------------------------------------
-void screenInit() {
-    bleCommResetPatternReadState();
-
-    Preferences prefs;
-    prefs.begin("m5-ctnr", false);
-    eject_status = prefs.getBool("ejectAddon", false);
-    vibrate_mode = prefs.getBool("Vibrate", true);
-    SafeStartStop   = prefs.getBool("SafeStartStop", true);
-    strokeinvert_mode = prefs.getBool("StrokeInvert", true);
-    ble_force_homeing = prefs.getBool("BleForceHomeing", true);
-    s_visual_speed_lock = prefs.getBool("VisualSpeedLock", false);
-    s_stroke_influences_depth = prefs.getBool("DepthToStroke", false);
-    s_manual_rail_length_mm = getDefaultManualRailLengthMm();
-    if (prefs.isKey("RailLengthMm")) {
-        s_manual_rail_length_mm = prefs.getFloat("RailLengthMm", s_manual_rail_length_mm);
-    }
-    int brightness = prefs.getInt("Brightness", 180);
-    if (brightness < 5) brightness = 5;
-    if (brightness > 255) brightness = 255;
-    prefs.end();
-
-    g_brightness_value = brightness;
-    last_activity_ms = millis();
-    M5.Display.setBrightness(brightness);
-    M5.Lcd.setBrightness(brightness);
-
-    if (eject_status) {
-        lv_obj_add_state(ui_ejectaddon,    LV_STATE_CHECKED);
-        lv_obj_clear_state(ui_HomeButtonL, LV_STATE_DISABLED);
-    }
-    if (vibrate_mode) { lv_obj_add_state(ui_vibrate,  LV_STATE_CHECKED); }
-    if (SafeStartStop)   { lv_obj_add_state(ui_safeStartStop,    LV_STATE_CHECKED); }
-    if (strokeinvert_mode && ui_strokeinvert) { lv_obj_add_state(ui_strokeinvert, LV_STATE_CHECKED); }
-    if (ble_force_homeing && ui_forceHome)    { lv_obj_add_state(ui_forceHome, LV_STATE_CHECKED); }
-    if (s_visual_speed_lock && ui_visualSpeedLock) { lv_obj_add_state(ui_visualSpeedLock, LV_STATE_CHECKED); }
-    if (s_stroke_influences_depth && ui_strokeDepthLink) { lv_obj_add_state(ui_strokeDepthLink, LV_STATE_CHECKED); }
-    ensureManualRailLengthSetting();
-    syncManualRailLengthSettingUi();
-    if (ui_brightness_slider) {
-        lv_slider_set_value(ui_brightness_slider, brightness, LV_ANIM_OFF);
-    }
-
-    lv_roller_set_selected(ui_PatternS, 2, LV_ANIM_OFF);
-    lv_roller_get_selected_str(ui_PatternS, patternstr, 0);
-    lv_label_set_text(ui_HomePatternLabel, patternstr);
-
-    colors_init();
-
-    // Initialise the battery icon display for all screens immediately so that
-    // the very first lv_task_handler() render (which runs before handleScreens()
-    // in loop()) already shows the icon + percentage instead of the old bar.
-    {
-        const bool c = detectChargingNow();
-        update_battery_icons_all_screens(readBatteryPercentForUi(c), c);
-    }
-}
-
-void brightness_slider_event_cb(lv_event_t *e)
-{
-    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED || !ui_brightness_slider) return;
-
-    int val = lv_slider_get_value(ui_brightness_slider);
-    if (val < 5) val = 5;
-    if (val > 255) val = 255;
-
-    g_brightness_value = val;
-    M5.Display.setBrightness(val);
-    M5.Lcd.setBrightness(val);
-
-    Preferences pref;
-    pref.begin("m5-ctnr", false);
-    pref.putInt("Brightness", val);
-    pref.end();
-}
-
-// -------------------------------------------------------
-// Screen event callbacks (registered via ui.c / ui.h)
-// -------------------------------------------------------
-
-void screenmachine(lv_event_t * e) {
-    // Clear any lingering LVGL touch-press tracking from the previous screen.
-    // Without this, a button tap that causes a screen transition can leak into
-    // the new screen if a button there occupies the same pixel coordinates
-    // (e.g. PatternButtonM and HomeButtonM are both at lv_pct(0) / y=100).
-    lv_indev_t *_indev = lv_indev_get_next(NULL);
-    while (_indev) {
-        lv_indev_reset(_indev, NULL);
-        _indev = lv_indev_get_next(_indev);
-    }
-
-    if (lv_scr_act() == ui_Start) {
-        st_screens = ST_UI_START;
-    } else if (lv_scr_act() == ui_Home) {
-        st_screens = ST_UI_HOME;
-        syncHomeSliderRangesToLimits();
-        syncHomeSensationSliderToTransport();
-        speed = lv_slider_get_value(ui_homespeedslider);
-        //LogDebug(speedenc);
-        //LogDebug(speed);
-    } else if (lv_scr_act() == ui_Menu) {
-        // requestMenuEntryAction equivalent (mirrors backup firmware logic).
-        // At this point st_screens is STILL the PREVIOUS screen value.
-        {
-            const bool cameFromHome = (st_screens == ST_UI_HOME || st_screens == ST_UI_STROKE || st_screens == ST_UI_PATTERN);
-            const bool cameFromStreaming = (st_screens == ST_UI_STREAMING);
-            if (!bleCommIsConnected()) {
-                s_ble_menu_requires_stroke_reentry = false;
-            } else if (cameFromHome) {
-                // home/stroke → menu: OSSM stays in strokeEngine; suppress re-home on return.
-                s_ble_menu_requires_stroke_reentry = false;
-            } else if (cameFromStreaming) {
-                // streaming → menu: go:menu was already queued by SCREEN_UNLOAD_START;
-                // arm the flag so home screen re-homes after the mode change.
-                s_ble_menu_requires_stroke_reentry = true;
-            } else if (ble_force_homeing) {
-                // Force-homing enabled: navigated from a non-strokeEngine screen (settings, etc.)
-                bleCommGoToMenu();
-                s_ble_menu_requires_stroke_reentry = true;
-            } else {
-                s_ble_menu_requires_stroke_reentry = false;
-            }
-        }
-        st_screens = ST_UI_MENU;
-    } else if (lv_scr_act() == ui_Pattern) {
-        st_screens = ST_UI_PATTERN;
-
-        if (commIsBleMode()) {
-            if (readPatternsFromOSSM() && newPatternIsReadFromOSSM && patternString.length() > 0) {
-                lv_roller_set_options(ui_PatternS, patternString.c_str(), LV_ROLLER_MODE_NORMAL);
-                uint16_t optionCount = (uint16_t)lv_roller_get_option_count(ui_PatternS);
-                if (optionCount > 0) {
-                    if (pattern < 0 || pattern >= (int)optionCount) {
-                        pattern = 0;
-                    }
-                    lv_roller_set_selected(ui_PatternS, pattern, LV_ANIM_OFF);
-                }
-                newPatternIsReadFromOSSM = false;
-            }
-        } else {
-            // Keep ESP-NOW flow on default UI-defined patterns.
-            newPatternIsReadFromOSSM = false;
-        }
-    } else if (lv_scr_act() == ui_Torqe) {
-        st_screens = ST_UI_Torqe;
-        torqe_f = lv_slider_get_value(ui_outtroqeslider);
-        torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
-        encoder1.setCount(torqe_f_enc);
-        torqe_r = lv_slider_get_value(ui_introqeslider);
-        torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
-        encoder4.setCount(torqe_r_enc);
-    } else if (lv_scr_act() == ui_EJECTSettings) {
-        st_screens = ST_UI_EJECTSETTINGS;
-    } else if (lv_scr_act() == ui_Settings) {
-        st_screens = ST_UI_SETTINGS;
-        s_settings_focus_index = 0;
-        s_settings_scroll_offset = 0;
-        refreshSettingsCarousel();
-    } else if (lv_scr_act() == ui_Stroke) {
-        st_screens = ST_UI_STROKE;
-        refreshStrokeStartStopUi();
-    } else if (lv_scr_act() == ui_Colors) {
-        st_screens = ST_UI_COLORS;
-    } else if (lv_scr_act() == ui_Streaming) {
-        st_screens = ST_UI_STREAMING;
-    } else if (lv_scr_act() == ui_Addons) {
-        st_screens = ST_UI_ADDONS;
-        addonsSyncSelectionVisual();
-    } else if (lv_scr_act() == ui_FistIT) {
-        st_screens = ST_UI_FISTIT;
-    } else if (APModeOwnsActiveScreen()) {
-        st_screens = ST_UI_APMODE;
-    }
-}
-
-// -------------------------------------------------------
-// Settings Persistence / Action Callbacks
-// -------------------------------------------------------
-void savesettings(lv_event_t * e) {
-    Preferences prefs;
-    prefs.begin("m5-ctnr", false);
-    if (lv_obj_has_state(ui_vibrate, LV_STATE_CHECKED) == 1) {
-        prefs.putBool("Vibrate", true);
-    } else {
-        prefs.putBool("Vibrate", false);
-    }
-
-    if (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1) {
-        prefs.putBool("SafeStartStop", true);
-    } else {
-        prefs.putBool("SafeStartStop", false);
-    }
-
-    if (ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED) == 1) {
-        prefs.putBool("StrokeInvert", true);
-        strokeinvert_mode = true;
-    } else {
-        prefs.putBool("StrokeInvert", false);
-        strokeinvert_mode = false;
-    }
-
-    if (ui_forceHome && lv_obj_has_state(ui_forceHome, LV_STATE_CHECKED) == 1) {
-        prefs.putBool("BleForceHomeing", true);
-        ble_force_homeing = true;
-    } else {
-        prefs.putBool("BleForceHomeing", false);
-        ble_force_homeing = false;
-    }
-
-    if (ui_visualSpeedLock && lv_obj_has_state(ui_visualSpeedLock, LV_STATE_CHECKED) == 1) {
-        prefs.putBool("VisualSpeedLock", true);
-        s_visual_speed_lock = true;
-        if (stroke > 0.001f) {
-            s_visual_speed_stroke_product = speed * stroke;
-            s_visual_speed_ratio_valid = true;
-        }
-    } else {
-        prefs.putBool("VisualSpeedLock", false);
-        s_visual_speed_lock = false;
-        resetVisualSpeedRatioState();
-    }
-
-    if (ui_strokeDepthLink && lv_obj_has_state(ui_strokeDepthLink, LV_STATE_CHECKED) == 1) {
-        prefs.putBool("DepthToStroke", true);
-        s_stroke_influences_depth = true;
-    } else {
-        prefs.putBool("DepthToStroke", false);
-        s_stroke_influences_depth = false;
-    }
-
-    prefs.putFloat("RailLengthMm", s_manual_rail_length_mm);
-
-    if (ui_brightness_slider) {
-        int brightness = lv_slider_get_value(ui_brightness_slider);
-        if (brightness < 5) brightness = 5;
-        if (brightness > 255) brightness = 255;
-        prefs.putInt("Brightness", brightness);
-        M5.Display.setBrightness(brightness);
-        M5.Lcd.setBrightness(brightness);
-    }
-
-    prefs.end();
-    delay(100);
-    vibrate(225, 75);
-}
-
-void pullOut(lv_event_t * e) {
-    if (speed > 5) {
-        SendCommand(SPEED, 5, OSSM_ID);
-    }
-    SendCommand(DEPTH, 0, OSSM_ID);
-    SendCommand(STROKE, 0.1, OSSM_ID); // set a tiny stroke to ensure we exit the stroke pattern if active
-    speed = 0;
-    stroke = 0;
-    depth = 0;
-    lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
-    lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
-    lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
-    //std::string speedStr = std::to_string(speed);
-    lv_label_set_text(ui_homespeedvalue, "0");
-    //std::string strokeStr = std::to_string(stroke);
-    lv_label_set_text(ui_homestrokevalue, "0");
-    //std::string depthStr = std::to_string(depth);
-    lv_label_set_text(ui_homedepthvalue, "0");
-    showNotification(T_PULLING_OUT, T_PULLING_OUT_TEXT, 3000, false, nullptr, false, nullptr, false);
-    lv_refr_now(NULL);  // force immediate render — lv_task_handler() is re-entrant-blocked inside an event callback
-    SendCommand(SPEED, 0, OSSM_ID);
-    SendCommand(STROKE, 0, OSSM_ID);
-    screenmachine(e);
-}
-
-void emergencyStop(lv_event_t * e) {
-    pullOut(e);
-    EJECT_On = false;
-    
-    // turn off fist-it and send that command to Fist-IT, regardless of whatever screen we are in
-    SendCommand(OFF, 0.0, FIST_ID);
-    SendCommand(OFF, 0.0, OSSM_ID);
-    SendCommand(OFF, 0.0, EJECT_ID);    
-}
-
-void ejectcreampie(lv_event_t * e) {
-    if (EJECT_On == true) {
-        lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
-        SendCommand(ON, 0.0, EJECT_ID);    
-        EJECT_On = false;
-    } else {
-        lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
-//        depth  = 0;
-//        speed  = 0;
-//        stroke = 0;
-//        SendCommand(SETUP_D_I, 0.0, OSSM_ID);
-//        SendCommand(DEPTH, depth, OSSM_ID);
-//        screenmachine(e);
-        SendCommand(ON, 0.0, EJECT_ID);    
-        EJECT_On = true;
-    }
-}
-
-void toggleFistIT(lv_event_t * e) {
-    if (EJECT_On == true) {
-        lv_obj_clear_state(ui_HomeButtonR, LV_STATE_CHECKED);
-        SendCommand(ON, 0.0, EJECT_ID);    
-        EJECT_On = false;
-    } else {
-        lv_obj_clear_state(ui_HomeButtonR, LV_STATE_CHECKED);
-        SendCommand(ON, 0.0, EJECT_ID);    
-        EJECT_On = true;
-    }
-}
-
-void savepattern(lv_event_t * e) {
-    pattern = lv_roller_get_selected(ui_PatternS);
-    lv_roller_get_selected_str(ui_PatternS, patternstr, 0);
-    lv_label_set_text(ui_HomePatternLabel, patternstr);
-    if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
-    //LogDebug(pattern);
-    float patterns = pattern;
-    SendCommand(PATTERN, patterns, OSSM_ID);
-}
-
-static void applyHomeButtonMState(const char* text, lv_style_t* defaultStyle, lv_style_t* pressedStyle, bool forceFocused = false) {
-    if (!ui_HomeButtonM || !ui_HomeButtonMText) return;
-
-    lv_obj_remove_style(ui_HomeButtonM, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_remove_style(ui_HomeButtonM, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_remove_style(ui_HomeButtonM, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_remove_style(ui_HomeButtonM, &style_button_running_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_remove_style(ui_HomeButtonM, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_remove_style(ui_HomeButtonM, &style_button_stopped_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
-
-    lv_obj_add_style(ui_HomeButtonM, defaultStyle, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_style(ui_HomeButtonM, pressedStyle, LV_PART_MAIN | LV_STATE_PRESSED);
-    lv_obj_add_style(ui_HomeButtonM, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
-
-    lv_label_set_text(ui_HomeButtonMText, text);
-    lv_obj_refresh_style(ui_HomeButtonM, LV_PART_MAIN, LV_STYLE_PROP_ANY);
-    lv_obj_invalidate(ui_HomeButtonM);
-}
-
-static void updateHomeButtonMState() {
-    bool isMoving = speed > 0 and stroke > 0 and depth > 0 and OSSM_On;
-    
-    if (isMoving) {
-        applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
-    } else {
-        applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
-    }
-}
-
-
-static void syncHomeMotionUi(bool invertStroke)
-{
-    if (ui_homedepthslider) {
-        lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
-    }
-    if (ui_homedepthvalue) {
-        char depth_v[7];
-        dtostrf(depth, 6, 0, depth_v);
-        lv_label_set_text(ui_homedepthvalue, depth_v);
-    }
-
-    if (ui_homestrokeslider) {
-        if (invertStroke) {
-            if (lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_RANGE) {
-                lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_RANGE);
-            }
-            lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
-            lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
-        } else {
-            if (lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_NORMAL) {
-                lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_NORMAL);
-            }
-            lv_bar_set_start_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
-            lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
-        }
-    }
-    if (ui_homestrokevalue) {
-        char stroke_v[7];
-        dtostrf(stroke, 6, 0, stroke_v);
-        lv_label_set_text(ui_homestrokevalue, stroke_v);
-    }
-}
-
-static void rampHomeStartSpeed(int targetSpeed)
-{
-    s_home_speed_ramp_active = true;
-    s_home_speed_ramp_current = HOME_START_RAMP_THRESHOLD + 1;
-    s_home_speed_ramp_target = targetSpeed;
-    s_home_speed_ramp_step = 1;
-    s_home_speed_ramp_interval_ms = HOME_START_RAMP_INTERVAL_MS;
-    s_home_speed_ramp_next_ms = millis() + HOME_START_RAMP_INTERVAL_MS;
-}
-
-static void rampHomeStopSpeed(int startSpeed)
-{
-    s_home_speed_ramp_active = true;
-    s_home_speed_ramp_current = startSpeed - 1;
-    s_home_speed_ramp_target = HOME_START_RAMP_THRESHOLD;
-    s_home_speed_ramp_step = -1;
-    s_home_speed_ramp_interval_ms = HOME_START_RAMP_INTERVAL_MS / 2;
-    s_home_speed_ramp_next_ms = millis() + s_home_speed_ramp_interval_ms;
-}
-
-static void serviceHomeSpeedRamp()
-{
-    if (!s_home_speed_ramp_active) return;
-
-    const uint32_t now = millis();
-    if (now < s_home_speed_ramp_next_ms) return;
-
-    const bool reachedTarget =
-        (s_home_speed_ramp_step > 0 && s_home_speed_ramp_current > s_home_speed_ramp_target) ||
-        (s_home_speed_ramp_step < 0 && s_home_speed_ramp_current < s_home_speed_ramp_target);
-    if (reachedTarget) {
-        s_home_speed_ramp_active = false;
-        return;
-    }
-
-    SendCommand(SPEED, (float)s_home_speed_ramp_current, OSSM_ID);
-    s_home_speed_ramp_current += s_home_speed_ramp_step;
-    s_home_speed_ramp_next_ms = now + s_home_speed_ramp_interval_ms;
-}
-
-void homebuttonmevent(lv_event_t * e) {
-    //LogDebug("HomeButton");
-        SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
-    if (OSSM_On == false) {
-        if (speed == 0 || stroke == 0 || depth == 0) return;
-        applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
-        lv_refr_now(NULL);
-        const int targetSpeed = (int)(speed + 0.5f);
-        const int startSpeed = (targetSpeed > HOME_START_RAMP_THRESHOLD) ? HOME_START_RAMP_THRESHOLD : targetSpeed;
-        LogDebugFormatted("Starting OSSM Safe start is active: %s\n Starting at startingspeed %d", SafeStartStop ? "true" : "false", startSpeed);
-        if (SafeStartStop) {
-            s_home_speed_ramp_active = (targetSpeed > HOME_START_RAMP_THRESHOLD);
-            //SendCommand(SPEED, 1, OSSM_ID);
-            SendCommand(ON, (float)startSpeed, OSSM_ID);
-            //OSSM_On = true;
-            if (targetSpeed > HOME_START_RAMP_THRESHOLD) {
-                rampHomeStartSpeed(targetSpeed);
-            }
-        } else {
-            SendCommand(SPEED, (float)targetSpeed, OSSM_ID);
-            SendCommand(ON, (float)targetSpeed, OSSM_ID);
-            //OSSM_On = true;
-        }
-    } else {
-        const int resumeSpeed = (int)(speed + 0.5f);
-        const bool wasRamping = s_home_speed_ramp_active;
-        LogDebugFormatted("Stopping OSSM Safe start is active: %s\n", SafeStartStop ? "true" : "false");
-        LogDebugFormatted("BLE: Unpause speed %.1f\n", bleCommGetUnpauseSpeed());
-        applyHomeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);
-        lv_refr_now(NULL);
-        s_home_speed_ramp_active = false;
-        if (SafeStartStop) {
-            if (!wasRamping && resumeSpeed > HOME_START_RAMP_THRESHOLD) {
-//                rampHomeStopSpeed(resumeSpeed);
-                SendCommand(SPEED, (float)resumeSpeed, OSSM_ID);
-            }
-            if (wasRamping && resumeSpeed > HOME_START_RAMP_THRESHOLD) {
-//                rampHomeStopSpeed(resumeSpeed);
-                //SendCommand(SPEED, 1, OSSM_ID);
-            }
-        } else {
-            SendCommand(SPEED, (float)resumeSpeed, OSSM_ID);
-        }
-        SendCommand(OFF, 0.0, OSSM_ID);
-        bleCommSetUnpauseSpeed(resumeSpeed);
-    }
-}
-
-void setupDepthInter(lv_event_t * e) {
-    SendCommand(SETUP_D_I, 0.0, OSSM_ID);
-}
-
-void setupdepthF(lv_event_t * e) {
-    SendCommand(SETUP_D_I_F, 0.0, OSSM_ID);
-}
-
-void resetEncoderCounts() {
-    encoder1.setCount(0);
-    encoder2.setCount(0);
-    encoder3.setCount(0);
-    encoder4.setCount(0);
-}
-
-// -------------------------------------------------------
-// Zero-Stroke Depth Jog + Motion Command Flush
-// -------------------------------------------------------
 static void startZeroStrokeDepthJog(float previousDepth, float targetDepth)
 {
     s_zero_stroke_depth_jog_active = true;
@@ -1957,13 +1899,6 @@ static void stopZeroStrokeDepthJog()
 
 static void serviceZeroStrokeDepthJog()
 {
-    if (!ENABLE_ZERO_STROKE_DEPTH_JOG) {
-        if (s_zero_stroke_depth_jog_active) {
-            stopZeroStrokeDepthJog();
-        }
-        return;
-    }
-
     if (!s_zero_stroke_depth_jog_active) return;
 
     if (s_manual_rail_length_mm <= 0.0f) {
@@ -2035,10 +1970,10 @@ static void flushMotionCommands(float motionSpeed,
 
     if (allowSend && motionValueChanged) {
         const float commandedSpeed = resolveVisualCompensatedSpeed(motionSpeed, motionStroke);
-        const bool speedChanged = !s_motion_command_cache_valid || motionSpeed != s_last_motion_speed;
+        const bool speedChanged = !s_motion_command_cache_valid || commandedSpeed != s_last_motion_speed;
         const bool depthChanged = !s_motion_command_cache_valid || motionDepth != s_last_motion_depth;
         const bool strokeChanged = !s_motion_command_cache_valid || motionStroke != s_last_motion_stroke;
-        const bool wantsZeroStrokeJog = ENABLE_ZERO_STROKE_DEPTH_JOG && commIsBleMode() && motionSpeed > 0.5f && motionStroke <= 0.001f && motionDepth > 0.0f && depthChanged;
+        const bool wantsZeroStrokeJog = commIsBleMode() && motionSpeed > 0.5f && motionStroke <= 0.001f && motionDepth > 0.0f && depthChanged;
 
         if (wantsZeroStrokeJog && s_manual_rail_length_mm <= 0.0f) {
             LogDebugFormatted("Error depth jogging - no rail length set\n");
@@ -2049,7 +1984,7 @@ static void flushMotionCommands(float motionSpeed,
             return;
         }
 
-        const bool zeroStrokeDepthJog = ENABLE_ZERO_STROKE_DEPTH_JOG && commIsBleMode() && motionSpeed > 0.5f && motionStroke <= 0.001f &&
+        const bool zeroStrokeDepthJog = commIsBleMode() && motionSpeed > 0.5f && motionStroke <= 0.001f &&
                         motionDepth > 0.0f && s_manual_rail_length_mm > 0.0f && depthChanged;
         const bool forceRunForZeroStrokeJog = zeroStrokeDepthJog && !OSSM_On;
         const float previousDepth = s_motion_command_cache_valid ? s_last_motion_depth : 0.0f;
@@ -2057,7 +1992,7 @@ static void flushMotionCommands(float motionSpeed,
         if (forceRunForZeroStrokeJog) {
             SendCommand(ON, commandedSpeed, OSSM_ID);
             LogDebugFormatted("BLE: zero-stroke depth jog forcing ON at speed %.1f\n", commandedSpeed);
-        } else if (speedChanged && !s_home_speed_ramp_active) {
+        } else if (speedChanged) {
             SendCommand(SPEED, commandedSpeed, OSSM_ID);
         }
         if (depthChanged) { SendCommand(DEPTH, motionDepth, OSSM_ID); }
@@ -2085,13 +2020,15 @@ static void flushMotionCommands(float motionSpeed,
             }
         }
 
-        syncMotionCommandCache(motionSpeed, motionDepth, motionStroke);
+        syncMotionCommandCache(commandedSpeed, motionDepth, motionStroke);
 
     }
 }
-
 // -------------------------------------------------------
-// BLE Connection Guard
+// checkBleDisconnectError() — show a fatal notification if BLE drops
+// and does not recover within 3 seconds.
+// Only active in BLE transport mode; skipped for ESP-NOW connections.
+// Must only be called from the Arduino main-task context.
 // -------------------------------------------------------
 static void checkBleDisconnectError()
 {
@@ -2162,11 +2099,11 @@ static void checkBleDisconnectError()
 }
 
 // -------------------------------------------------------
-// Main Screen State Machine Loop
+// handleScreens() — battery update + state machine + flag clear
+// Called every loop iteration from main loop()
 // -------------------------------------------------------
 void handleScreens() {
     checkBleDisconnectError();
-    serviceHomeSpeedRamp();
 
     if (s_zero_stroke_depth_jog_active && st_screens != ST_UI_HOME) {
         SendCommand(STROKE, 0.0f, OSSM_ID);
@@ -2408,10 +2345,10 @@ void handleScreens() {
             changed = false;
             lv_slider_set_value(ui_homesensationslider, sensation, LV_ANIM_OFF);
             if (encoder4.getCount() >= 2) {
-                changed = true; sensation += rampValue;
+                changed = true; sensation += 2;
                 encoder4.setCount(0); rampMs = millis(); encId = 4;
             } else if (encoder4.getCount() <= -2) {
-                changed = true; sensation -= rampValue;
+                changed = true; sensation -= 2;
                 encoder4.setCount(0); rampMs = millis(); encId = 4;
             }
             if (sensation < -100)   { changed = true; sensation = -100; }

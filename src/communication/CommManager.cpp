@@ -13,6 +13,9 @@
 
 namespace {
 
+// -------------------------------------------------------
+// Internal Transport State
+// -------------------------------------------------------
 static CommTransportMode g_mode = COMM_MODE_NONE;
 
 static void setMode(CommTransportMode mode) {
@@ -53,6 +56,9 @@ static bool isAddonTarget(int target) {
 
 }  // namespace
 
+// -------------------------------------------------------
+// Public Transport Lifecycle
+// -------------------------------------------------------
 void commInit() {
   setMode(COMM_MODE_NONE);
   // BLE is lazy-initialised: only start the BLE stack when ESP-NOW pairing
@@ -79,6 +85,9 @@ bool commIsEspNowMode() {
   return commGetMode() == COMM_MODE_ESPNOW;
 }
 
+// -------------------------------------------------------
+// Public UI Connect Flow
+// -------------------------------------------------------
 void connectbutton(lv_event_t* e) {
   (void)e;
   //LogDebug("Connect button clicked");
@@ -186,6 +195,9 @@ bool SendCommand(int Command, float Value, int Target) {
   return false;
 }
 
+// -------------------------------------------------------
+// Public Streaming Bridge
+// -------------------------------------------------------
 bool SendStreamCommand(int position, int durationMs) {
   // Stream commands are BLE-only by design.
   if (!bleCommTryConnect()) {

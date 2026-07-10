@@ -45,5 +45,7 @@ bool FistITSendCommand(int command, float value);
 void FistITToggle();        // Toggle on/off (uses internal state)
 bool FistITIsPaired();
 void FistITSetAddonEnabled(bool enabled);
+const uint8_t* FistITGetTxAddress();
+bool FistITEnsureTxPeer();
 lv_obj_t *FistITGetBatteryTitleLabel();
 lv_obj_t *FistITGetBatteryValueLabel();
