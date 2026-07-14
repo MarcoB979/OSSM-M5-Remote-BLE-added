@@ -91,6 +91,7 @@ static int s_home_speed_ramp_target = 0;
 static int s_home_speed_ramp_step = 0;
 static uint32_t s_home_speed_ramp_interval_ms = 0;
 static uint32_t s_home_speed_ramp_next_ms = 0;
+static bool s_force_home_restore_pending = false;
 static uint32_t s_zero_stroke_depth_jog_start_ms = 0;
 static uint32_t s_zero_stroke_debug_log_ms = 0;
 static uint32_t s_visual_speed_log_ms = 0;
@@ -116,23 +117,34 @@ static constexpr bool ENABLE_ZERO_STROKE_DEPTH_JOG = false;
 static constexpr float ZERO_STROKE_DEPTH_TOLERANCE = 1.0f;
 static constexpr uint32_t ZERO_STROKE_DEPTH_JOG_TIMEOUT_MS = 25000;
 static constexpr int SETTINGS_CAROUSEL_VISIBLE_COUNT = 4;
+enum EncRampProfile {
+    ENCODER_RAMP_NONE = 0,
+    ENCODER_RAMP_MEDIUM = 1,
+    ENCODER_RAMP_HIGH = 2,
+    ENCODER_RAMP_AGGRESSIVE = 3,
+};
 static int s_settings_focus_index = 0;
 static int s_settings_scroll_offset = 0;
-static lv_obj_t* s_settings_position_label = nullptr;
 static lv_obj_t* s_manual_rail_length_setting = nullptr;
+static lv_obj_t* s_encoder_ramp_profile_setting = nullptr;
 static bool s_manual_rail_length_ui_syncing = false;
+static int s_encoder_ramp_profile = ENCODER_RAMP_MEDIUM;
 static void resetVisualSpeedRatioState();
 static void updateVisualSpeedRatioFromUi(bool uiSpeedChanged, float uiSpeed, float uiStroke);
 static float resolveVisualCompensatedSpeed(float uiSpeed, float uiStroke);
 static void ensureManualRailLengthSetting();
+static void ensureEncRampProfileSetting();
 static int collectSettingsOptionObjects(lv_obj_t** outObjects, int maxObjects);
 static void refreshSettingsCarousel();
 static lv_obj_t* getSettingsFocusedObject();
 
 static void syncManualRailLengthSettingUi();
+static void syncEncRampProfileSettingUi();
 static void persistManualRailLengthSetting();
+static void persistEncRampProfileSetting();
 static void runManualRailLengthCalibrationWorkflow();
 static void manualRailLengthSetting_event_cb(lv_event_t* e);
+static void EncRampProfile_event_cb(lv_event_t* e);
 static float getDefaultManualRailLengthMm();
 
 bool dynamicStroke  = false;
@@ -159,16 +171,51 @@ uint32_t       deep_sleep_timeout_ms    = DEEP_SLEEP_TIMEOUT_MS_DEFAULT;
 // Notification touch result (set by LVGL button callbacks inside showNotification)
 static volatile int g_notification_touch_result = NOTIFICATION_RESULT_NONE;
 static volatile bool g_status_strip_refresh_requested = true;
+static uint32_t s_encoder_last_step_ms[4] = {0, 0, 0, 0};
 
-static unsigned long nowMs      = 0;
-static int           rampMs     = 0;
-static bool          rampEnabled = true;
-static int           rampValue  = 1;
-static int           rampUpValue = 2;
-static int           rampTime   = 75;
-static int           maxRamp    = 5;
-static int           encId      = 0;
-static int           activeEncId = 0;
+static constexpr uint32_t ENCODER_RAMP_MEDIUM_MS = 120;
+static constexpr uint32_t ENCODER_RAMP_FAST_MS = 45;
+
+static int homeStepFromEncoderCount(int encoderIndex, long count)
+{
+    if (encoderIndex < 0 || encoderIndex >= 4) return 0;
+
+    const long magnitude = labs(count);
+    if (magnitude < 2) return 0;
+
+    if (s_encoder_ramp_profile == ENCODER_RAMP_NONE) {
+        return (count > 0) ? 1 : -1;
+    }
+
+    const uint32_t nowMs = millis();
+    const uint32_t lastMs = s_encoder_last_step_ms[encoderIndex];
+    const uint32_t elapsedMs = (lastMs == 0U) ? UINT32_MAX : (nowMs - lastMs);
+    s_encoder_last_step_ms[encoderIndex] = nowMs;
+
+    int step = 1;
+    if (elapsedMs <= ENCODER_RAMP_FAST_MS) {
+        if (s_encoder_ramp_profile == ENCODER_RAMP_MEDIUM) {
+            step = 3;
+        } else if (s_encoder_ramp_profile == ENCODER_RAMP_HIGH) {
+            step = 4;
+        } else if (s_encoder_ramp_profile == ENCODER_RAMP_AGGRESSIVE) {
+            step = 6;
+        }
+    } else if (elapsedMs <= ENCODER_RAMP_MEDIUM_MS) {
+        if (s_encoder_ramp_profile == ENCODER_RAMP_MEDIUM) {
+            step = 2;
+        } else if (s_encoder_ramp_profile == ENCODER_RAMP_HIGH) {
+            step = 3;
+        } else if (s_encoder_ramp_profile == ENCODER_RAMP_AGGRESSIVE) {
+            step = 4;
+        }
+    }
+
+    if (step < 1) step = 1;
+    if (step > 6) step = 6;
+
+    return (count > 0) ? step : -step;
+}
 
 static constexpr int EJECT_ICON_W = 14;
 static constexpr int EJECT_ICON_H = 20;
@@ -367,6 +414,7 @@ static void updateStatusStrip() {
         lv_obj_add_style(statusLabels[i], &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(statusLabels[i], &lv_font_montserrat_22, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_clear_flag(statusLabels[i], LV_OBJ_FLAG_HIDDEN);
+
 
         if (statusESPIcons[i] == nullptr) {
             statusESPIcons[i] = createStatusESPIcon(statusScreens[i]);
@@ -1181,6 +1229,14 @@ static void persistManualRailLengthSetting()
     prefs.end();
 }
 
+static void persistEncRampProfileSetting()
+{
+    Preferences prefs;
+    prefs.begin("m5-ctnr", false);
+    prefs.putInt("EncRampProfile", s_encoder_ramp_profile);
+    prefs.end();
+}
+
 static float getDefaultManualRailLengthMm()
 {
 #ifdef RAIL_LENGTH
@@ -1217,6 +1273,30 @@ static void syncManualRailLengthSettingUi()
     s_manual_rail_length_ui_syncing = false;
 }
 
+static const char* getEncRampProfileName(int profile)
+{
+    switch (profile) {
+        case ENCODER_RAMP_NONE:
+            return "None";
+        case ENCODER_RAMP_HIGH:
+            return "High";
+        case ENCODER_RAMP_AGGRESSIVE:
+            return "Aggressive";
+        case ENCODER_RAMP_MEDIUM:
+        default:
+            return "Medium";
+    }
+}
+
+static void syncEncRampProfileSettingUi()
+{
+    if (!s_encoder_ramp_profile_setting) return;
+    char label[64];
+    snprintf(label, sizeof(label), "Encoder ramp : %s", getEncRampProfileName(s_encoder_ramp_profile));
+    lv_checkbox_set_text(s_encoder_ramp_profile_setting, label);
+    lv_obj_add_state(s_encoder_ramp_profile_setting, LV_STATE_CHECKED);
+}
+
 static void ensureManualRailLengthSetting()
 {
     if (!ui_Settings || s_manual_rail_length_setting) return;
@@ -1235,6 +1315,25 @@ static void ensureManualRailLengthSetting()
     syncManualRailLengthSettingUi();
 }
 
+static void ensureEncRampProfileSetting()
+{
+    if (!ui_Settings || s_encoder_ramp_profile_setting) return;
+
+    s_encoder_ramp_profile_setting = lv_checkbox_create(ui_Settings);
+    lv_checkbox_set_text(s_encoder_ramp_profile_setting, "Encoder ramp : Medium");
+    lv_obj_set_width(s_encoder_ramp_profile_setting, LV_SIZE_CONTENT);
+    lv_obj_set_height(s_encoder_ramp_profile_setting, LV_SIZE_CONTENT);
+    lv_obj_set_x(s_encoder_ramp_profile_setting, 10);
+    lv_obj_set_y(s_encoder_ramp_profile_setting, 150);
+    lv_obj_set_align(s_encoder_ramp_profile_setting, LV_ALIGN_LEFT_MID);
+    lv_obj_add_flag(s_encoder_ramp_profile_setting, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    
+    lv_obj_set_style_text_font(s_encoder_ramp_profile_setting, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+    uiApplyCheckboxStyles(s_encoder_ramp_profile_setting);
+    lv_obj_add_event_cb(s_encoder_ramp_profile_setting, EncRampProfile_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    syncEncRampProfileSettingUi();
+}
+
 static void manualRailLengthSetting_event_cb(lv_event_t* e)
 {
     if (!e || s_manual_rail_length_ui_syncing) return;
@@ -1251,6 +1350,20 @@ static void manualRailLengthSetting_event_cb(lv_event_t* e)
     }
 
     runManualRailLengthCalibrationWorkflow();
+}
+
+static void EncRampProfile_event_cb(lv_event_t* e)
+{
+    if (!e || !s_encoder_ramp_profile_setting) return;
+
+    const lv_event_code_t code = lv_event_get_code(e);
+    if (code != LV_EVENT_VALUE_CHANGED) return;
+
+    s_encoder_ramp_profile = (s_encoder_ramp_profile + 1) % 4;
+    persistEncRampProfileSetting();
+    syncEncRampProfileSettingUi();
+    refreshSettingsCarousel();
+    lv_refr_now(NULL);
 }
 
 static void runManualRailLengthCalibrationWorkflow()
@@ -1370,7 +1483,7 @@ static int collectSettingsOptionObjects(lv_obj_t** outObjects, int maxObjects)
 {
     if (!outObjects || maxObjects <= 0) return 0;
 
-    ensureManualRailLengthSetting();
+    ensureEncRampProfileSetting();
 
     int count = 0;
     auto addObj = [&](lv_obj_t* obj) {
@@ -1384,24 +1497,19 @@ static int collectSettingsOptionObjects(lv_obj_t** outObjects, int maxObjects)
     addObj(ui_forceHome);
     addObj(ui_visualSpeedLock);
     addObj(ui_strokeDepthLink);
-    addObj(s_manual_rail_length_setting);
+    addObj(s_encoder_ramp_profile_setting);
     return count;
 }
 
 static void refreshSettingsCarousel()
 {
-    lv_obj_t* options[8] = {};
-    const int optionCount = collectSettingsOptionObjects(options, 8);
-    if (optionCount <= 0) return;
-
-    if (!s_settings_position_label && ui_Settings) {
-        s_settings_position_label = lv_label_create(ui_Settings);
-        lv_obj_set_align(s_settings_position_label, LV_ALIGN_LEFT_MID);
-        lv_obj_set_x(s_settings_position_label, 12);
-        lv_obj_set_y(s_settings_position_label, 88);
-        lv_obj_set_style_text_font(s_settings_position_label, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_text_color(s_settings_position_label, lv_color_hex(getActiveTextSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_clear_flag(s_settings_position_label, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t* options[9] = {};
+    const int optionCount = collectSettingsOptionObjects(options, 9);
+    if (optionCount <= 0) {
+        if (ui_Logo1) {
+            lv_label_set_text(ui_Logo1, T_SCREEN_SETTINGS);
+        }
+        return;
     }
 
     if (s_settings_focus_index < 0) s_settings_focus_index = 0;
@@ -1442,18 +1550,17 @@ static void refreshSettingsCarousel()
         }
     }
 
-    if (s_settings_position_label) {
-        char indicator[12];
-        snprintf(indicator, sizeof(indicator), "%d/%d", s_settings_focus_index + 1, optionCount);
-        lv_label_set_text(s_settings_position_label, indicator);
-        lv_obj_set_style_text_color(s_settings_position_label, lv_color_hex(getActiveTextSecondaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
+    if (ui_Logo1) {
+        char title[64];
+        snprintf(title, sizeof(title), "%s %d/%d", T_SCREEN_SETTINGS, s_settings_focus_index + 1, optionCount);
+        lv_label_set_text(ui_Logo1, title);
     }
 }
 
 static lv_obj_t* getSettingsFocusedObject()
 {
-    lv_obj_t* options[8] = {};
-    const int optionCount = collectSettingsOptionObjects(options, 8);
+    lv_obj_t* options[9] = {};
+    const int optionCount = collectSettingsOptionObjects(options, 9);
     if (optionCount <= 0) return nullptr;
 
     if (s_settings_focus_index < 0) s_settings_focus_index = 0;
@@ -1476,6 +1583,10 @@ void screenInit() {
     ble_force_homeing = prefs.getBool("BleForceHomeing", true);
     s_visual_speed_lock = prefs.getBool("VisualSpeedLock", false);
     s_stroke_influences_depth = prefs.getBool("DepthToStroke", false);
+    s_encoder_ramp_profile = prefs.getInt("EncRampProfile", ENCODER_RAMP_MEDIUM);
+    if (s_encoder_ramp_profile < ENCODER_RAMP_NONE || s_encoder_ramp_profile > ENCODER_RAMP_AGGRESSIVE) {
+        s_encoder_ramp_profile = ENCODER_RAMP_MEDIUM;
+    }
     s_manual_rail_length_mm = getDefaultManualRailLengthMm();
     if (prefs.isKey("RailLengthMm")) {
         s_manual_rail_length_mm = prefs.getFloat("RailLengthMm", s_manual_rail_length_mm);
@@ -1500,8 +1611,8 @@ void screenInit() {
     if (ble_force_homeing && ui_forceHome)    { lv_obj_add_state(ui_forceHome, LV_STATE_CHECKED); }
     if (s_visual_speed_lock && ui_visualSpeedLock) { lv_obj_add_state(ui_visualSpeedLock, LV_STATE_CHECKED); }
     if (s_stroke_influences_depth && ui_strokeDepthLink) { lv_obj_add_state(ui_strokeDepthLink, LV_STATE_CHECKED); }
-    ensureManualRailLengthSetting();
-    syncManualRailLengthSettingUi();
+    ensureEncRampProfileSetting();
+    syncEncRampProfileSettingUi();
     if (ui_brightness_slider) {
         lv_slider_set_value(ui_brightness_slider, brightness, LV_ANIM_OFF);
     }
@@ -1557,6 +1668,9 @@ void screenmachine(lv_event_t * e) {
     if (lv_scr_act() == ui_Start) {
         st_screens = ST_UI_START;
     } else if (lv_scr_act() == ui_Home) {
+        if (st_screens != ST_UI_HOME) {
+            resetEncoderCounts();
+        }
         st_screens = ST_UI_HOME;
         syncHomeSliderRangesToLimits();
         syncHomeSensationSliderToTransport();
@@ -1564,6 +1678,7 @@ void screenmachine(lv_event_t * e) {
         //LogDebug(speedenc);
         //LogDebug(speed);
     } else if (lv_scr_act() == ui_Menu) {
+
         // requestMenuEntryAction equivalent (mirrors backup firmware logic).
         // At this point st_screens is STILL the PREVIOUS screen value.
         {
@@ -1586,8 +1701,15 @@ void screenmachine(lv_event_t * e) {
                 s_ble_menu_requires_stroke_reentry = false;
             }
         }
+        if (st_screens != ST_UI_MENU) {
+            resetEncoderCounts();
+        }
+
         st_screens = ST_UI_MENU;
     } else if (lv_scr_act() == ui_Pattern) {
+        if (st_screens != ST_UI_PATTERN) {
+            resetEncoderCounts();
+        }
         st_screens = ST_UI_PATTERN;
 
         if (commIsBleMode()) {
@@ -1607,6 +1729,10 @@ void screenmachine(lv_event_t * e) {
             newPatternIsReadFromOSSM = false;
         }
     } else if (lv_scr_act() == ui_Torqe) {
+//        if (st_screens != ST_UI_Torqe) {
+//            resetEncoderCounts();
+//        }
+
         st_screens = ST_UI_Torqe;
         torqe_f = lv_slider_get_value(ui_outtroqeslider);
         torqe_f_enc = fscale(50, 200, 0, Encoder_MAP, torqe_f, 0);
@@ -1615,6 +1741,9 @@ void screenmachine(lv_event_t * e) {
         torqe_r_enc = fscale(20, 200, 0, Encoder_MAP, torqe_r, 0);
         encoder4.setCount(torqe_r_enc);
     } else if (lv_scr_act() == ui_EJECTSettings) {
+//        if (st_screens != ST_UI_EJECTSETTINGS) {
+//            resetEncoderCounts();
+//        }
         st_screens = ST_UI_EJECTSETTINGS;
     } else if (lv_scr_act() == ui_Settings) {
         st_screens = ST_UI_SETTINGS;
@@ -1622,18 +1751,33 @@ void screenmachine(lv_event_t * e) {
         s_settings_scroll_offset = 0;
         refreshSettingsCarousel();
     } else if (lv_scr_act() == ui_Stroke) {
+        if (st_screens != ST_UI_STROKE) {
+            resetEncoderCounts();
+        }
         st_screens = ST_UI_STROKE;
         refreshStrokeStartStopUi();
     } else if (lv_scr_act() == ui_Colors) {
         st_screens = ST_UI_COLORS;
     } else if (lv_scr_act() == ui_Streaming) {
+        if (st_screens != ST_UI_STREAMING) {
+            resetEncoderCounts();
+        }
         st_screens = ST_UI_STREAMING;
     } else if (lv_scr_act() == ui_Addons) {
+//        if (st_screens != ST_UI_ADDONS) {
+//            resetEncoderCounts();
+//        }
         st_screens = ST_UI_ADDONS;
         addonsSyncSelectionVisual();
     } else if (lv_scr_act() == ui_FistIT) {
+//        if (st_screens != ST_UI_FISTIT) {
+//            resetEncoderCounts();
+//        }
         st_screens = ST_UI_FISTIT;
     } else if (APModeOwnsActiveScreen()) {
+//        if (st_screens != ST_UI_APMODE) {
+//            resetEncoderCounts();
+//        }
         st_screens = ST_UI_APMODE;
     }
 }
@@ -1692,6 +1836,8 @@ void savesettings(lv_event_t * e) {
         prefs.putBool("DepthToStroke", false);
         s_stroke_influences_depth = false;
     }
+
+    prefs.putInt("EncRampProfile", s_encoder_ramp_profile);
 
     prefs.putFloat("RailLengthMm", s_manual_rail_length_mm);
 
@@ -1779,9 +1925,14 @@ void savepattern(lv_event_t * e) {
     lv_roller_get_selected_str(ui_PatternS, patternstr, 0);
     lv_label_set_text(ui_HomePatternLabel, patternstr);
     if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
+    
     //LogDebug(pattern);
     float patterns = pattern;
     SendCommand(PATTERN, patterns, OSSM_ID);
+    SendCommand(SENSATION, 0.0, OSSM_ID);
+    lv_slider_get_value(ui_homesensationslider);
+    lv_slider_set_value(ui_homesensationslider, 0, LV_ANIM_OFF);
+    sensation = 0;
 }
 
 static void applyHomeButtonMState(const char* text, lv_style_t* defaultStyle, lv_style_t* pressedStyle, bool forceFocused = false) {
@@ -1957,7 +2108,12 @@ void resetEncoderCounts() {
     encoder2.setCount(0);
     encoder3.setCount(0);
     encoder4.setCount(0);
-}
+    s_encoder_last_step_ms[0] = 0;
+    s_encoder_last_step_ms[1] = 0;
+    s_encoder_last_step_ms[2] = 0;
+    s_encoder_last_step_ms[3] = 0;
+    encoder3_enc = 0;
+    encoder4_enc = 0;}
 
 // -------------------------------------------------------
 // Zero-Stroke Depth Jog + Motion Command Flush
@@ -2217,8 +2373,16 @@ void handleScreens() {
     serviceHomeSpeedRamp();
 
     s_home_toggle_fired_this_loop = false;
+    const bool mxPressCanToggleOssm =
+        (st_screens == ST_UI_HOME) ||
+        (st_screens == ST_UI_STROKE) ||
+        (st_screens == ST_UI_STREAMING);
 
-    if (mxpress_waspressed) {
+    if (!mxPressCanToggleOssm) {
+        s_consume_next_mx_short_click = false;
+    }
+
+    if (mxpress_waspressed && mxPressCanToggleOssm) {
         const bool motionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         if ((OSSM_On || motionReady) && requestHomeButtonToggleOnce()) {
             s_consume_next_mx_short_click = true;
@@ -2328,36 +2492,29 @@ void handleScreens() {
             const bool fromStreaming  = (s_prev_st_screens == ST_UI_STREAMING);
             const bool fromMenuArmed = (s_prev_st_screens == ST_UI_MENU && s_ble_menu_requires_stroke_reentry);
             if (fromStart || fromStreaming || fromMenuArmed) {
-                bleCommGoToStrokeEngine();
+                const bool transitioned = bleCommGoToStrokeEngine();
+                if (fromMenuArmed && transitioned) {
+                    // A force re-home changes OSSM internals; invalidate cache so
+                    // the next home loop re-applies UI values to OSSM explicitly.
+                    s_motion_command_cache_valid = false;
+                    s_force_home_restore_pending = true;
+                }
                 s_ble_menu_requires_stroke_reentry = false;
             }
         }
 
         syncHomeSliderRangesToLimits();
 
-        // Ramp helper
-        nowMs = millis();
-        if (nowMs - rampMs <= (unsigned long)rampTime && rampEnabled == true) {
-            if (rampValue <= maxRamp && encId == activeEncId) {
-                rampValue += rampUpValue;
-                //++rampValue;
-            }
-        } else {
-            rampValue = 1;  //TEST AFTER EAU COMMENTS
-            activeEncId = encId;
-        }
-
         // Encoder 1 — Speed
         bool changed = false;
         //bool updateMXbutton = false;
         if (lv_slider_is_dragged(ui_homespeedslider) == false) {
             changed = false;
-            if (encoder1.getCount() >= 2) {
-                changed = true; speed += rampValue;
-                encoder1.setCount(0); rampMs = millis(); encId = 1;
-            } else if (encoder1.getCount() <= -2) {
-                changed = true; speed -= rampValue;
-                encoder1.setCount(0); rampMs = millis(); encId = 1;
+            const int speedStep = homeStepFromEncoderCount(0, encoder1.getCount());
+            if (speedStep != 0) {
+                changed = true;
+                speed += speedStep;
+                encoder1.setCount(0);
             }
             if (speed <= 0)          { changed = true; speed = 0; }
             if (speed > speedlimit) { changed = true; speed = speedlimit; }
@@ -2381,17 +2538,15 @@ void handleScreens() {
             changed = false;
             const float prevDepth = depth;
             const float prevStroke = stroke;
-            if (encoder2.getCount() >= 2) {
-                changed = true; depth += rampValue;
-                if (dynamicStroke) stroke += rampValue;
-                encoder2.setCount(0); rampMs = millis(); encId = 2;
-            } else if (encoder2.getCount() <= -2) {
-                changed = true; depth -= rampValue;
+            const int depthStep = homeStepFromEncoderCount(1, encoder2.getCount());
+            if (depthStep != 0) {
+                changed = true;
+                depth += depthStep;
                 if (dynamicStroke) {
-                    stroke -= rampValue;
+                    stroke += depthStep;
                     if (stroke >= depth) stroke = depth;
                 }
-                encoder2.setCount(0); rampMs = millis(); encId = 2;
+                encoder2.setCount(0);
             }
             if (depth <= 0)            { changed = true; depth = 0; stroke = 0; }   //here is the error
             if (depth > maxdepthinmm) { changed = true; depth = maxdepthinmm; }
@@ -2417,12 +2572,11 @@ void handleScreens() {
             changed = false;
             const float prevDepth = depth;
             const float prevStroke = stroke;
-            if (encoder3.getCount() >= 2) {
-                changed = true; stroke += invertStroke ? -rampValue : rampValue;
-                encoder3.setCount(0); rampMs = millis(); encId = 3;
-            } else if (encoder3.getCount() <= -2) {  
-                changed = true; stroke += invertStroke ? rampValue : -rampValue; 
-                encoder3.setCount(0); rampMs = millis(); encId = 3;
+            const int strokeStep = homeStepFromEncoderCount(2, encoder3.getCount());
+            if (strokeStep != 0) {
+                changed = true;
+                stroke += invertStroke ? -strokeStep : strokeStep;
+                encoder3.setCount(0);
             }
             if (stroke <= 0)            { changed = true; stroke = 0; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
@@ -2482,12 +2636,11 @@ void handleScreens() {
         if (lv_slider_is_dragged(ui_homesensationslider) == false) {
             changed = false;
             lv_slider_set_value(ui_homesensationslider, sensation, LV_ANIM_OFF);
-            if (encoder4.getCount() >= 2) {
-                changed = true; sensation += rampValue;
-                encoder4.setCount(0); rampMs = millis(); encId = 4;
-            } else if (encoder4.getCount() <= -2) {
-                changed = true; sensation -= rampValue;
-                encoder4.setCount(0); rampMs = millis(); encId = 4;
+            const int sensationStep = homeStepFromEncoderCount(3, encoder4.getCount());
+            if (sensationStep != 0) {
+                changed = true;
+                sensation += sensationStep;
+                encoder4.setCount(0);
             }
             if (sensation < -100)   { changed = true; sensation = -100; }
             if (sensation > 100) { changed = true; sensation = 100; }
@@ -2496,6 +2649,25 @@ void handleScreens() {
             sensation = lv_slider_get_value(ui_homesensationslider);
             SendCommand(SENSATION, sensation, OSSM_ID);
         }
+
+        if (s_force_home_restore_pending) {
+            // One-shot full restore from UI -> OSSM after re-home completion.
+            // Keep it explicit here (all 4 channels) for readability and safety.
+            // Also block same-loop MX short-click from starting with stale values.
+            mxclick_short_waspressed = false;
+            s_consume_next_mx_short_click = false;
+
+            const float restoredSpeed = resolveVisualCompensatedSpeed(speed, stroke);
+            SendCommand(SPEED, restoredSpeed, OSSM_ID);
+            SendCommand(DEPTH, depth, OSSM_ID);
+            SendCommand(STROKE, stroke, OSSM_ID);
+            SendCommand(SENSATION, sensation, OSSM_ID);
+
+            syncMotionCommandCache(speed, depth, stroke);
+            s_visual_speed_last_commanded = restoredSpeed;
+            s_force_home_restore_pending = false;
+        }
+
         if (click2_long_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_LONG_PRESSED, NULL);
         } else if (click2_double_waspressed) {
@@ -2793,8 +2965,8 @@ void handleScreens() {
         }
 
         if (encoder4.getCount() > encoder4_enc + 2) {
-            lv_obj_t* options[8] = {};
-            const int optionCount = collectSettingsOptionObjects(options, 8);
+            lv_obj_t* options[9] = {};
+            const int optionCount = collectSettingsOptionObjects(options, 9);
             if (optionCount > 0 && s_settings_focus_index < (optionCount - 1)) {
                 ++s_settings_focus_index;
             }
@@ -2826,7 +2998,11 @@ void handleScreens() {
                     }
                     lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
                 } else {
-                    lv_obj_send_event(focused, LV_EVENT_SHORT_CLICKED, NULL);
+                    if (focused == s_encoder_ramp_profile_setting) {
+                        lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
+                    } else {
+                        lv_obj_send_event(focused, LV_EVENT_SHORT_CLICKED, NULL);
+                    }
                 }
             }
         }
