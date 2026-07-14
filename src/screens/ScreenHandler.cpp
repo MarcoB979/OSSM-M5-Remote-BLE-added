@@ -99,6 +99,23 @@ static bool s_home_toggle_fired_this_loop = false;
 static bool s_consume_next_mx_short_click = false;
 
 //variables for natural speed curve (to make speed drop at low stroke)
+// Selectable natural-speed presets for Visual Speed Lock tuning.
+//   0 = legacy/current behavior
+//   1 = conservative distance-based tuning
+//   2 = aggressive distance-based tuning
+#ifndef VIS_SPEED_CURVE_PRESET
+#define VIS_SPEED_CURVE_PRESET 1
+#endif
+
+#if VIS_SPEED_CURVE_PRESET == 2
+static constexpr float VIS_SPEED_CURVE_MIN_FACTOR = 0.40f;
+static constexpr float VIS_SPEED_CURVE_KNEE_STROKE = 18.0f;
+static constexpr float VIS_SPEED_CURVE_POWER = 0.90f;
+#elif VIS_SPEED_CURVE_PRESET == 1
+static constexpr float VIS_SPEED_CURVE_MIN_FACTOR = 0.32f;
+static constexpr float VIS_SPEED_CURVE_KNEE_STROKE = 22.0f;
+static constexpr float VIS_SPEED_CURVE_POWER = 1.05f;
+#else
 static constexpr float VIS_SPEED_CURVE_MIN_FACTOR = 0.14f;
 //Lower this if you want even lower minimum speed at tiny stroke.
 //Example: 0.05 -> 0.03.
@@ -106,6 +123,8 @@ static constexpr float VIS_SPEED_CURVE_KNEE_STROKE = 30.0f;
 //Increase this second if needed. Higher value = full speed is reached at a larger stroke.
 //Example: 50 -> 60 or 70.
 static constexpr float VIS_SPEED_CURVE_POWER = 1.3f;
+#endif
+
 //Higher value = stronger suppression at low/mid stroke, and longer before speed recovers.
 //Example: 2.0 -> 2.8 or 3.2.
 static constexpr float VIS_SPEED_CURVE_MAX_STEP = 2.0f;
