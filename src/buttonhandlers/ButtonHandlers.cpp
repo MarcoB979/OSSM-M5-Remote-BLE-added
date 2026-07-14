@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 bool mxclick_short_waspressed  = false;
 bool mxclick_long_waspressed   = false;
+bool mxpress_waspressed        = false;
 bool click2_short_waspressed   = false;
 bool click2_long_waspressed    = false;
 bool click2_double_waspressed  = false;
@@ -89,6 +90,7 @@ void buttonInit() {
     Button1.setClickMs(50);  //candidate for speed improvement: 100ms click window for encoder push-button makes double-click recognition feel snappier.
     Button1.setPressMs(500);  //Emergency stop attached so keep long press shorter
 
+    Button1.attachPress(mxpress);
     Button1.attachClick(mxclick);
     Button1.attachLongPressStart(mxlong);
     Button2.attachClick(click2);
@@ -102,6 +104,10 @@ void buttonInit() {
 // ---------------------------------------------------------------------------
 // OneButton callbacks
 // ---------------------------------------------------------------------------
+void mxpress() {
+    mxpress_waspressed = true;
+}
+
 void mxclick() {
     mxclick_short_waspressed = true;
     vibrate(200, 200);

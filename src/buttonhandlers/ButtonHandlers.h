@@ -21,6 +21,7 @@ extern OneButton Button3;
 // Button press state flags – set by ISR-like callbacks, cleared in loop()
 extern bool mxclick_short_waspressed;
 extern bool mxclick_long_waspressed;
+extern bool mxpress_waspressed;
 extern bool click2_short_waspressed;
 extern bool click2_long_waspressed;
 extern bool click2_double_waspressed;
@@ -36,6 +37,7 @@ void vibrate(int vbr_Intensity = 200, int vbr_Length = 100);
 void buttonInit();
 
 // OneButton callbacks
+void mxpress();
 void mxclick();
 void mxlong();
 void click2();

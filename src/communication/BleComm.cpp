@@ -1023,7 +1023,7 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
       }
       queueCommand("set:speed:0", true);
     }
-/*  CHECK MARCO*/
+/*  CHECK MARCO
 //    if (requestedStroke > 0.001f && prevStroke <= 0.001f && OSSM_On) {
     if (requestedStroke > 0.001f && prevStroke <= 0.001f) {
       SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
@@ -1052,7 +1052,7 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
     }
 
 
-//*/
+*/
   g_lastRequestedStroke = requestedStroke;
   }
 

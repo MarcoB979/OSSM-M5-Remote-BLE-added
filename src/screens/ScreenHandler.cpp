@@ -82,6 +82,7 @@ static int   s_zero_stroke_depth_direction = 0;
 static bool  s_visual_speed_lock = false;
 static bool  s_visual_speed_ratio_valid = false;
 static float s_visual_speed_stroke_product = 0.0f;
+static float s_visual_speed_last_commanded = -1.0f;
 static bool  s_stroke_influences_depth = false;
 static float s_manual_rail_length_mm = 0.0f;
 static bool s_home_speed_ramp_active = false;
@@ -93,6 +94,20 @@ static uint32_t s_home_speed_ramp_next_ms = 0;
 static uint32_t s_zero_stroke_depth_jog_start_ms = 0;
 static uint32_t s_zero_stroke_debug_log_ms = 0;
 static uint32_t s_visual_speed_log_ms = 0;
+static bool s_home_toggle_fired_this_loop = false;
+static bool s_consume_next_mx_short_click = false;
+
+//variables for natural speed curve (to make speed drop at low stroke)
+static constexpr float VIS_SPEED_CURVE_MIN_FACTOR = 0.14f;
+//Lower this if you want even lower minimum speed at tiny stroke.
+//Example: 0.05 -> 0.03.
+static constexpr float VIS_SPEED_CURVE_KNEE_STROKE = 30.0f;
+//Increase this second if needed. Higher value = full speed is reached at a larger stroke.
+//Example: 50 -> 60 or 70.
+static constexpr float VIS_SPEED_CURVE_POWER = 1.3f;
+//Higher value = stronger suppression at low/mid stroke, and longer before speed recovers.
+//Example: 2.0 -> 2.8 or 3.2.
+static constexpr float VIS_SPEED_CURVE_MAX_STEP = 2.0f;
 
 
 static constexpr bool ENABLE_ZERO_STROKE_DEPTH_JOG = false;
@@ -646,6 +661,7 @@ int showNotification(const char *title,
     if (shouldBlockTouch) touch_disabled = true;
 
     // Drain stale button states before opening the modal.
+    mxpress_waspressed       = false;
     mxclick_short_waspressed  = false;
     mxclick_long_waspressed   = false;
     click2_short_waspressed   = false;
@@ -766,6 +782,7 @@ int showNotification(const char *title,
         }
 
         // Consume all button events so the current screen never sees stale flags.
+        mxpress_waspressed       = false;
         mxclick_short_waspressed  = false;
         mxclick_long_waspressed   = false;
         click2_short_waspressed   = false;
@@ -779,6 +796,7 @@ int showNotification(const char *title,
     lv_obj_del(overlay);
 
     // Clear flags after modal closes.
+    mxpress_waspressed       = false;
     mxclick_short_waspressed  = false;
     mxclick_long_waspressed   = false;
     click2_short_waspressed   = false;
@@ -1315,6 +1333,7 @@ static void resetVisualSpeedRatioState()
 {
     s_visual_speed_ratio_valid = false;
     s_visual_speed_stroke_product = 0.0f;
+    s_visual_speed_last_commanded = -1.0f;
 }
 
 static void updateVisualSpeedRatioFromUi(bool uiSpeedChanged, float uiSpeed, float uiStroke)
@@ -1327,7 +1346,7 @@ static void updateVisualSpeedRatioFromUi(bool uiSpeedChanged, float uiSpeed, flo
     if (uiStroke <= 0.001f) return;
 
     if (uiSpeedChanged || !s_visual_speed_ratio_valid) {
-        s_visual_speed_stroke_product = uiSpeed * uiStroke;
+        s_visual_speed_stroke_product = uiSpeed;
         s_visual_speed_ratio_valid = true;
     }
 }
@@ -1338,7 +1357,10 @@ static float resolveVisualCompensatedSpeed(float uiSpeed, float uiStroke)
     if (!s_visual_speed_ratio_valid) return uiSpeed;
     if (uiStroke <= 0.001f) return uiSpeed;
 
-    float compensatedSpeed = s_visual_speed_stroke_product / uiStroke;
+    const float strokeNorm = fminf(1.0f, fmaxf(0.0f, uiStroke / VIS_SPEED_CURVE_KNEE_STROKE));
+    const float factor = VIS_SPEED_CURVE_MIN_FACTOR +
+                         (1.0f - VIS_SPEED_CURVE_MIN_FACTOR) * powf(strokeNorm, VIS_SPEED_CURVE_POWER);
+    float compensatedSpeed = s_visual_speed_stroke_product * factor;
     if (compensatedSpeed < 0.0f) compensatedSpeed = 0.0f;
     if (compensatedSpeed > speedlimit) compensatedSpeed = speedlimit;
     return compensatedSpeed;
@@ -1654,7 +1676,7 @@ void savesettings(lv_event_t * e) {
         prefs.putBool("VisualSpeedLock", true);
         s_visual_speed_lock = true;
         if (stroke > 0.001f) {
-            s_visual_speed_stroke_product = speed * stroke;
+            s_visual_speed_stroke_product = speed;
             s_visual_speed_ratio_valid = true;
         }
     } else {
@@ -1872,7 +1894,8 @@ void homebuttonmevent(lv_event_t * e) {
         if (speed == 0 || stroke == 0 || depth == 0) return;
         applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
         lv_refr_now(NULL);
-        const int targetSpeed = (int)(speed + 0.5f);
+        const float startCommandedSpeed = resolveVisualCompensatedSpeed(speed, stroke);
+        const int targetSpeed = (int)(startCommandedSpeed + 0.5f);
         const int startSpeed = (targetSpeed > HOME_START_RAMP_THRESHOLD) ? HOME_START_RAMP_THRESHOLD : targetSpeed;
         LogDebugFormatted("Starting OSSM Safe start is active: %s\n Starting at startingspeed %d", SafeStartStop ? "true" : "false", startSpeed);
         if (SafeStartStop) {
@@ -1911,6 +1934,14 @@ void homebuttonmevent(lv_event_t * e) {
         SendCommand(OFF, 0.0, OSSM_ID);
         bleCommSetUnpauseSpeed(resumeSpeed);
     }
+}
+
+static bool requestHomeButtonToggleOnce()
+{
+    if (s_home_toggle_fired_this_loop) return false;
+    s_home_toggle_fired_this_loop = true;
+    homebuttonmevent(nullptr);
+    return true;
 }
 
 void setupDepthInter(lv_event_t * e) {
@@ -2038,6 +2069,10 @@ static void flushMotionCommands(float motionSpeed,
         const bool speedChanged = !s_motion_command_cache_valid || motionSpeed != s_last_motion_speed;
         const bool depthChanged = !s_motion_command_cache_valid || motionDepth != s_last_motion_depth;
         const bool strokeChanged = !s_motion_command_cache_valid || motionStroke != s_last_motion_stroke;
+        bool sendSpeedForVsl = !speedChanged &&
+                               s_visual_speed_lock && s_visual_speed_ratio_valid &&
+                               strokeChanged && motionStroke > 0.001f &&
+                               OSSM_On && !s_home_speed_ramp_active;
         const bool wantsZeroStrokeJog = ENABLE_ZERO_STROKE_DEPTH_JOG && commIsBleMode() && motionSpeed > 0.5f && motionStroke <= 0.001f && motionDepth > 0.0f && depthChanged;
 
         if (wantsZeroStrokeJog && s_manual_rail_length_mm <= 0.0f) {
@@ -2053,12 +2088,25 @@ static void flushMotionCommands(float motionSpeed,
                         motionDepth > 0.0f && s_manual_rail_length_mm > 0.0f && depthChanged;
         const bool forceRunForZeroStrokeJog = zeroStrokeDepthJog && !OSSM_On;
         const float previousDepth = s_motion_command_cache_valid ? s_last_motion_depth : 0.0f;
+        float speedToSend = commandedSpeed;
+
+        if (sendSpeedForVsl && s_visual_speed_last_commanded >= 0.0f) {
+            const float delta = speedToSend - s_visual_speed_last_commanded;
+            if (fabsf(delta) < 0.1f) {
+                sendSpeedForVsl = false;
+            } else if (delta > VIS_SPEED_CURVE_MAX_STEP) {
+                speedToSend = s_visual_speed_last_commanded + VIS_SPEED_CURVE_MAX_STEP;
+            } else if (delta < -VIS_SPEED_CURVE_MAX_STEP) {
+                speedToSend = s_visual_speed_last_commanded - VIS_SPEED_CURVE_MAX_STEP;
+            }
+        }
 
         if (forceRunForZeroStrokeJog) {
             SendCommand(ON, commandedSpeed, OSSM_ID);
             LogDebugFormatted("BLE: zero-stroke depth jog forcing ON at speed %.1f\n", commandedSpeed);
-        } else if (speedChanged && !s_home_speed_ramp_active) {
-            SendCommand(SPEED, commandedSpeed, OSSM_ID);
+        } else if ((speedChanged || sendSpeedForVsl) && !s_home_speed_ramp_active) {
+            SendCommand(SPEED, speedToSend, OSSM_ID);
+            s_visual_speed_last_commanded = speedToSend;
         }
         if (depthChanged) { SendCommand(DEPTH, motionDepth, OSSM_ID); }
         if (zeroStrokeDepthJog) {
@@ -2080,7 +2128,7 @@ static void flushMotionCommands(float motionSpeed,
             }
             if (s_last_motion_speed == 0.0f && commandedSpeed > 0.0f) {
                 LogDebugFormatted("BLE: Unpause speed %.1f\n", bleCommGetUnpauseSpeed());
-                homebuttonmevent(nullptr); // simulate a press of the HomeButtonM to resume motion
+                requestHomeButtonToggleOnce(); // simulate a press of the HomeButtonM to resume motion
 //            SendCommand(ON, bleCommGetUnpauseSpeed(), OSSM_ID);
             }
         }
@@ -2167,6 +2215,22 @@ static void checkBleDisconnectError()
 void handleScreens() {
     checkBleDisconnectError();
     serviceHomeSpeedRamp();
+
+    s_home_toggle_fired_this_loop = false;
+
+    if (mxpress_waspressed) {
+        const bool motionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
+        if ((OSSM_On || motionReady) && requestHomeButtonToggleOnce()) {
+            s_consume_next_mx_short_click = true;
+        }
+    }
+    if (mxclick_long_waspressed) {
+        s_consume_next_mx_short_click = false;
+    }
+    if (mxclick_short_waspressed && s_consume_next_mx_short_click) {
+        mxclick_short_waspressed = false;
+        s_consume_next_mx_short_click = false;
+    }
 
     if (s_zero_stroke_depth_jog_active && st_screens != ST_UI_HOME) {
         SendCommand(STROKE, 0.0f, OSSM_ID);
@@ -2362,6 +2426,19 @@ void handleScreens() {
             }
             if (stroke <= 0)            { changed = true; stroke = 0; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
+            
+            if (s_stroke_influences_depth) {
+                if (stroke > depth) {
+                    changed = true;
+                    depth = stroke;
+                }
+            } else {
+                if (stroke > depth) {
+                    changed = true;
+                    stroke = depth;
+                }
+            }
+
             if (invertStroke) {
                 if(lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_RANGE) {
                     lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_RANGE);
@@ -2387,13 +2464,11 @@ void handleScreens() {
                 stroke = touchStroke;
                 changed = true;
             }
-        }
-        if (s_stroke_influences_depth) {
-            if (stroke > depth) {
+            if (!s_stroke_influences_depth && stroke > depth) {
+                stroke = depth;
                 changed = true;
-                depth = stroke;
             }
-        }    
+        }
             homeMotionValueChanged = homeMotionValueChanged || changed;
             homeStrokeValueChanged = homeStrokeValueChanged || changed;
         syncHomeMotionUi(invertStroke);
@@ -2428,7 +2503,7 @@ void handleScreens() {
         } else if (click2_short_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {
-            lv_obj_send_event(ui_HomeButtonM, LV_EVENT_CLICKED, NULL);
+            requestHomeButtonToggleOnce();
         } else if (mxclick_long_waspressed) {
             lv_obj_send_event(ui_HomeButtonM, LV_EVENT_LONG_PRESSED, NULL);
             sensation = 0;
@@ -2463,10 +2538,10 @@ void handleScreens() {
         serviceZeroStrokeDepthJog();
 
         if (homeMotionValueChanged && !wasMotionReady && isMotionReady && !OSSM_On) {
-            homebuttonmevent(nullptr);
+            requestHomeButtonToggleOnce();
             LogDebug ("HomeButtonM auto-started OSSM due to motion values being set");
         } else if (homeMotionValueChanged && wasMotionReady && !isMotionReady && OSSM_On) {
-            homebuttonmevent(nullptr);
+            requestHomeButtonToggleOnce();
             LogDebug ("HomeButtonM auto-stopped OSSM due to motion values being cleared");
         }
 
@@ -2761,6 +2836,7 @@ void handleScreens() {
     } // end switch(st_screens)
 
     // ---- Clear button flags ----
+    mxpress_waspressed       = false;
     mxclick_long_waspressed  = false;
     mxclick_short_waspressed = false;
     click2_short_waspressed  = false;
