@@ -39,326 +39,54 @@ Steps:
 
 ---
 
-## Controls Quick Guide
+## User manuals:
+- Se:
+	[Quick start guide](src/Manuals-templates/M5%20Remote%20Quick%20Start%20guide.md)
+	[Manual extra explained](src/Manuals-templates/M5%20Remote%20Manual%20-%20extra%20explanation.md)
 
-- Left encoder: rotate + click
-- Middle encoder (MX): rotate + click
-- Right encoder: rotate + click
-- Touchscreen buttons: same actions as on-screen labels
-- Touchscreen is disabled in motion control screens for safety
 
-In this manual:
-- Left button = bottom-left button on the active screen
-- Middle button = bottom-middle button
-- Right button = bottom-right button
+# Build the OSSM M5 Remote Yourself
 
----
+### Assembly instructions: [Klick Here !](Assembly.md)
 
-## Start Screen (Connect)
+## Bill Of Materials for sourcing Electrical Components
 
-<img src="image/Start.jpg" alt="Start screen" width="250">
+All M5Stack Core2 and CoreS3 are supported Now.
 
-Use this screen to connect your remote.
+BOM is on Octopart for Easy Sourcing: https://octopart.com/bom-tool/rURYMuwB
 
-What to do:
-1. Press Connect (or wait for auto-connect).
-2. After connection, the remote opens the Menu screen.
+PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder if you want to make one yourself or use a different manufacturer other than PCBWay.
 
-Buttons:
-- Left: Connect
-- Middle: open Settings
-- Right: open Home (demo/manual path)
+## Additional parts needed that are not PCB:  
 
-> [!TIP]
-> If connection fails, retry once with OSSM powered and nearby.
+| Quantity | Part | Sourcing EU | Price € |
+|----------|------|-------------|---------|
+| 1x | M5Stack CoreS3 SE | https://www.digikey.de/de/products/detail/m5stack-technology-co-ltd/K128-SE/23628221?s=N4IgTCBcDaILIFYDKAXAhgYwNYAIDCA9gE4CmSAzDkgKIgC6AvkA | 43 € |
+| 2x | M3x25mm Hex Head Cap Bolt | https://www.amazon.de/Edelstahl-Innensechskant-Bolzenset-Eisenrahmen-Mechanischer-Innensechskantschraube-Mutternset/dp/B07PPFT871/ | 12,97 € |
+| 4x | M3x20mm Hex Head Cap Bolt | Comes as part of the set mentioned above | " | 
+| 4x | Heat Set inserts M3 | https://www.amazon.de/ruthex-Gewindeeinsatz-St%C3%BCck-Gewindebuchsen-Kunststoffteile/dp/B08BCRZZS3 | 8,99 € |
+| 1x | 3,7v 2000mAh Lipo Batterie Size 34,5 mm x 10,6 mm x 56 mm | https://www.amazon.de/EEMB-103454-2AhLithium-Schutzplatine-Isolationsbeschichtung/dp/B08214DJLJ/ | 14,89 € |
+| 4x | Encoder Knob Bought or 3D Printed | https://de.aliexpress.com/item/1005001394286414.html | 5 € |
+| 1x | OSSM M5 Remote PCB | KinyMaker Discord #M5-Remote Channel or https://www.pcbway.com/project/shareproject/M5Stack_Core2_Remote_Plattform_2cb5bac0.html | 15 € |
 
----
+--------------------------------------------
 
-## Menu Screen
+| Quantity | Part | Sourcing US | Price $ |
+|----------|------|-------------|---------|
+| 1x | M5Stack CoreS3 SE | https://www.digikey.de/de/products/detail/m5stack-technology-co-ltd/K128-SE/23628221?s=N4IgTCBcDaILIFYDKAXAhgYwNYAIDCA9gE4CmSAzDkgKIgC6AvkA | $47|
+| 2x | M3x25mm Hex Head Cap Bolt | https://www.amazon.com/dp/B09NR8X2LV | $17.99 |
+| 4x | M3x20mm Hex Head Cap Bolt | Comes as part of the set mentioned above | " | 
+| 4x | Heat Set inserts M3 | https://www.amazon.com/ruthex-M3-Threaded-Inserts-RX-M3x5-7/dp/B08BCRZZS3 | $10.99 |
+| 1x | 3.7v 2000mAh Lipo Battery Size 34.5 X 56 X 10.6 mm (The wires will need to be reversed in the connector on this one! See Assembly instructions for more info.) | https://www.amazon.com/EEMB-2000mAh-Battery-Rechargeable-Connector/dp/B08214DJLJ/ | $14.99 |
+| 4x | Encoder Knob Bought or 3D Printed | https://www.aliexpress.us/item/3256801207971662.html?gatewayAdapt=deu2usa4itemAdapt | $5.00 |
+| 1x | M5 Remote PCB | KinyMaker Discord #M5-Remote Channel or https://www.pcbway.com/project/shareproject/M5Stack_Core2_Remote_Plattform_2cb5bac0.html | $30.00 |
 
-<img src="image/Menu.jpg" alt="Menu screen" width="250">
+## 3D Printed Parts Needed:
 
-This is your navigation hub.
+| Quantity | Part | Information |
+|----------|------|-------------|
+| 1x | M5_curved_w6mm+5.stl Thanks to "Hoodlatch" KM Discord | There is a specific version for the wider Adafruit LIPO battery. Print with the base side facing down, 6 walls 20% Infill | 
+| 1x | TOP-*-Keycap-Standoff.stl | Top Depends on your Keycap: Cherry or DSA (DSA is wider) | 
+| 4x | M5_Remote_Knob_Customizable.scad | If you go for the 3d Printed knobs |
 
-Main tiles:
-- Home (OSSM control)
-- Bator mode
-- Settings
-- Addons
-
-Bottom buttons:
-- Left: Restart remote (with confirmation)
-- Middle: Colors / UI themes
-- Right: Select focused tile
-
-How to navigate:
-1. Rotate right encoder to move focus.
-2. Press right button to open selected tile.
-
----
-
-## Home Screen (OSSM Control)
-
-<img src="image/OSSM-home.jpg" alt="Home screen" width="250">
-
-This is the main OSSM control screen.
-
-Encoders:
-- Encoder 1: Speed
-- Encoder 2: Depth
-- Encoder 3: Stroke
-- Encoder 4: Sensation
-
-Behavior:
-- If speed, depth, and stroke are all above 0, your OSSM can run (auto start feature).
-- If one of them goes to 0, your OSSM stops.
-
-Buttons:
-- Left: Pull-out
-- Middle: Start/Stop (pause)
-- Right: Pattern screen
-
-Long press actions:
-- Middle long press: Emergency stop and return path
-- Left long press: open Eject screen (if enabled/paired)
-- Right long press: open Fist-IT screen (if enabled/paired)
-
-> [!WARNING]
-> Emergency stop can still create movement while retracting. Keep clear and stay attentive.
-
----
-
-## Bator Mode
-
-<img src="image/Bator-mode.jpg" alt="Bator mode" width="250">
-
-Bator mode is optimized for stroker-style movement around center.
-
-Difference vs Home:
-- Home: classic OSSM depth/stroke behavior
-- Bator mode: stroke is centered around mid rail and behaves differently for sleeve-style use
-
-Typical use:
-- Set speed
-- Set stroke
-- Set sensation
-- Start with middle button
-
-Buttons:
-- Left: back to Menu
-- Middle: Start/Stop
-- Right: Pattern screen
-
----
-
-## Pattern Screen
-
-<img src="image/Patterns.jpg" alt="Pattern screen" width="250">
-
-Use this screen to choose an OSSM pattern.
-
-How to use:
-1. Rotate right encoder to browse patterns.
-2. Press right button to save and apply.
-
-Buttons:
-- Left: back to Menu
-- Middle: return to previous control screen
-- Right: Save (apply) selected pattern. This returns you to he previous screen. Sensation will be reset.
-
----
-
-## Settings Screen
-
-<img src="image/Settings.jpg" alt="Settings screen" width="250">
-
-Use Settings to configure behavior and safety.
-
-Main options:
-- Vibrate: haptic feedback on interactions
-- Safe Start/Stop: safer start behavior (speed will ramp up instead of immediately applied)
-- Stroke invert: reverse stroke encoder direction
-- Force re-home: enforce re-home on specific screen transitions. If unselected, ignores homeing procedure when switching between motion control screens like Home and Batormode.
-- Speed behaviour: Standard / Natural / Tamed. On shorter strokes, speed behaviour can be too rappid. Changing this setting makes this 'feel' more natural or even tamed.
-- Stroke affects depth: unselected: stroke can never be more than depth, selected: a higher stroke makes depth increase too.
-- Encoder ramp: None / Medium / High / Aggressive (how fast encoder turns respond/relate to values)
-- Brightness: adjust screen brightness. Rotate 3rd encoder to change
-
-Buttons:
-- Left: Save settings
-- Middle: Back to Menu
-- Right encoder click: toggle/cycle selected setting
-
-About Speed behaviour:
-- Standard: checkbox appears off
-- Natural: checkbox appears on
-- Tamed: checkbox appears on
-
-> [!TIP]
-> Natural is a good default for smoother speed vs stroke feel.
-
-> [!WARNING]
-> Force re-home MUST be selected when using IHSV motors, can be unselected with Gold motors. Keep Force re-home enabled unless you clearly understand your setup and risks.
-
----
-
-## Colors / UI Themes
-
-<img src="image/UI-themes.jpg" alt="UI themes" width="250">
-
-Change visual theme colors.
-
-How to use:
-1. Rotate right encoder to browse themes.
-2. Press right button to apply selected theme.
-
-Buttons:
-- Left: back to Menu
-- Right: apply selected theme
-
----
-
-## Addons Screen
-
-<img src="image/Addons.jpg" alt="Addons screen" width="250">
-
-Open or manage addon modules.
-
-Available addons may include:
-- Streaming
-- Eject
-- Fist-IT
-- AP-Mode (Advanced Penetration), depending on firmware build (needs OSSM Lite by Frayd)
-
-How to use:
-1. Rotate right encoder to select addon.
-2. Press middle button to open/toggle mode actions.
-3. Press right button to select/open.
-
-Buttons:
-- Left: back to Menu
-- Middle: mode action (show/hide or select mode)
-- Right: open/select addon
-
----
-
-## Streaming Mode (Experimental)
-
-<img src="image/Streaming.jpg" alt="Streaming screen" width="250">
-
-Streaming mode allows external position sources (for example scripts/apps) to control motion.
-
-Startup flow:
-1. Open Streaming addon.
-2. Remote prepares OSSM mode and safety flow.
-3. Streaming becomes active.
-
-Useful screens:
-- <img src="image/Streaming-mode.jpg" alt="Streaming mode" width="250">
-- <img src="image/Streaming-connect-now.jpg" alt="Streaming connect" width="250">
-- <img src="image/Streaming-active.jpg" alt="Streaming active" width="250">
-
-Buttons:
-- Left: back
-- Middle: pause/resume override
-- Right: go to Addons
-
-Important requirement:
-- OSSM must support two simultaneous BLE connections.
-- Use this firmware file:
-	[OSSM-FW-Multiple-BLE-Connections-USE-AT-YOUR-OWN-RISK.bin](build/firmware/OSSM%20multiple%20BLE%20Connections%20FW/OSSM-FW-Multiple-BLE-Connections-USE-AT-YOUR-OWN-RISK.bin)
-
-> [!WARNING]
-> Streaming mode is still experimental.
-> Only use trusted scripts and safe limits.
-> You are responsible for safe operation.
-
----
-
-## Eject Addon
-
-<img src="image/Eject.jpg" alt="Eject screen" width="250">
-
-Use Eject to configure and run one-shot pump/squirt sequences.
-
-Set:
-- Speed
-- Count/time
-- Size
-- Acceleration
-
-Buttons:
-- Left: back
-- Middle: run/toggle action
-- Right: menu/select action (depends on current flow)
-
----
-
-## Fist-IT Addon
-
-<img src="image/Fist-IT.jpg" alt="Fist-IT screen" width="250">
-
-Use Fist-IT controls for paired addon behavior.
-
-Common controls:
-- Speed
-- Rotation
-- Pause
-- Acceleration
-
-Buttons:
-- Left: back
-- Middle: start/stop toggle
-- Right: back/menu flow
-
----
-
-## Advanced Penetration (AP-Mode, Experimental)
-
-AP-Mode is an advanced addon for advanced pattern behavior tuning (base/modifier logic and presets).
-
-What it can do:
-- live parameter control
-- start/stop with AP logic
-- preset apply/save actions
-
-Important requirement:
-- AP-Mode needs OSSM Lite firmware created by Frayd.
-- Without that compatible firmware, AP will not work!
-
-> [!WARNING]
-> AP-Mode is experimental.
-> Test slowly with conservative limits before real use.
-
----
-
-## Safety Checklist (Recommended Every Session)
-
-1. Confirm correct screen and mode before starting movement.
-2. Start low: speed/depth/stroke.
-3. Verify movement direction and range first.
-4. Keep a stop option ready (Middle button / emergency behavior).
-5. Do not use experimental features unattended.
-6. Never have yourself constrained
-7. You alone are responsible for your own safety. Always.
----
-
-## Troubleshooting Quick Tips
-
-- Not connecting:
-	- reboot OSSM and remote
-	- retry from Start screen
-- Movement not matching values after mode change:
-	- return to Home and re-check values
-	- if needed, stop and re-home flow
-- Streaming unavailable:
-	- verify two-BLE-connections OSSM firmware is installed
-- AP-Mode unavailable/not working:
-	- verify Frayd OSSM Lite firmware compatibility
-
----
-
-## Final Notes
-
-This remote has powerful controls.
-Use them with care, test changes gradually, and keep safety first.
+Filament - A good quality PLA works well. While there are no threads it is recommended that your printer is well calibrated.  
