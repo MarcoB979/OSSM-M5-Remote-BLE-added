@@ -1,266 +1,364 @@
-# Project OSSM M5 REMOTE
-## Overview of the OSSM-M5-Remote
+# OSSM M5 Remote User Manual
 
-A Remote Control Platform for with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and other related ESP Controlled Sex Toys (like Eject cumpump and Fist-IT).
+The M5 remote is a Remote Control Platform for with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and other related ESP Controlled Sex Toys (like Eject cumpump and Fist-IT).
 
 ![Final Addon](image/remote.png?raw=true "Remote" )
 
-Intially developed for the [OSSM Project](https://github.com/KinkyMakers/OSSM-hardware) by [Ortlof](https://github.com/ortlof), this new firmware has received a complete re-do.
+Intially developed for the [OSSM Project](https://github.com/KinkyMakers/OSSM-hardware) by [Ortlof](https://github.com/ortlof), this new firmware has received a complete makeover and adds bluetooth functionality. The new M5 remote firmware will work with the latest stock (BLE) OSSM firmware and OSSM-Lite. Rust-OSSM has not been tested yet.
 
 
-To help with development and design join the [KinkyMakers Discord](https://discord.gg/MmpT9xE). Be sure to say hello in the #m5-remote channel. 
 
-## M5 Remote now works with the official OSSM BLE firmware. ##
-If you still have the 'old' ESP_NOW firmware on your OSSM (used for previous M5 remote firmwares), from the [esp-now branch](https://github.com/ortlof/OSSM-Stroke), this new M5 remote firmware will still work. Communication via ESP_NOW still is possible, but some extra functionality will be limited (no streaming mode for example). If you use the newer V2 OSSM controller boards, please update your OSSM Firmware.
+## Before You Start
 
-The Cable remote is obsolete with this firmware.
+1. Charge your M5 Remote.
+2. Power on your OSSM.
+3. Keep your hand close to the M5 buttons during first tests.
 
-## Supported in this version of the M5 remote:
-[OSSM latest firmware (BLE)](https://github.com/KinkyMakers/OSSM-hardware)  
-[OSSM StrokeEngine branch for older (esp_now) OSSM](https://github.com/KinkyMakers/OSSM-hardware)
+> [!TIP]
+> Start every new setup with low speed, low depth, and low stroke.
 
-## Web Flasher (Online Install)
+## Quick Online Flash (Web Flasher)
 
-End users can flash directly from browser via ESP Web Tools.
+You can flash firmware directly from browser.
 
-- Installer page: [https://marcob979.github.io/OSSM-M5-Remote-BLE-added/webflasher/](https://marcob979.github.io/OSSM-M5-Remote-BLE-added/webflasher/)
-- Core2 manifest: [webflasher/manifest-core2.json](webflasher/manifest-core2.json)
-- CoreS3 manifest: [webflasher/manifest-cores3.json](webflasher/manifest-cores3.json)
+Open:
+- [Web flasher page](https://marcob979.github.io/OSSM-M5-Remote-BLE-added/webflasher/)
 
-Notes:
-- Best supported browsers: Chrome or Edge (desktop).
-- A USB data cable is required.
+Steps:
+1. Connect your M5 with a USB data cable.
+2. Select your board (Core2 or CoreS3).
+3. Click Install.
+4. Select the COM/serial port.
+5. Wait for flash to finish, then reboot the device.
 
-Maintainer workflow:
-1. Build new firmware for both boards.
-2. Run script [scripts/generate_webflasher_manifest.py](scripts/generate_webflasher_manifest.py) to auto-point manifests to latest firmware files in build/firmware.
-3. Publish repository (for example via GitHub Pages).
+> [!TIP]
+> Use Chrome or Edge on desktop for best compatibility.
 
-## Additional toy support:
+> [!WARNING]
+> Always select the correct board type before flashing.
 
-[EJECT Cumpump](https://github.com/MarcoB979/EJECT-Cumpump)  [A Work in Progress]
+---
 
+## Controls Quick Guide
 
-[FIST-IT](https://github.com/MarcoB979/Fist-IT) | [A Work in Progress]
+- Left encoder: rotate + click
+- Middle encoder (MX): rotate + click
+- Right encoder: rotate + click
+- Touchscreen buttons: same actions as on-screen labels
+- Touchscreen is disabled in motion control screens for safety
 
-For information on how to build and source your materials, see the bottom of the page or see the official M5 remote page here:
-[](https://github.com/ortlof/OSSM-M5-Remote)
+In this manual:
+- Left button = bottom-left button on the active screen
+- Middle button = bottom-middle button
+- Right button = bottom-right button
 
-## Operation, functionality and screens:
-Steps to initialize start-up:
-1. Power on the OSSM and let it home.
-2. Power on the OSSM M5 Remote.
-3. M5 remote will try an auto connect first. If the OSSM was not ready and connection is unsuccesfull you can try again manually by pressing the left encoder to select 'Connect'.
-4. After successfull connection, the menu screen will show.
+---
 
+## Start Screen (Connect)
 
-On the top left of the screen, you can see the status icons. If the OSSM is connected via Bluetooth you will see a Bluetooth icon, if it is connected via ESP_NOW you will see a WiFi icon. If addons are connected, you will also see these here. When the OSSM is performing a homeing sequence, you will see a homeing icon (only in BLE mode)
+<img src="../../image/Start.jpg" alt="Start screen" width="250">
 
+Use this screen to connect your remote.
 
-## Menu screen
-<img src="image/Menu.jpg?raw=true" alt="Final Addon" title="Menu" width="200">
-In the menu screen you can select the various options and go to the respective screens:
-- Home (OSSM Control)
-- Bator Mode (OSSM control for strokers)
-- Settings (to change the different settings)
-- Addons (to open and/or activate (show/hide) the available addons.
-    - Available addons at this moment: Eject, Fist-IT and Streaming mode
+What to do:
+1. Press Connect (or wait for auto-connect).
+2. After connection, the remote opens the Menu screen.
 
+Buttons:
+- Left: Connect
+- Middle: open Settings
+- Right: open Home (demo/manual path)
 
-* make your selection by rotating the right encoder.
+> [!TIP]
+> If connection fails, retry once with OSSM powered and nearby.
 
+---
 
-* Pressing the left encoder button makes the M5 remote restart (after you confirmed the notification)
-* Pressing the middle (MX/square) button, you can change the colors used in the screen (ui themes are built in)
-* Pressing the right encoder button selects the actively selected menu option
+## Menu Screen
 
-## (OSSM) Home screen
-<img src="image/OSSM-home.jpg?raw=true" alt="home" title="Home" width="200">
-This is the home screen where you can control your OSSM after successfull connection. The OSSM is controlled in 'Stroke Engine' mode.
+<img src="../../image/Menu.jpg" alt="Menu screen" width="250">
 
+This is your navigation hub.
 
-By rotating the left encoder you control speed
-By rotating the second encoder you change depth
-By rotating the third encoder you change stroke (notice the slider shows the stroke depth relative to the depth)
-By rotating the fourth (right) encoder you can change sensation (influences pattern behaviour)
+Main tiles:
+- Home (OSSM control)
+- Bator mode
+- Settings
+- Addons
 
+Bottom buttons:
+- Left: Restart remote (with confirmation)
+- Middle: Colors / UI themes
+- Right: Select focused tile
 
-Rotating an encoder to the right increases (+) the values, to the left the values decreases (-) the values. If in settings you selected to invert the stroke, rotating the slider increases when rotating to the right, if unchecked the values will decrease.
+How to navigate:
+1. Rotate right encoder to move focus.
+2. Press right button to open selected tile.
 
+---
 
-If stroke, speed and depth are changed to all positive values the OSSM will start automatically. if one of the values is set to 0, the OSSM will stop.
+## Home Screen (OSSM Control)
 
+<img src="../../image/OSSM-home.jpg" alt="Home screen" width="250">
 
-You can also press the middle button to start and stop.
+This is the main OSSM control screen.
 
+Encoders:
+- Encoder 1: Speed
+- Encoder 2: Depth
+- Encoder 3: Stroke
+- Encoder 4: Sensation
 
-When long pressing the middle button, you activate the emergency stop: the OSSM will slowly retract itself and go back to the menu screen. The OSSM MUST be re-homed before you can start to play again.
+Behavior:
+- If speed, depth, and stroke are all above 0, your OSSM can run (auto start feature).
+- If one of them goes to 0, your OSSM stops.
 
+Buttons:
+- Left: Pull-out
+- Middle: Start/Stop (pause)
+- Right: Pattern screen
 
-When pressing the left button, the OSSM will only do the pullout movement as described, but not trigger an emergency stop or go back to the menu.
+Long press actions:
+- Middle long press: Emergency stop and return path
+- Left long press: open Eject screen (if enabled/paired)
+- Right long press: open Fist-IT screen (if enabled/paired)
 
+> [!WARNING]
+> Emergency stop can still create movement while retracting. Keep clear and stay attentive.
 
-To change a pattern, click the right button to go to the Pattern selection screen.
-
+---
 
 ## Bator Mode
-<img src="image/Bator-mode.jpg?raw=true" alt="bator" title="Bator mode" width="200">
-Bator mode has the same functionality as the OSSM home screen. However, the OSSM movement is now suitable for strokers. The OSSM will now move with the middle of the rail as starting point. 
 
+<img src="../../image/Bator-mode.jpg" alt="Bator mode" width="250">
 
-Only speed, stroke and sensation can be set. When stroke is changed, the OSSM will move from middle to the size of stroke. If stroke is set to 20% as example, the OSSM will move from middle of the rail (50%) to 10% to the left (40%) and then to 60% of the rail lengte (making it a 20% stroke move)
+Bator mode is optimized for stroker-style movement around center.
 
+Difference vs Home:
+- Home: classic OSSM depth/stroke behavior
+- Bator mode: stroke is centered around mid rail and behaves differently for sleeve-style use
 
-Clicking the right button brings you in the pattern selection menu. Clicking the left encoder you will return to the menu screen.
-The middle square button has the same start/stop behaviour as the OSSM home screen, including the long press emergency stop.
+Typical use:
+- Set speed
+- Set stroke
+- Set sensation
+- Start with middle button
 
+Buttons:
+- Left: back to Menu
+- Middle: Start/Stop
+- Right: Pattern screen
 
-## Settings
-<img src="image/Settings.jpg?raw=true" alt="settings" title="Settings" width="200">
-In settings you can change the following settings:
+---
 
--Vibrate: should the M5 Remote vibrate after button presses to give haptic feedback. 
+## Pattern Screen
 
--Touch Disabled: if you do not want to be able to use the touchscreen, then check this option.
+<img src="../../image/Patterns.jpg" alt="Pattern screen" width="250">
 
--Stroke inverted: change the bravoure of the encoder where you change the stroke values in the OSSM Ho.e screen (rotating right games stoke go up, or down.
+Use this screen to choose an OSSM pattern.
 
--Force re-home: if we switch to the Menu screen and then back to screens where you can control the OSSM, this can force a homeing procedure. This is a safety measure, but sometimes this might be not totally necessary if you use the 57AIM Gold Motor. In that case you can choose to disable to force re-homes on occasions where this is not absolutely necessary. 
+How to use:
+1. Rotate right encoder to browse patterns.
+2. Press right button to save and apply.
 
-> [!WARNING]
-PLEASE NOTE: it is recommended to have force re-home selected. **EXTRA CAUTION:** if you own the IHSV57 motor, you MUST keep this option activated for safety reasons!
+Buttons:
+- Left: back to Menu
+- Middle: return to previous control screen
+- Right: Save (apply) selected pattern. This returns you to he previous screen. Sensation will be reset.
 
+---
 
-You can also change the screen brightness to fit your needs and save on battery life. To do this, rotate the 3rd rotary encoder (seen from the left). Changes are applied immediately.
+## Settings Screen
 
+<img src="../../image/Settings.jpg" alt="Settings screen" width="250">
 
-As a standard, the M5 remote has a screensaver functionality.  if not using the remote, the screen will be dimmed, after a longer time of not using, the remote will go into deep sleep. This will disconnect all connections too.
+Use Settings to configure behavior and safety.
 
+Main options:
+- Vibrate: haptic feedback on interactions
+- Safe Start/Stop: safer start behavior (speed will ramp up instead of immediately applied)
+- Stroke invert: reverse stroke encoder direction
+- Force re-home: enforce re-home on specific screen transitions. If unselected, ignores homeing procedure when switching between motion control screens like Home and Batormode.
+- Speed behaviour: Standard / Natural / Tamed. On shorter strokes, speed behaviour can be too rappid. Changing this setting makes this 'feel' more natural or even tamed.
+- Stroke affects depth: unselected: stroke can never be more than depth, selected: a higher stroke makes depth increase too.
+- Encoder ramp: None / Medium / High / Aggressive (how fast encoder turns respond/relate to values)
+- Brightness: adjust screen brightness. Rotate 3rd encoder to change
 
-By pressing the left encoder, you save the settings in memory. The M5 Remote will use these saved settings at next start-up.
-Rotating the right encoder will scroll through the options. Pressing it will select or de-select the active option
+Buttons:
+- Left: Save settings
+- Middle: Back to Menu
+- Right encoder click: toggle/cycle selected setting
 
+About Speed behaviour:
+- Standard: checkbox appears off
+- Natural: checkbox appears on
+- Tamed: checkbox appears on
 
-By pressing the middle button, you return to the menu screen. Do not forget to save first.
-
-
-## Addons screen
-<img src="image/Addons.jpg?raw=true" alt="Addons" title="Addons" width="200">
-The new M5 Remote has several addons available, which you can start in the Addons screen. 
-
-
-To select (open) an addon, navigate to it and select/run it by pressing the right encoder button. 
-
-
-If you dont want to use an addon, you can hide (deactivate) it (or show/activate if you want to undo this). 
-After you press the middle button (show/hide) you can deactivate (hide) or activate (show) the addon in the selection menu. You can also show/activate all available addons at once by pressing the show all button.
-
-
-Your choice will be stored in memory so you only have to do this once.
-
-
-# Addons - Streaming mode
-<img src="image/Streaming.jpg?raw=true" alt="Streaming" title="Streaming" width="200">
-
-The latest OSSM Firmware has a streaming mode. For example: by using streaming mode, you are able to use funscripts or the xtoys application (position mode).
-
-
-Xtoys is however not completely compatible/functional yet (there is no starting speed values sent by xtoys after position/streaming mode is made active). By using the M5 Remote, this is correctly done automatically. You also have an override option to control this yourself. 
-
-
-Ater you start the M5 Streaming mode, the M5 will send the task to go to streaming to the OSSM, make sure it will do a homeing procedure when necessary and then slowly push out the rail to the maximum. This way you can position yourself safely before use.
-
-This is done in a few steps. Notifications on screen will help/guide you.
-
-
-Some of these notifications show safety warnings, since the OSSM Streaming mode still is an experimental feature. So is the addon available in the M5 Remote. **PLEASE BE CAUTIOUS**  when using streaming mode. Ensure patterns, (fun)scripts and others are tested and found safe by you before use. **You alone are responsible for your own safety!**
-
-
-Normally, when the streaming setup is finished, you can safely shut down the M5 remote. There is however a possibility to override settings. This way you can change the maximum speed, depth or stroke the OSSM will accept and you can start or stop movement. Changing max speed (or other values) will not make changes to the settings of the online streaming service. So if in the streaming service (xtoys as example) the speed is set at 80 and on your M5 max speed is set at 50 (%) the OSSM will apply an actual speed of 40 (50% of the sent 80 by the streaming service). This works similar to stroke, depth and sensation.
+> [!TIP]
+> Natural is a good default for smoother speed vs stroke feel.
 
 > [!WARNING]
-> Overriding can give you more control, but also can pose a safety hazard if handled pourly. **ONLY** use this functionality if you understand the hazards and know what you do. Again: ONLY YOU are responsible for your safety.
+> Force re-home MUST be selected when using IHSV motors, can be unselected with Gold motors. Keep Force re-home enabled unless you clearly understand your setup and risks.
 
+---
 
-# Addons - EJECT cumpump
-<img src="image/Eject.jpg?raw=true" alt="Eject" title="Eject" width="200">
-For code and information, see my  [Eject Cumpump repository](https://github.com/MarcoB979/Eject)
+## Colors / UI Themes
 
+<img src="../../image/UI-themes.jpg" alt="UI themes" width="250">
 
-The EJECT Cumpump  is based on the eject cumpump from [Ortlof](https://github.com/ortlof/EJECT-cum-tube-project). I have made a functional firmware which is integrated in the M5 remote. It can be activated in the Addons screen by showing (or hiding) the addon.
+Change visual theme colors.
 
+How to use:
+1. Rotate right encoder to browse themes.
+2. Press right button to apply selected theme.
 
-The screen itself lets you configure the squirt pattern which executes once. Set your desired speed, how many times a shot (squirt) should happen, the volume of each shot and the force (accelleration: how fast the speed ramps up). If the force is the same than the speed, the pump will turn instantantly, If it is lower, the speed will ramp up. If you set this too low, the Eject possibly will not reach the set speed. 
+Buttons:
+- Left: back to Menu
+- Right: apply selected theme
 
+---
 
-If all values have been correctly set, you can start the squirt sequence by pressing the middle 'cum' button.
-> [!TIP] If you have enabled the Eject Cumpump in the Addons screen and the Eject Cumpump is turned on and connected to the M5 remote, you will see the status icon on the top left. Also the left button in the home screen will have an added 'E' to the button text. When long pressing the left button in home screen, you will open the Eject screen. If you double click (leave 0.5 seconds between clicks) in the home screen, you will start the squirt sequence you have previously configured (similar to pressing the 'CUM' button in the eject screen)
->
+## Addons Screen
 
-# Addons - Fist-IT   <img src="image/Fist-IT.jpg?raw=true" alt="Fist-IT" title="Fist-IT" width="200">
-For code and information, see my  [Fist-IT repository !](https://github.com/MarcoB979/EJECT-Cumpump)
+<img src="../../image/Addons.jpg" alt="Addons screen" width="250">
 
-Fist-IT is an attachment I designed, which you can mount on your OSSM using the 24mm thread. The Fist-IT is an enclosed, geared, Nema-23 motrlor and driver, run by an ESP32 Super mini. You can then attach a fisting dildo, to mimic the rotational movement when one is being fisted.
+Open or manage addon modules.
 
-The screen lets you set all the necessary parameters by rotating the encoders:
+Available addons may include:
+- Streaming
+- Eject
+- Fist-IT
+- AP-Mode (Advanced Penetration), depending on firmware build (needs OSSM Lite by Frayd)
+
+How to use:
+1. Rotate right encoder to select addon.
+2. Press middle button to open/toggle mode actions.
+3. Press right button to select/open.
+
+Buttons:
+- Left: back to Menu
+- Middle: mode action (show/hide or select mode)
+- Right: open/select addon
+
+---
+
+## Streaming Mode (Experimental)
+
+<img src="../../image/Streaming.jpg" alt="Streaming screen" width="250">
+
+Streaming mode allows external position sources (for example scripts/apps) to control motion.
+
+Startup flow:
+1. Open Streaming addon.
+2. Remote prepares OSSM mode and safety flow.
+3. Streaming becomes active.
+
+Useful screens:
+- <img src="../../image/Streaming-mode.jpg" alt="Streaming mode" width="250">
+- <img src="../../image/Streaming-connect-now.jpg" alt="Streaming connect" width="250">
+- <img src="../../image/Streaming-active.jpg" alt="Streaming active" width="250">
+
+Buttons:
+- Left: back
+- Middle: pause/resume override
+- Right: go to Addons
+
+Important requirement:
+- OSSM must support two simultaneous BLE connections.
+- Use this firmware file:
+	[OSSM-FW-Multiple-BLE-Connections-USE-AT-YOUR-OWN-RISK.bin](../../build/firmware/OSSM%20multiple%20BLE%20Connections%20FW/OSSM-FW-Multiple-BLE-Connections-USE-AT-YOUR-OWN-RISK.bin)
+
+> [!WARNING]
+> Streaming mode is still experimental.
+> Only use trusted scripts and safe limits.
+> You are responsible for safe operation.
+
+---
+
+## Eject Addon
+
+<img src="../../image/Eject.jpg" alt="Eject screen" width="250">
+
+Use Eject to configure and run one-shot pump/squirt sequences.
+
+Set:
 - Speed
-- Rotation (0-360)
-- Pause in 0.1 seconds per steps. This adds a pause between each movemet, both backwards or forwards
-- Accell which sets the accelleration of the movement.
+- Count/time
+- Size
+- Acceleration
 
-> [!IMPORTANT]
-Be mindfull of the settings and do 'dry testruns' before you use the Fist-IT since if using in a wrong way, this can cause **serious injuries**
->
+Buttons:
+- Left: back
+- Middle: run/toggle action
+- Right: menu/select action (depends on current flow)
 
-If all values have been correctly set, you can start the rotational movemt by pressing the middle 'Start/stop' button. Pressing it again will stop the movement instantly. A new press will again start the movement.
-> [!TIP] if you have enabled the Fist-IT in the Addons screen and the Fist-IT is turned on and connected to the M5 remote you will see the status icon on the top left. Also the right button in the home screen will have an added 'F' to the button text. When long pressing the left button in home screen, you will open the Fist-IT screen. If you double click (leave 0.5 seconds between clicks) in the home screen, you will start the Fist-IT (or stop after a second double click) using the values you have previously configurered in the Fist-IT screen (similar to pressing the 'Start/Stop' button in the Fist-IT screen)
-> 
+---
 
+## Fist-IT Addon
 
+<img src="../../image/Fist-IT.jpg" alt="Fist-IT screen" width="250">
 
+Use Fist-IT controls for paired addon behavior.
 
-# Build the OSSM M5 Remote Yourself
+Common controls:
+- Speed
+- Rotation
+- Pause
+- Acceleration
 
-### Assembly instructions: [Klick Here !](Assembly.md)
+Buttons:
+- Left: back
+- Middle: start/stop toggle
+- Right: back/menu flow
 
-## Bill Of Materials for sourcing Electrical Components
+---
 
-All M5Stack Core2 and CoreS3 are supported Now.
+## Advanced Penetration (AP-Mode, Experimental)
 
-BOM is on Octopart for Easy Sourcing: https://octopart.com/bom-tool/rURYMuwB
+AP-Mode is an advanced addon for advanced pattern behavior tuning (base/modifier logic and presets).
 
-PCB Files are located in the /OSSM-M5-Remote/Hardware/PCB folder if you want to make one yourself or use a different manufacturer other than PCBWay.
+What it can do:
+- live parameter control
+- start/stop with AP logic
+- preset apply/save actions
 
-## Additional parts needed that are not PCB:  
+Important requirement:
+- AP-Mode needs OSSM Lite firmware created by Frayd.
+- Without that compatible firmware, AP will not work!
 
-| Quantity | Part | Sourcing EU | Price € |
-|----------|------|-------------|---------|
-| 1x | M5Stack CoreS3 SE | https://www.digikey.de/de/products/detail/m5stack-technology-co-ltd/K128-SE/23628221?s=N4IgTCBcDaILIFYDKAXAhgYwNYAIDCA9gE4CmSAzDkgKIgC6AvkA | 43 € |
-| 2x | M3x25mm Hex Head Cap Bolt | https://www.amazon.de/Edelstahl-Innensechskant-Bolzenset-Eisenrahmen-Mechanischer-Innensechskantschraube-Mutternset/dp/B07PPFT871/ | 12,97 € |
-| 4x | M3x20mm Hex Head Cap Bolt | Comes as part of the set mentioned above | " | 
-| 4x | Heat Set inserts M3 | https://www.amazon.de/ruthex-Gewindeeinsatz-St%C3%BCck-Gewindebuchsen-Kunststoffteile/dp/B08BCRZZS3 | 8,99 € |
-| 1x | 3,7v 2000mAh Lipo Batterie Size 34,5 mm x 10,6 mm x 56 mm | https://www.amazon.de/EEMB-103454-2AhLithium-Schutzplatine-Isolationsbeschichtung/dp/B08214DJLJ/ | 14,89 € |
-| 4x | Encoder Knob Bought or 3D Printed | https://de.aliexpress.com/item/1005001394286414.html | 5 € |
-| 1x | OSSM M5 Remote PCB | KinyMaker Discord #M5-Remote Channel or https://www.pcbway.com/project/shareproject/M5Stack_Core2_Remote_Plattform_2cb5bac0.html | 15 € |
+> [!WARNING]
+> AP-Mode is experimental.
+> Test slowly with conservative limits before real use.
 
---------------------------------------------
+---
 
-| Quantity | Part | Sourcing US | Price $ |
-|----------|------|-------------|---------|
-| 1x | M5Stack CoreS3 SE | https://www.digikey.de/de/products/detail/m5stack-technology-co-ltd/K128-SE/23628221?s=N4IgTCBcDaILIFYDKAXAhgYwNYAIDCA9gE4CmSAzDkgKIgC6AvkA | $47|
-| 2x | M3x25mm Hex Head Cap Bolt | https://www.amazon.com/dp/B09NR8X2LV | $17.99 |
-| 4x | M3x20mm Hex Head Cap Bolt | Comes as part of the set mentioned above | " | 
-| 4x | Heat Set inserts M3 | https://www.amazon.com/ruthex-M3-Threaded-Inserts-RX-M3x5-7/dp/B08BCRZZS3 | $10.99 |
-| 1x | 3.7v 2000mAh Lipo Battery Size 34.5 X 56 X 10.6 mm (The wires will need to be reversed in the connector on this one! See Assembly instructions for more info.) | https://www.amazon.com/EEMB-2000mAh-Battery-Rechargeable-Connector/dp/B08214DJLJ/ | $14.99 |
-| 4x | Encoder Knob Bought or 3D Printed | https://www.aliexpress.us/item/3256801207971662.html?gatewayAdapt=deu2usa4itemAdapt | $5.00 |
-| 1x | M5 Remote PCB | KinyMaker Discord #M5-Remote Channel or https://www.pcbway.com/project/shareproject/M5Stack_Core2_Remote_Plattform_2cb5bac0.html | $30.00 |
+## Safety Checklist (Recommended Every Session)
 
-## 3D Printed Parts Needed:
+1. Confirm correct screen and mode before starting movement.
+2. Start low: speed/depth/stroke.
+3. Verify movement direction and range first.
+4. Keep a stop option ready (Middle button / emergency behavior).
+5. Do not use experimental features unattended.
+6. Never have yourself constrained
+7. You alone are responsible for your own safety. Always.
+---
 
-| Quantity | Part | Information |
-|----------|------|-------------|
-| 1x | M5_curved_w6mm+5.stl Thanks to "Hoodlatch" KM Discord | There is a specific version for the wider Adafruit LIPO battery. Print with the base side facing down, 6 walls 20% Infill | 
-| 1x | TOP-*-Keycap-Standoff.stl | Top Depends on your Keycap: Cherry or DSA (DSA is wider) | 
-| 4x | M5_Remote_Knob_Customizable.scad | If you go for the 3d Printed knobs |
+## Troubleshooting Quick Tips
 
-Filament - A good quality PLA works well. While there are no threads it is recommended that your printer is well calibrated.  
+- Not connecting:
+	- reboot OSSM and remote
+	- retry from Start screen
+- Movement not matching values after mode change:
+	- return to Home and re-check values
+	- if needed, stop and re-home flow
+- Streaming unavailable:
+	- verify two-BLE-connections OSSM firmware is installed
+- AP-Mode unavailable/not working:
+	- verify Frayd OSSM Lite firmware compatibility
+
+---
+
+## Final Notes
+
+This remote has powerful controls.
+Use them with care, test changes gradually, and keep safety first.
