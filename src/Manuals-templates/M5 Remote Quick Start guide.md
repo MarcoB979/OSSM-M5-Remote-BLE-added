@@ -2,7 +2,7 @@
 
 The M5 remote is a Remote Control Platform for with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and other related ESP Controlled Sex Toys (like Eject cumpump and Fist-IT).
 
-<img src="image/remote.png?raw=true" alt="Remote" width="250">
+![Final Addon](image/remote.png?raw=true "Remote" )
 
 Intially developed for the [OSSM Project](https://github.com/KinkyMakers/OSSM-hardware) by [Ortlof](https://github.com/ortlof), this new firmware has received a complete makeover and adds bluetooth functionality. The new M5 remote firmware will work with the latest stock (BLE) OSSM firmware and OSSM-Lite. Rust-OSSM has not been tested yet.
 
@@ -56,7 +56,7 @@ In this manual:
 
 ## Start Screen (Connect)
 
-<img src="image/Start.jpg" alt="Start screen" width="250">
+<img src="/image/Start.jpg" alt="Start screen" width="250">
 
 Use this screen to connect your remote.
 
@@ -76,7 +76,7 @@ Buttons:
 
 ## Menu Screen
 
-<img src="image/Menu.jpg" alt="Menu screen" width="250">
+<img src="/image/Menu.jpg?raw=true" alt="Final Addon" title="Menu" width="250">
 
 This is your navigation hub.
 
@@ -99,7 +99,7 @@ How to navigate:
 
 ## Home Screen (OSSM Control)
 
-<img src="image/OSSM-home.jpg" alt="Home screen" width="250">
+<img src="/image/OSSM-home.jpg" alt="Home screen" width="250">
 
 This is the main OSSM control screen.
 
@@ -130,7 +130,7 @@ Long press actions:
 
 ## Bator Mode
 
-<img src="image/Bator-mode.jpg" alt="Bator mode" width="250">
+<img src="/image/Bator-mode.jpg" alt="Bator mode" width="250">
 
 Bator mode is optimized for stroker-style movement around center.
 
@@ -153,7 +153,7 @@ Buttons:
 
 ## Pattern Screen
 
-<img src="image/Patterns.jpg" alt="Pattern screen" width="250">
+<img src="/image/Patterns.jpg" alt="Pattern screen" width="250">
 
 Use this screen to choose an OSSM pattern.
 
@@ -170,7 +170,7 @@ Buttons:
 
 ## Settings Screen
 
-<img src="image/Settings.jpg" alt="Settings screen" width="250">
+<img src="/image/Settings.jpg" alt="Settings screen" width="250">
 
 Use Settings to configure behavior and safety.
 
@@ -204,7 +204,7 @@ About Speed behaviour:
 
 ## Colors / UI Themes
 
-<img src="image/UI-themes.jpg" alt="UI themes" width="250">
+<img src="/image/UI-themes.jpg" alt="UI themes" width="250">
 
 Change visual theme colors.
 
@@ -220,7 +220,7 @@ Buttons:
 
 ## Addons Screen
 
-<img src="image/Addons.jpg" alt="Addons screen" width="250">
+<img src="/image/Addons.jpg" alt="Addons screen" width="250">
 
 Open or manage addon modules.
 
@@ -244,7 +244,7 @@ Buttons:
 
 ## Streaming Mode (Experimental)
 
-<img src="image/Streaming.jpg" alt="Streaming screen" width="250">
+<img src="/image/Streaming.jpg" alt="Streaming screen" width="250">
 
 Streaming mode allows external position sources (for example scripts/apps) to control motion.
 
@@ -254,9 +254,9 @@ Startup flow:
 3. Streaming becomes active.
 
 Useful screens:
-- <img src="image/Streaming-mode.jpg" alt="Streaming mode" width="250">
-- <img src="image/Streaming-connect-now.jpg" alt="Streaming connect" width="250">
-- <img src="image/Streaming-active.jpg" alt="Streaming active" width="250">
+- <img src="/image/Streaming-mode.jpg" alt="Streaming mode" width="250">
+- <img src="/image/Streaming-connect-now.jpg" alt="Streaming connect" width="250">
+- <img src="/image/Streaming-active.jpg" alt="Streaming active" width="250">
 
 Buttons:
 - Left: back
@@ -277,7 +277,7 @@ Important requirement:
 
 ## Eject Addon
 
-<img src="image/Eject.jpg" alt="Eject screen" width="250">
+<img src="/image/Eject.jpg" alt="Eject screen" width="250">
 
 Use Eject to configure and run one-shot pump/squirt sequences.
 
@@ -296,7 +296,7 @@ Buttons:
 
 ## Fist-IT Addon
 
-<img src="image/Fist-IT.jpg" alt="Fist-IT screen" width="250">
+<img src="/image/Fist-IT.jpg" alt="Fist-IT screen" width="250">
 
 Use Fist-IT controls for paired addon behavior.
 
