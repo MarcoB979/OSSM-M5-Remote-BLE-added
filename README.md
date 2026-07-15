@@ -1,4 +1,13 @@
-# OSSM M5 Remote User Manual
+> [!NOTE]
+> - 	[Quick start guide](src/Manuals-templates/M5%20Remote%20Quick%20Start%20guide.md)
+
+> [!NOTE]
+> - 	[Manual extra explained](src/Manuals-templates/M5%20Remote%20Manual%20-%20extra%20explanation.md)
+
+> [!NOTE]
+> - [Web flasher page](https://marcob979.github.io/OSSM-M5-Remote-BLE-added/webflasher/)
+
+
 
 The M5 remote is a Remote Control Platform for with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and other related ESP Controlled Sex Toys (like Eject cumpump and Fist-IT).
 
