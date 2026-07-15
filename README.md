@@ -1,7 +1,7 @@
 > [!NOTE]
 >- 	[Quick start guide](/src/Manuals-templates/M5%20Remote%20Quick%20Start%20guide.md)
 >
->- 	[Manual extra explained](/src/Manuals-templates/M5%20Remote%20Manual%20-%20extra%20explanation.md)
+>- 	[Manual - extra explained](/src/Manuals-templates/M5%20Remote%20Manual%20-%20extra%20explanation.md)
 >
 >- [Web flasher page](https://marcob979.github.io/OSSM-M5-Remote-BLE-added/webflasher/)
 
