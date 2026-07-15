@@ -83,6 +83,12 @@ static bool  s_visual_speed_lock = false;
 static bool  s_visual_speed_ratio_valid = false;
 static float s_visual_speed_stroke_product = 0.0f;
 static float s_visual_speed_last_commanded = -1.0f;
+enum SpeedBehaviorProfile {
+    SPEED_BEHAVIOR_STANDARD = 0,
+    SPEED_BEHAVIOR_NATURAL = 1,
+    SPEED_BEHAVIOR_TAMED = 2,
+};
+static int s_speed_behavior_profile = SPEED_BEHAVIOR_STANDARD;
 static bool  s_stroke_influences_depth = false;
 static float s_manual_rail_length_mm = 0.0f;
 static bool s_home_speed_ramp_active = false;
@@ -98,32 +104,22 @@ static uint32_t s_visual_speed_log_ms = 0;
 static bool s_home_toggle_fired_this_loop = false;
 static bool s_consume_next_mx_short_click = false;
 
-//variables for natural speed curve (to make speed drop at low stroke)
-// Selectable natural-speed presets for Visual Speed Lock tuning.
-//   0 = legacy/current behavior
-//   1 = conservative distance-based tuning
-//   2 = aggressive distance-based tuning
-#ifndef VIS_SPEED_CURVE_PRESET
-#define VIS_SPEED_CURVE_PRESET 1
-#endif
+// Variables for natural speed curve (to make speed drop at low stroke).
+// Runtime profile selection:
+//   Standard (legacy): strongest suppression at low stroke
+//   Natural: balanced distance-based behavior
+//   Tamed: between Standard and Natural
+static constexpr float VIS_SPEED_STANDARD_MIN_FACTOR = 0.14f;
+static constexpr float VIS_SPEED_STANDARD_KNEE_STROKE = 308.0f;
+static constexpr float VIS_SPEED_STANDARD_POWER = 0.30f;
 
-#if VIS_SPEED_CURVE_PRESET == 2
-static constexpr float VIS_SPEED_CURVE_MIN_FACTOR = 0.40f;
-static constexpr float VIS_SPEED_CURVE_KNEE_STROKE = 18.0f;
-static constexpr float VIS_SPEED_CURVE_POWER = 0.90f;
-#elif VIS_SPEED_CURVE_PRESET == 1
-static constexpr float VIS_SPEED_CURVE_MIN_FACTOR = 0.32f;
-static constexpr float VIS_SPEED_CURVE_KNEE_STROKE = 22.0f;
-static constexpr float VIS_SPEED_CURVE_POWER = 1.05f;
-#else
-static constexpr float VIS_SPEED_CURVE_MIN_FACTOR = 0.14f;
-//Lower this if you want even lower minimum speed at tiny stroke.
-//Example: 0.05 -> 0.03.
-static constexpr float VIS_SPEED_CURVE_KNEE_STROKE = 30.0f;
-//Increase this second if needed. Higher value = full speed is reached at a larger stroke.
-//Example: 50 -> 60 or 70.
-static constexpr float VIS_SPEED_CURVE_POWER = 1.3f;
-#endif
+static constexpr float VIS_SPEED_NATURAL_MIN_FACTOR = 0.32f;
+static constexpr float VIS_SPEED_NATURAL_KNEE_STROKE = 22.0f;
+static constexpr float VIS_SPEED_NATURAL_POWER = 1.05f;
+
+static constexpr float VIS_SPEED_TAMED_MIN_FACTOR = 0.40f;
+static constexpr float VIS_SPEED_TAMED_KNEE_STROKE = 18.0f;
+static constexpr float VIS_SPEED_TAMED_POWER = 0.90f;
 
 //Higher value = stronger suppression at low/mid stroke, and longer before speed recovers.
 //Example: 2.0 -> 2.8 or 3.2.
@@ -147,6 +143,7 @@ static int s_settings_scroll_offset = 0;
 static lv_obj_t* s_manual_rail_length_setting = nullptr;
 static lv_obj_t* s_encoder_ramp_profile_setting = nullptr;
 static bool s_manual_rail_length_ui_syncing = false;
+static bool s_speed_behavior_ui_syncing = false;
 static int s_encoder_ramp_profile = ENCODER_RAMP_MEDIUM;
 static void resetVisualSpeedRatioState();
 static void updateVisualSpeedRatioFromUi(bool uiSpeedChanged, float uiSpeed, float uiStroke);
@@ -159,11 +156,16 @@ static lv_obj_t* getSettingsFocusedObject();
 
 static void syncManualRailLengthSettingUi();
 static void syncEncRampProfileSettingUi();
+static void syncSpeedBehaviorSettingUi();
 static void persistManualRailLengthSetting();
 static void persistEncRampProfileSetting();
+static void persistSpeedBehaviorSetting();
 static void runManualRailLengthCalibrationWorkflow();
 static void manualRailLengthSetting_event_cb(lv_event_t* e);
 static void EncRampProfile_event_cb(lv_event_t* e);
+static void SpeedBehavior_event_cb(lv_event_t* e);
+static const char* getSpeedBehaviorProfileName(int profile);
+static void applySpeedBehaviorProfile(int profile);
 static float getDefaultManualRailLengthMm();
 
 bool dynamicStroke  = false;
@@ -1256,6 +1258,15 @@ static void persistEncRampProfileSetting()
     prefs.end();
 }
 
+static void persistSpeedBehaviorSetting()
+{
+    Preferences prefs;
+    prefs.begin("m5-ctnr", false);
+    prefs.putInt("SpeedBehaviorProfile", s_speed_behavior_profile);
+    prefs.putBool("VisualSpeedLock", s_speed_behavior_profile != SPEED_BEHAVIOR_STANDARD);
+    prefs.end();
+}
+
 static float getDefaultManualRailLengthMm()
 {
 #ifdef RAIL_LENGTH
@@ -1314,6 +1325,52 @@ static void syncEncRampProfileSettingUi()
     snprintf(label, sizeof(label), "Encoder ramp : %s", getEncRampProfileName(s_encoder_ramp_profile));
     lv_checkbox_set_text(s_encoder_ramp_profile_setting, label);
     lv_obj_add_state(s_encoder_ramp_profile_setting, LV_STATE_CHECKED);
+}
+
+static const char* getSpeedBehaviorProfileName(int profile)
+{
+    switch (profile) {
+        case SPEED_BEHAVIOR_NATURAL:
+            return "Natural";
+        case SPEED_BEHAVIOR_TAMED:
+            return "Tamed";
+        case SPEED_BEHAVIOR_STANDARD:
+        default:
+            return "Standard";
+    }
+}
+
+static void applySpeedBehaviorProfile(int profile)
+{
+    if (profile < SPEED_BEHAVIOR_STANDARD || profile > SPEED_BEHAVIOR_TAMED) {
+        profile = SPEED_BEHAVIOR_STANDARD;
+    }
+    s_speed_behavior_profile = profile;
+    s_visual_speed_lock = (s_speed_behavior_profile != SPEED_BEHAVIOR_STANDARD);
+
+    if (!s_visual_speed_lock) {
+        resetVisualSpeedRatioState();
+    } else if (stroke > 0.001f) {
+        s_visual_speed_stroke_product = speed;
+        s_visual_speed_ratio_valid = true;
+    }
+}
+
+static void syncSpeedBehaviorSettingUi()
+{
+    if (!ui_visualSpeedLock) return;
+
+    s_speed_behavior_ui_syncing = true;
+    char label[64];
+    snprintf(label, sizeof(label), "Speed behaviour : %s", getSpeedBehaviorProfileName(s_speed_behavior_profile));
+    lv_checkbox_set_text(ui_visualSpeedLock, label);
+
+    if (s_speed_behavior_profile == SPEED_BEHAVIOR_STANDARD) {
+        lv_obj_clear_state(ui_visualSpeedLock, LV_STATE_CHECKED);
+    } else {
+        lv_obj_add_state(ui_visualSpeedLock, LV_STATE_CHECKED);
+    }
+    s_speed_behavior_ui_syncing = false;
 }
 
 static void ensureManualRailLengthSetting()
@@ -1381,6 +1438,25 @@ static void EncRampProfile_event_cb(lv_event_t* e)
     s_encoder_ramp_profile = (s_encoder_ramp_profile + 1) % 4;
     persistEncRampProfileSetting();
     syncEncRampProfileSettingUi();
+    refreshSettingsCarousel();
+    lv_refr_now(NULL);
+}
+
+static void SpeedBehavior_event_cb(lv_event_t* e)
+{
+    if (!e || !ui_visualSpeedLock || s_speed_behavior_ui_syncing) return;
+
+    const lv_event_code_t code = lv_event_get_code(e);
+    if (code != LV_EVENT_VALUE_CHANGED) return;
+
+    int nextProfile = s_speed_behavior_profile + 1;
+    if (nextProfile > SPEED_BEHAVIOR_TAMED) {
+        nextProfile = SPEED_BEHAVIOR_STANDARD;
+    }
+
+    applySpeedBehaviorProfile(nextProfile);
+    syncSpeedBehaviorSettingUi();
+    persistSpeedBehaviorSetting();
     refreshSettingsCarousel();
     lv_refr_now(NULL);
 }
@@ -1489,9 +1565,21 @@ static float resolveVisualCompensatedSpeed(float uiSpeed, float uiStroke)
     if (!s_visual_speed_ratio_valid) return uiSpeed;
     if (uiStroke <= 0.001f) return uiSpeed;
 
-    const float strokeNorm = fminf(1.0f, fmaxf(0.0f, uiStroke / VIS_SPEED_CURVE_KNEE_STROKE));
-    const float factor = VIS_SPEED_CURVE_MIN_FACTOR +
-                         (1.0f - VIS_SPEED_CURVE_MIN_FACTOR) * powf(strokeNorm, VIS_SPEED_CURVE_POWER);
+    float minFactor = VIS_SPEED_STANDARD_MIN_FACTOR;
+    float kneeStroke = VIS_SPEED_STANDARD_KNEE_STROKE;
+    float curvePower = VIS_SPEED_STANDARD_POWER;
+    if (s_speed_behavior_profile == SPEED_BEHAVIOR_NATURAL) {
+        minFactor = VIS_SPEED_NATURAL_MIN_FACTOR;
+        kneeStroke = VIS_SPEED_NATURAL_KNEE_STROKE;
+        curvePower = VIS_SPEED_NATURAL_POWER;
+    } else if (s_speed_behavior_profile == SPEED_BEHAVIOR_TAMED) {
+        minFactor = VIS_SPEED_TAMED_MIN_FACTOR;
+        kneeStroke = VIS_SPEED_TAMED_KNEE_STROKE;
+        curvePower = VIS_SPEED_TAMED_POWER;
+    }
+
+    const float strokeNorm = fminf(1.0f, fmaxf(0.0f, uiStroke / kneeStroke));
+    const float factor = minFactor + (1.0f - minFactor) * powf(strokeNorm, curvePower);
     float compensatedSpeed = s_visual_speed_stroke_product * factor;
     if (compensatedSpeed < 0.0f) compensatedSpeed = 0.0f;
     if (compensatedSpeed > speedlimit) compensatedSpeed = speedlimit;
@@ -1600,7 +1688,11 @@ void screenInit() {
     SafeStartStop   = prefs.getBool("SafeStartStop", true);
     strokeinvert_mode = prefs.getBool("StrokeInvert", true);
     ble_force_homeing = prefs.getBool("BleForceHomeing", true);
-    s_visual_speed_lock = prefs.getBool("VisualSpeedLock", false);
+    s_speed_behavior_profile = SPEED_BEHAVIOR_STANDARD;
+    if (prefs.isKey("SpeedBehaviorProfile")) {
+        s_speed_behavior_profile = prefs.getInt("SpeedBehaviorProfile", SPEED_BEHAVIOR_STANDARD);
+    }
+    applySpeedBehaviorProfile(s_speed_behavior_profile);
     s_stroke_influences_depth = prefs.getBool("DepthToStroke", false);
     s_encoder_ramp_profile = prefs.getInt("EncRampProfile", ENCODER_RAMP_MEDIUM);
     if (s_encoder_ramp_profile < ENCODER_RAMP_NONE || s_encoder_ramp_profile > ENCODER_RAMP_AGGRESSIVE) {
@@ -1628,7 +1720,10 @@ void screenInit() {
     if (SafeStartStop)   { lv_obj_add_state(ui_safeStartStop,    LV_STATE_CHECKED); }
     if (strokeinvert_mode && ui_strokeinvert) { lv_obj_add_state(ui_strokeinvert, LV_STATE_CHECKED); }
     if (ble_force_homeing && ui_forceHome)    { lv_obj_add_state(ui_forceHome, LV_STATE_CHECKED); }
-    if (s_visual_speed_lock && ui_visualSpeedLock) { lv_obj_add_state(ui_visualSpeedLock, LV_STATE_CHECKED); }
+    if (ui_visualSpeedLock) {
+        lv_obj_add_event_cb(ui_visualSpeedLock, SpeedBehavior_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
+        syncSpeedBehaviorSettingUi();
+    }
     if (s_stroke_influences_depth && ui_strokeDepthLink) { lv_obj_add_state(ui_strokeDepthLink, LV_STATE_CHECKED); }
     ensureEncRampProfileSetting();
     syncEncRampProfileSettingUi();
@@ -1835,18 +1930,8 @@ void savesettings(lv_event_t * e) {
         ble_force_homeing = false;
     }
 
-    if (ui_visualSpeedLock && lv_obj_has_state(ui_visualSpeedLock, LV_STATE_CHECKED) == 1) {
-        prefs.putBool("VisualSpeedLock", true);
-        s_visual_speed_lock = true;
-        if (stroke > 0.001f) {
-            s_visual_speed_stroke_product = speed;
-            s_visual_speed_ratio_valid = true;
-        }
-    } else {
-        prefs.putBool("VisualSpeedLock", false);
-        s_visual_speed_lock = false;
-        resetVisualSpeedRatioState();
-    }
+    prefs.putInt("SpeedBehaviorProfile", s_speed_behavior_profile);
+    prefs.putBool("VisualSpeedLock", s_speed_behavior_profile != SPEED_BEHAVIOR_STANDARD);
 
     if (ui_strokeDepthLink && lv_obj_has_state(ui_strokeDepthLink, LV_STATE_CHECKED) == 1) {
         prefs.putBool("DepthToStroke", true);
@@ -3005,22 +3090,26 @@ void handleScreens() {
         } else if (click3_short_waspressed) {
             lv_obj_t *focused = getSettingsFocusedObject();
             if (focused) {
-                bool isToggle = (focused == ui_vibrate || focused == ui_safeStartStop ||
-                                 focused == ui_strokeinvert || focused == ui_forceHome ||
-                                 focused == ui_visualSpeedLock || focused == ui_strokeDepthLink ||
-                                 focused == s_manual_rail_length_setting);
-                if (isToggle) {
-                    if (lv_obj_has_state(focused, LV_STATE_CHECKED)) {
-                        lv_obj_clear_state(focused, LV_STATE_CHECKED);
-                    } else {
-                        lv_obj_add_state(focused, LV_STATE_CHECKED);
-                    }
+                if (focused == ui_visualSpeedLock) {
                     lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
                 } else {
-                    if (focused == s_encoder_ramp_profile_setting) {
+                    bool isToggle = (focused == ui_vibrate || focused == ui_safeStartStop ||
+                                     focused == ui_strokeinvert || focused == ui_forceHome ||
+                                     focused == ui_strokeDepthLink ||
+                                     focused == s_manual_rail_length_setting);
+                    if (isToggle) {
+                        if (lv_obj_has_state(focused, LV_STATE_CHECKED)) {
+                            lv_obj_clear_state(focused, LV_STATE_CHECKED);
+                        } else {
+                            lv_obj_add_state(focused, LV_STATE_CHECKED);
+                        }
                         lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
                     } else {
-                        lv_obj_send_event(focused, LV_EVENT_SHORT_CLICKED, NULL);
+                        if (focused == s_encoder_ramp_profile_setting) {
+                            lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
+                        } else {
+                            lv_obj_send_event(focused, LV_EVENT_SHORT_CLICKED, NULL);
+                        }
                     }
                 }
             }

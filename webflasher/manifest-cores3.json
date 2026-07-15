@@ -1,0 +1,16 @@
+{
+  "name": "OSSM M5 Remote - CoreS3",
+  "version": "TEST-v0.200",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "../build/firmware/OSSM-M5-Remote_m5stack-cores3_TEST-v0-200.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

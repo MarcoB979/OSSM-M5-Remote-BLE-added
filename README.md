@@ -19,6 +19,23 @@ The Cable remote is obsolete with this firmware.
 [OSSM latest firmware (BLE)](https://github.com/KinkyMakers/OSSM-hardware)  
 [OSSM StrokeEngine branch for older (esp_now) OSSM](https://github.com/KinkyMakers/OSSM-hardware)
 
+## Web Flasher (Online Install)
+
+End users can flash directly from browser via ESP Web Tools.
+
+- Installer page: [webflasher/index.html](webflasher/index.html)
+- Core2 manifest: [webflasher/manifest-core2.json](webflasher/manifest-core2.json)
+- CoreS3 manifest: [webflasher/manifest-cores3.json](webflasher/manifest-cores3.json)
+
+Notes:
+- Best supported browsers: Chrome or Edge (desktop).
+- A USB data cable is required.
+
+Maintainer workflow:
+1. Build new firmware for both boards.
+2. Run script [scripts/generate_webflasher_manifest.py](scripts/generate_webflasher_manifest.py) to auto-point manifests to latest firmware files in build/firmware.
+3. Publish repository (for example via GitHub Pages).
+
 ## Additional toy support:
 
 [EJECT Cumpump](https://github.com/MarcoB979/EJECT-Cumpump)  [A Work in Progress]

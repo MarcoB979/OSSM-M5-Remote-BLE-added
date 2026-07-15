@@ -1,0 +1,16 @@
+{
+  "name": "OSSM M5 Remote - Core2",
+  "version": "TEST-v0.200",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "../build/firmware/OSSM-M5-Remote_m5stack-core2_TEST-v0-200.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
