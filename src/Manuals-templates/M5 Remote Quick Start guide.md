@@ -2,7 +2,7 @@
 
 The M5 remote is a Remote Control Platform for with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and other related ESP Controlled Sex Toys (like Eject cumpump and Fist-IT).
 
-![Final Addon](image/remote.png?raw=true "Remote" )
+<img src="image/remote.png?raw=true" alt="Remote" width="250">
 
 Intially developed for the [OSSM Project](https://github.com/KinkyMakers/OSSM-hardware) by [Ortlof](https://github.com/ortlof), this new firmware has received a complete makeover and adds bluetooth functionality. The new M5 remote firmware will work with the latest stock (BLE) OSSM firmware and OSSM-Lite. Rust-OSSM has not been tested yet.
 
