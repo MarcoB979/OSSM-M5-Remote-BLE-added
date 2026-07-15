@@ -57,7 +57,7 @@ On the top left of the screen, you can see the status icons. If the OSSM is conn
 
 
 ## Menu screen
-<img src="image/Menu.jpg?raw=true" alt="Final Addon" title="Menu" width="200">
+<img src="/image/Menu.jpg?raw=true" alt="Final Addon" title="Menu" width="200">
 In the menu screen you can select the various options and go to the respective screens:
 - Home (OSSM Control)
 - Bator Mode (OSSM control for strokers)
@@ -74,7 +74,7 @@ In the menu screen you can select the various options and go to the respective s
 * Pressing the right encoder button selects the actively selected menu option
 
 ## (OSSM) Home screen
-<img src="image/OSSM-home.jpg?raw=true" alt="home" title="Home" width="200">
+<img src="/image/OSSM-home.jpg?raw=true" alt="home" title="Home" width="200">
 This is the home screen where you can control your OSSM after successfull connection. The OSSM is controlled in 'Stroke Engine' mode.
 
 
@@ -103,7 +103,7 @@ To change a pattern, click the right button to go to the Pattern selection scree
 
 
 ## Bator Mode
-<img src="image/Bator-mode.jpg?raw=true" alt="bator" title="Bator mode" width="200">
+<img src="/image/Bator-mode.jpg?raw=true" alt="bator" title="Bator mode" width="200">
 Bator mode has the same functionality as the OSSM home screen. However, the OSSM movement is now suitable for strokers. The OSSM will now move with the middle of the rail as starting point. 
 
 
@@ -115,7 +115,7 @@ The middle square button has the same start/stop behaviour as the OSSM home scre
 
 
 ## Settings
-<img src="image/Settings.jpg?raw=true" alt="settings" title="Settings" width="200">
+<img src="/image/Settings.jpg?raw=true" alt="settings" title="Settings" width="200">
 In settings you can change the following settings:
 
 -Vibrate: should the M5 Remote vibrate after button presses to give haptic feedback. 
@@ -144,7 +144,7 @@ By pressing the middle button, you return to the menu screen. Do not forget to s
 
 
 ## Addons screen
-<img src="image/Addons.jpg?raw=true" alt="Addons" title="Addons" width="200">
+<img src="/image/Addons.jpg?raw=true" alt="Addons" title="Addons" width="200">
 The new M5 Remote has several addons available, which you can start in the Addons screen. 
 
 
@@ -159,7 +159,7 @@ Your choice will be stored in memory so you only have to do this once.
 
 
 # Addons - Streaming mode
-<img src="image/Streaming.jpg?raw=true" alt="Streaming" title="Streaming" width="200">
+<img src="/image/Streaming.jpg?raw=true" alt="Streaming" title="Streaming" width="200">
 
 The latest OSSM Firmware has a streaming mode. For example: by using streaming mode, you are able to use funscripts or the xtoys application (position mode).
 
@@ -182,7 +182,7 @@ Normally, when the streaming setup is finished, you can safely shut down the M5 
 
 
 # Addons - EJECT cumpump
-<img src="image/Eject.jpg?raw=true" alt="Eject" title="Eject" width="200">
+<img src="/image/Eject.jpg?raw=true" alt="Eject" title="Eject" width="200">
 For code and information, see my  [Eject Cumpump repository](https://github.com/MarcoB979/Eject)
 
 
@@ -196,7 +196,7 @@ If all values have been correctly set, you can start the squirt sequence by pres
 > [!TIP] If you have enabled the Eject Cumpump in the Addons screen and the Eject Cumpump is turned on and connected to the M5 remote, you will see the status icon on the top left. Also the left button in the home screen will have an added 'E' to the button text. When long pressing the left button in home screen, you will open the Eject screen. If you double click (leave 0.5 seconds between clicks) in the home screen, you will start the squirt sequence you have previously configured (similar to pressing the 'CUM' button in the eject screen)
 >
 
-# Addons - Fist-IT   <img src="image/Fist-IT.jpg?raw=true" alt="Fist-IT" title="Fist-IT" width="200">
+# Addons - Fist-IT   <img src="/image/Fist-IT.jpg?raw=true" alt="Fist-IT" title="Fist-IT" width="200">
 For code and information, see my  [Fist-IT repository !](https://github.com/MarcoB979/EJECT-Cumpump)
 
 Fist-IT is an attachment I designed, which you can mount on your OSSM using the 24mm thread. The Fist-IT is an enclosed, geared, Nema-23 motrlor and driver, run by an ESP32 Super mini. You can then attach a fisting dildo, to mimic the rotational movement when one is being fisted.
