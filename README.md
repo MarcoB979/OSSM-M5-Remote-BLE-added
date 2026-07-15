@@ -23,7 +23,7 @@ The Cable remote is obsolete with this firmware.
 
 End users can flash directly from browser via ESP Web Tools.
 
-- Installer page: [webflasher/index.html](webflasher/index.html)
+- Installer page: [https://marcob979.github.io/OSSM-M5-Remote-BLE-added/webflasher/](https://marcob979.github.io/OSSM-M5-Remote-BLE-added/webflasher/)
 - Core2 manifest: [webflasher/manifest-core2.json](webflasher/manifest-core2.json)
 - CoreS3 manifest: [webflasher/manifest-cores3.json](webflasher/manifest-cores3.json)
 

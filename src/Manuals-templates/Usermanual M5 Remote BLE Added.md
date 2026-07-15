@@ -17,7 +17,7 @@ It is written for end users: simple, visual, and practical.
 You can flash firmware directly from browser.
 
 Open:
-- [Web flasher page](../../webflasher/index.html)
+- [Web flasher page](https://marcob979.github.io/OSSM-M5-Remote-BLE-added/webflasher/)
 
 Steps:
 1. Connect your M5 with a USB data cable.
