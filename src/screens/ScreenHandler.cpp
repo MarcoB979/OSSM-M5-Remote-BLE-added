@@ -1085,46 +1085,6 @@ static int estimateBatteryPercentFromVoltageMv(float batteryMv)
         }
     }
     return 0;
-    /*
-    // Non-linear Li-ion OCV-inspired mapping (mV -> percent), then interpolate.
-    // This avoids the "too optimistic" mid-range values from linear mapping.
-    struct BatteryCurvePoint {
-        float mv;
-        int pct;
-    };
-
-    static const BatteryCurvePoint curve[] = {
-        {3200.0f, 0},
-        {3300.0f, 3},
-        {3400.0f, 7},
-        {3500.0f, 15},
-        {3600.0f, 28},
-        {3700.0f, 42},
-        {3800.0f, 58},
-        {3900.0f, 74},
-        {4000.0f, 87},
-        {4100.0f, 95},
-        {4200.0f, 100},
-    };
-
-    const int n = (int)(sizeof(curve) / sizeof(curve[0]));
-    if (batteryMv <= curve[0].mv) return curve[0].pct;
-    if (batteryMv >= curve[n - 1].mv) return curve[n - 1].pct;
-
-    for (int i = 0; i < n - 1; ++i) {
-        const BatteryCurvePoint &a = curve[i];
-        const BatteryCurvePoint &b = curve[i + 1];
-        if (batteryMv >= a.mv && batteryMv <= b.mv) {
-            const float t = (batteryMv - a.mv) / (b.mv - a.mv);
-            int pct = (int)(a.pct + t * (float)(b.pct - a.pct) + 0.5f);
-            if (pct < 0) pct = 0;
-            if (pct > 100) pct = 100;
-            return pct;
-        }
-    }
-
-    return 0;
-    */
 }
 
 static int readBatteryPercentForUi(bool isCharging)
@@ -1196,15 +1156,15 @@ void screen_power_tick()
         if (canEnterDeepSleep()) {
             vibrate(1000, 255);
                 const int result = showNotification(
-                "Deep Sleep",
-                "No activity detected for a while. Enter deep-sleep mode?",
+                T_SHUTDOWN_SLEEP_TITLE,
+                T_SHUTDOWN_SLEEP_TEXT,
             60000,
-            true,  "Yes",
+            true,  T_CANCEL,
             false,  nullptr,
             false);
 
             if (result != NOTIFICATION_RESULT_LEFT) {
-                enterDeepSleep();
+                M5.Power.powerOff();
             }
         }
     }
