@@ -87,12 +87,13 @@ static void my_touchpad_read(lv_indev_t *drv, lv_indev_data_t *data) {
     return;
   }
 
-  screensaver_check_activity();
   if (count > 0) {
     auto touch = M5.Touch.getDetail(0);
     data->state   = LV_INDEV_STATE_PRESSED;
     data->point.x = touch.x;
     data->point.y = touch.y;
+    screensaver_check_activity();
+    LogDebugFormatted("Touchpad read: count: %d, x: %d, y: %d\n", count, data->point.x, data->point.y);
   }
 }
 

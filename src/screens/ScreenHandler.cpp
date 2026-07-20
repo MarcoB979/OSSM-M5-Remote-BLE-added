@@ -72,6 +72,8 @@ static int  s_prev_st_screens = -1;
 // Home/stroke screen checks this flag before sending go:strokeEngine, so that
 // home→menu→home does NOT cause an unnecessary re-home.
 static bool s_ble_menu_requires_stroke_reentry = false;
+// Sent once after startup when Home is first opened while connected
+static bool s_initial_pattern_sent = false;
 static bool  s_motion_command_cache_valid = false;
 static float s_last_motion_speed = 0.0f;
 static float s_last_motion_depth = 0.0f;
@@ -1189,10 +1191,21 @@ void screen_power_tick()
         screensaver_active = true;
     }
 
-#if AUTO_IDLE_DEEP_SLEEP_ENABLED
+#if AUTO_IDLE_DEEP_SLEEP_ENABLED == 1
     if (millis() - last_activity_ms > deep_sleep_timeout_ms) {
         if (canEnterDeepSleep()) {
-            enterDeepSleep();
+            vibrate(1000, 255);
+                const int result = showNotification(
+                "Deep Sleep",
+                "No activity detected for a while. Enter deep-sleep mode?",
+            60000,
+            true,  "Yes",
+            false,  nullptr,
+            false);
+
+            if (result != NOTIFICATION_RESULT_LEFT) {
+                enterDeepSleep();
+            }
         }
     }
 #endif
@@ -1789,6 +1802,23 @@ void screenmachine(lv_event_t * e) {
         syncHomeSliderRangesToLimits();
         syncHomeSensationSliderToTransport();
         speed = lv_slider_get_value(ui_homespeedslider);
+        // If this is the very first time Home is opened while connected,
+        // send Pattern 2 (Simple Stroke) to OSSM and update UI labels.
+        if (!s_initial_pattern_sent) {
+            if (bleCommIsConnected() || espNowIsPaired()) {
+                s_initial_pattern_sent = true;
+                // Update roller/labels to reflect pattern 2 if UI objects exist
+                if (ui_PatternS) {
+                    lv_roller_set_selected(ui_PatternS, 2, LV_ANIM_OFF);
+                    lv_roller_get_selected_str(ui_PatternS, patternstr, sizeof(patternstr));
+                    if (ui_HomePatternLabel) lv_label_set_text(ui_HomePatternLabel, patternstr);
+                    if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
+                }
+                // Send pattern index 2 to OSSM
+                SendCommand(PATTERN, 2.0f, OSSM_ID);
+                SendCommand(SENSATION, 0.0f, OSSM_ID);
+            }
+        }
         //LogDebug(speedenc);
         //LogDebug(speed);
     } else if (lv_scr_act() == ui_Menu) {
@@ -2567,6 +2597,7 @@ void handleScreens() {
             connectbutton(nullptr);
             AtStartup = false;
         }
+        resetEncoderCounts();
     }
     break;
 
@@ -2582,8 +2613,8 @@ void handleScreens() {
 
         const bool wasMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         bool homeMotionValueChanged = false;
-    bool homeSpeedValueChanged = false;
-    bool homeStrokeValueChanged = false;
+        bool homeSpeedValueChanged = false;
+        bool homeStrokeValueChanged = false;
 
         // On first entry from a non-strokeEngine screen, tell OSSM to switch to strokeEngine.
         // Only re-home when we know it is needed:

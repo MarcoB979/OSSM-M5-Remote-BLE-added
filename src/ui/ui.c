@@ -2186,20 +2186,35 @@ void ui_Settings_screen_init(void)
 
 void ui_init(void)
 {
+    printf("0");
     lv_disp_t * dispp = lv_disp_get_default();
+    printf("0");
     lv_theme_t * theme = lv_theme_default_init(dispp, lv_color_hex(getActivePrimaryColor()), lv_color_hex(getActiveSecondaryColor()), true, LV_FONT_DEFAULT);
+    printf("0");
     lv_disp_set_theme(dispp, theme);
+    printf("0");
     ui_Start_screen_init();
+    printf("1");
     ui_Home_screen_init();
+    printf("2");
     ui_Menu_screen_init();
+    printf("3");
     ui_Pattern_screen_init();
+    printf("4");
     ui_Torqe_screen_init();
+    printf("5");
     EjectUiScreenCreate();
+    printf("6");
     ui_Settings_screen_init();
+    printf("7");
     ui_Stroke_screen_init();
+    printf("8");
     ui_Streaming_screen_init();
+    printf("9");
     ui_Addons_screen_init();
-    colors_ui_screen_init();
+    printf("10");
+   colors_ui_screen_init();
+    printf("11");
 
     lv_disp_load_scr(ui_Start);
 }
