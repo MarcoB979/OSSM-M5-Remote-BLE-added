@@ -93,7 +93,6 @@ static void my_touchpad_read(lv_indev_t *drv, lv_indev_data_t *data) {
     data->point.x = touch.x;
     data->point.y = touch.y;
     screensaver_check_activity();
-    LogDebugFormatted("Touchpad read: count: %d, x: %d, y: %d\n", count, data->point.x, data->point.y);
   }
 }
 

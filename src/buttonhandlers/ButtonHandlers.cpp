@@ -10,6 +10,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/timers.h>
 #include "../ui/ui.h"        // for ui_vibrate
+#include "../screens/ScreenHandler.h"
 #include "../config/config_pins.h"  // for ENC_x_CLK/DT pin defines (no object definitions)
 
 // ---------------------------------------------------------------------------
@@ -106,44 +107,53 @@ void buttonInit() {
 // ---------------------------------------------------------------------------
 void mxpress() {
     mxpress_waspressed = true;
+    screensaver_check_activity();
 }
 
 void mxclick() {
     mxclick_short_waspressed = true;
     vibrate(200, 200);
+    screensaver_check_activity();
 }
 
 void mxlong() {
     mxclick_long_waspressed = true;
     vibrate(200, 200);
+    screensaver_check_activity();
 }
 
 void click2() {
     click2_short_waspressed = true;
     vibrate(200, 200);
+    screensaver_check_activity();
 }
 
 void click2long() {
     click2_long_waspressed = true;
     vibrate(200, 200);
+    screensaver_check_activity();
 }
 
 void c2double() {
     click2_double_waspressed = true;
     vibrate(200, 200);
+    screensaver_check_activity();
 }
 
 void click3() {
     click3_short_waspressed = true;
     vibrate(200, 200);
+    screensaver_check_activity();
 }
 
 void c3long() {
     click3_long_waspressed = true;
     vibrate(200, 200);
+    screensaver_check_activity();
 }
 
 void c3double() {
     click3_double_waspressed = true;
     vibrate(200, 200);
+    screensaver_check_activity();
 }

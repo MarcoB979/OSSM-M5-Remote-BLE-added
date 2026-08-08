@@ -85,7 +85,7 @@ static bool  s_visual_speed_lock = false;
 static bool  s_visual_speed_ratio_valid = false;
 static float s_visual_speed_stroke_product = 0.0f;
 static float s_visual_speed_last_commanded = -1.0f;
-enum SpeedBehaviorProfile {
+enum SpeedBehavior {
     SPEED_BEHAVIOR_STANDARD = 0,
     SPEED_BEHAVIOR_NATURAL = 1,
     SPEED_BEHAVIOR_TAMED = 2,
@@ -166,8 +166,8 @@ static void runManualRailLengthCalibrationWorkflow();
 static void manualRailLengthSetting_event_cb(lv_event_t* e);
 static void EncRampProfile_event_cb(lv_event_t* e);
 static void SpeedBehavior_event_cb(lv_event_t* e);
-static const char* getSpeedBehaviorProfileName(int profile);
-static void applySpeedBehaviorProfile(int profile);
+static const char* getSpeedBehaviorName(int profile);
+static void applySpeedBehavior(int profile);
 static float getDefaultManualRailLengthMm();
 
 bool dynamicStroke  = false;
@@ -1141,8 +1141,22 @@ static int getSmoothedBatteryLevel(bool isCharging)
 // -------------------------------------------------------
 void screen_power_tick()
 {
-    if (encoder1.getCount() + encoder2.getCount() + encoder3.getCount() + encoder4.getCount() != 0) {
+    // Only treat encoder movement as activity when the counts change since
+    // the last tick. Some encoder implementations leave a non-zero count
+    // value until explicitly cleared which would otherwise constantly
+    // retrigger the screensaver activity check.
+    static long s_prev_encoder_counts[4] = {0, 0, 0, 0};
+    long c1 = encoder1.getCount();
+    long c2 = encoder2.getCount();
+    long c3 = encoder3.getCount();
+    long c4 = encoder4.getCount();
+    if (c1 != s_prev_encoder_counts[0] || c2 != s_prev_encoder_counts[1] ||
+        c3 != s_prev_encoder_counts[2] || c4 != s_prev_encoder_counts[3]) {
         screensaver_check_activity();
+        s_prev_encoder_counts[0] = c1;
+        s_prev_encoder_counts[1] = c2;
+        s_prev_encoder_counts[2] = c3;
+        s_prev_encoder_counts[3] = c4;
     }
 
     if (!screensaver_active && (millis() - last_activity_ms > (unsigned long)screensaver_timeout_ms)) {
@@ -1235,7 +1249,7 @@ static void persistSpeedBehaviorSetting()
 {
     Preferences prefs;
     prefs.begin("m5-ctnr", false);
-    prefs.putInt("SpeedBehaviorProfile", s_speed_behavior_profile);
+    prefs.putInt("SpeedBehavior", s_speed_behavior_profile);
     prefs.putBool("VisualSpeedLock", s_speed_behavior_profile != SPEED_BEHAVIOR_STANDARD);
     prefs.end();
 }
@@ -1300,7 +1314,7 @@ static void syncEncRampProfileSettingUi()
     lv_obj_add_state(s_encoder_ramp_profile_setting, LV_STATE_CHECKED);
 }
 
-static const char* getSpeedBehaviorProfileName(int profile)
+static const char* getSpeedBehaviorName(int profile)
 {
     switch (profile) {
         case SPEED_BEHAVIOR_NATURAL:
@@ -1313,7 +1327,7 @@ static const char* getSpeedBehaviorProfileName(int profile)
     }
 }
 
-static void applySpeedBehaviorProfile(int profile)
+static void applySpeedBehavior(int profile)
 {
     if (profile < SPEED_BEHAVIOR_STANDARD || profile > SPEED_BEHAVIOR_TAMED) {
         profile = SPEED_BEHAVIOR_STANDARD;
@@ -1335,7 +1349,7 @@ static void syncSpeedBehaviorSettingUi()
 
     s_speed_behavior_ui_syncing = true;
     char label[64];
-    snprintf(label, sizeof(label), "Speed behaviour : %s", getSpeedBehaviorProfileName(s_speed_behavior_profile));
+    snprintf(label, sizeof(label), "Speed behaviour : %s", getSpeedBehaviorName(s_speed_behavior_profile));
     lv_checkbox_set_text(ui_visualSpeedLock, label);
 
     if (s_speed_behavior_profile == SPEED_BEHAVIOR_STANDARD) {
@@ -1427,7 +1441,7 @@ static void SpeedBehavior_event_cb(lv_event_t* e)
         nextProfile = SPEED_BEHAVIOR_STANDARD;
     }
 
-    applySpeedBehaviorProfile(nextProfile);
+    applySpeedBehavior(nextProfile);
     syncSpeedBehaviorSettingUi();
     persistSpeedBehaviorSetting();
     refreshSettingsCarousel();
@@ -1662,10 +1676,10 @@ void screenInit() {
     strokeinvert_mode = prefs.getBool("StrokeInvert", true);
     ble_force_homeing = prefs.getBool("BleForceHomeing", true);
     s_speed_behavior_profile = SPEED_BEHAVIOR_STANDARD;
-    if (prefs.isKey("SpeedBehaviorProfile")) {
-        s_speed_behavior_profile = prefs.getInt("SpeedBehaviorProfile", SPEED_BEHAVIOR_STANDARD);
+    if (prefs.isKey("SpeedBehavior")) {
+        s_speed_behavior_profile = prefs.getInt("SpeedBehavior", SPEED_BEHAVIOR_STANDARD);
     }
-    applySpeedBehaviorProfile(s_speed_behavior_profile);
+    applySpeedBehavior(s_speed_behavior_profile);
     s_stroke_influences_depth = prefs.getBool("DepthToStroke", false);
     s_encoder_ramp_profile = prefs.getInt("EncRampProfile", ENCODER_RAMP_MEDIUM);
     if (s_encoder_ramp_profile < ENCODER_RAMP_NONE || s_encoder_ramp_profile > ENCODER_RAMP_AGGRESSIVE) {
@@ -1920,7 +1934,7 @@ void savesettings(lv_event_t * e) {
         ble_force_homeing = false;
     }
 
-    prefs.putInt("SpeedBehaviorProfile", s_speed_behavior_profile);
+    prefs.putInt("SpeedBehavior", s_speed_behavior_profile);
     prefs.putBool("VisualSpeedLock", s_speed_behavior_profile != SPEED_BEHAVIOR_STANDARD);
 
     if (ui_strokeDepthLink && lv_obj_has_state(ui_strokeDepthLink, LV_STATE_CHECKED) == 1) {
@@ -1950,9 +1964,11 @@ void savesettings(lv_event_t * e) {
 }
 
 void pullOut(lv_event_t * e) {
-    if (speed > 5) {
-        SendCommand(SPEED, 5, OSSM_ID);
+    if (speed > 20) {
+        speed = 20;
+        SendCommand(SPEED, speed, OSSM_ID);
     }
+    int speed_time = (5000*(20/speed));
     SendCommand(DEPTH, 0, OSSM_ID);
     SendCommand(STROKE, 0.1, OSSM_ID); // set a tiny stroke to ensure we exit the stroke pattern if active
     speed = 0;
@@ -1967,7 +1983,7 @@ void pullOut(lv_event_t * e) {
     lv_label_set_text(ui_homestrokevalue, "0");
     //std::string depthStr = std::to_string(depth);
     lv_label_set_text(ui_homedepthvalue, "0");
-    showNotification(T_PULLING_OUT, T_PULLING_OUT_TEXT, 3000, false, nullptr, false, nullptr, false);
+    showNotification(T_PULLING_OUT, T_PULLING_OUT_TEXT, speed_time, false, nullptr, false, nullptr, false);
     lv_refr_now(NULL);  // force immediate render — lv_task_handler() is re-entrant-blocked inside an event callback
     SendCommand(SPEED, 0, OSSM_ID);
     SendCommand(STROKE, 0, OSSM_ID);
@@ -2179,6 +2195,7 @@ void homebuttonmevent(lv_event_t * e) {
         SendCommand(OFF, 0.0, OSSM_ID);
         bleCommSetUnpauseSpeed(resumeSpeed);
     }
+    // Stroke screen watches OSSM_On itself and will refresh its Start/Stop UI.
 }
 
 static bool requestHomeButtonToggleOnce()
@@ -2462,6 +2479,23 @@ static void checkBleDisconnectError()
 // -------------------------------------------------------
 // Main Screen State Machine Loop
 // -------------------------------------------------------
+
+void SetInitialValues() {
+        //if either speed, stroke or depth has no value, set it to 0, so that the stroke screen will not start with a value that is not valid
+        if (speed <= 0.0f) {
+            speed = 0.0f;
+            SendCommand(SPEED, speed, OSSM_ID);
+        }
+        if (stroke <= 0.0f) {
+            stroke = 0.0f;
+            SendCommand(STROKE, stroke, OSSM_ID);
+        }    
+        if (depth <= 0.0f) {
+            depth = 50.0f;
+            SendCommand(DEPTH, depth, OSSM_ID);
+        }
+}
+
 void handleScreens() {
     checkBleDisconnectError();
     serviceHomeSpeedRamp();
@@ -2545,7 +2579,7 @@ void handleScreens() {
 //            touch_disabled = true;
 //        }
         touch_disabled = false;
-
+        SetInitialValues();
         if (click2_short_waspressed) {
             lv_obj_send_event(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {

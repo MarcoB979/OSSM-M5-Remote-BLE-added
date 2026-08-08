@@ -73,7 +73,7 @@ static lv_obj_t *s_batt_bar = nullptr;
 static bool s_enabled = false;
 static bool s_running = false;
 static bool s_needs_redraw = true;
-static int s_last_nonzero_speed = 30;
+static int s_last_nonzero_speed = 0;
 static bool s_preset_mode = false;
 static bool s_modifier_view = false;
 static int s_preset_selection = 0;
@@ -751,7 +751,7 @@ static void handleMiddleShortAction() {
             }
         } else {
             int resume = s_last_nonzero_speed;
-            if (resume <= 0) resume = 30;
+            if (resume <= 0) resume = 0;
             if (setSpeedValue(resume)) {
                 s_running = true;
                 s_needs_redraw = true;
@@ -1217,6 +1217,25 @@ static void updateCurvePreview(const std::string &baseName) {
     }
 }
 
+static void applyApModeButtonMState(const char *text, lv_style_t *defaultStyle, lv_style_t *pressedStyle) {
+    if (!s_btn_m || !s_btn_m_label) return;
+
+    lv_obj_remove_style(s_btn_m, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(s_btn_m, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(s_btn_m, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(s_btn_m, &style_button_running_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_remove_style(s_btn_m, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_remove_style(s_btn_m, &style_button_stopped_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+
+    lv_obj_add_style(s_btn_m, defaultStyle, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(s_btn_m, pressedStyle, LV_PART_MAIN | LV_STATE_PRESSED);
+    lv_obj_add_style(s_btn_m, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
+
+    lv_label_set_text(s_btn_m_label, text);
+    lv_obj_refresh_style(s_btn_m, LV_PART_MAIN, LV_STYLE_PROP_ANY);
+    lv_obj_invalidate(s_btn_m);
+}
+
 static void drawApScreen() {
     ensureDefaultModel();
     normalizeIndexes();
@@ -1242,11 +1261,11 @@ static void drawApScreen() {
     const std::string focusedName = s_modifier_view ? modName : baseName;
     const int focusedValue = s_modifier_view ? modInt : baseInt;
     lv_label_set_text(s_title_label, focusedName.c_str());
-    lv_label_set_text_fmt(s_state_label, "Speed %d", speedInt);
+    lv_label_set_text_fmt(s_state_label, T_SPEED " %d", speedInt);
 
     if (s_transport_label) {
         if (s_modifier_view && !baseName.empty()) {
-            lv_label_set_text_fmt(s_transport_label, "Mod for: %s", baseName.c_str());
+            lv_label_set_text_fmt(s_transport_label, T_MOD " %s", baseName.c_str());
             lv_obj_clear_flag(s_transport_label, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_label_set_text(s_transport_label, "");
@@ -1352,11 +1371,16 @@ static void drawApScreen() {
         if (s_bottom_line) lv_obj_add_flag(s_bottom_line, LV_OBJ_FLAG_HIDDEN);
     }
 
-    lv_label_set_text_fmt(s_preset_label, "Preset: %s", selectedPreset.c_str());
+    //if in modifier screen, s_preset_label should be blank, otherwise show the selected preset name
+    if (s_modifier_view) {
+        lv_label_set_text(s_preset_label, "");
+    } else {
+        lv_label_set_text_fmt(s_preset_label, T_PRESET " %s", selectedPreset.c_str());
+    }
 
     if (s_warning_label) {
         if (!liveActive) {
-            lv_label_set_text(s_warning_label, "fallback");
+            lv_label_set_text(s_warning_label, T_FALLBACK);
             lv_obj_clear_flag(s_warning_label, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_obj_add_flag(s_warning_label, LV_OBJ_FLAG_HIDDEN);
@@ -1365,30 +1389,32 @@ static void drawApScreen() {
 
     if (s_btn_l_label && s_btn_m_label && s_btn_r_label) {
         if (s_preset_mode) {
-            lv_label_set_text(s_btn_l_label, "Back");
-            lv_label_set_text(s_btn_m_label, "Select");
-            lv_label_set_text(s_btn_r_label, "Close");
+            lv_label_set_text(s_btn_l_label, T_BACK);
+            lv_label_set_text(s_btn_m_label, T_SELECT);
+            lv_label_set_text(s_btn_r_label, T_CLOSE);
+            lv_obj_remove_style(s_btn_m, &style_button_running, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_remove_style(s_btn_m, &style_button_stopped, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_remove_style(s_btn_m, &style_button_running_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+            lv_obj_remove_style(s_btn_m, &style_button_stopped_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+            lv_obj_add_style(s_btn_m, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+            lv_obj_add_style(s_btn_m, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+            lv_obj_refresh_style(s_btn_m, LV_PART_MAIN, LV_STYLE_PROP_ANY);
+            lv_obj_invalidate(s_btn_m);
         } else if (s_modifier_view) {
-            lv_label_set_text(s_btn_l_label, "Back");
-            lv_label_set_text(s_btn_m_label, s_running ? "Pause" : "Run");
-            lv_label_set_text(s_btn_r_label, "Close");
+            lv_label_set_text(s_btn_l_label, T_BACK);
+            lv_label_set_text(s_btn_r_label, T_CLOSE);
+            applyApModeButtonMState(s_running ? T_PAUSE : T_START,
+                                    s_running ? &style_button_running : &style_button_stopped,
+                                    s_running ? &style_button_running_pressed : &style_button_stopped_pressed);
         } else {
-            lv_label_set_text(s_btn_l_label, "Presets");
-            lv_label_set_text(s_btn_m_label, s_running ? "Pause" : "Run");
-            lv_label_set_text(s_btn_r_label, "Modifier");
+            lv_label_set_text(s_btn_l_label, T_PRESETS);
+            lv_label_set_text(s_btn_r_label, T_MODIFIER);
+            applyApModeButtonMState(s_running ? T_PAUSE : T_START,
+                                    s_running ? &style_button_running : &style_button_stopped,
+                                    s_running ? &style_button_running_pressed : &style_button_stopped_pressed);
         }
     }
-/*
-    if (s_help_label) {
-        if (s_preset_mode) {
-            lv_label_set_text(s_help_label, "Enc2 Select preset");
-        } else if (s_modifier_view) {
-            lv_label_set_text(s_help_label, "Enc1 Speed  Enc2 Modifier  Enc4 Value  R: Pattern");
-        } else {
-            lv_label_set_text(s_help_label, "Enc1 Speed  Enc2 Command  Enc3 Value");
-        }
-    }
-*/
+
 }
 
 static void onScreenLoaded(lv_event_t *e) {
@@ -1405,30 +1431,7 @@ static void createScreenIfNeeded() {
 
     lv_obj_set_style_bg_color(s_screen, lv_color_hex(0x0A0A12), LV_PART_MAIN | LV_STATE_DEFAULT);
 
-/*    s_hdr_l = lv_btn_create(s_screen);
-    lv_obj_set_size(s_hdr_l, 64, 22);
-    lv_obj_set_align(s_hdr_l, LV_ALIGN_TOP_LEFT);
-    lv_obj_set_x(s_hdr_l, 8);
-    lv_obj_set_y(s_hdr_l, 4);
-    lv_obj_set_style_bg_color(s_hdr_l, lv_color_hex(0xDDE6F0), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(s_hdr_l, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-    s_hdr_l_label = lv_label_create(s_hdr_l);
-    lv_obj_center(s_hdr_l_label);
-    lv_label_set_text(s_hdr_l_label, "<<");
-    lv_obj_add_event_cb(s_hdr_l, event_hdr_l, LV_EVENT_SHORT_CLICKED, nullptr);
 
-    s_hdr_r = lv_btn_create(s_screen);
-    lv_obj_set_size(s_hdr_r, 64, 22);
-    lv_obj_set_align(s_hdr_r, LV_ALIGN_TOP_RIGHT);
-    lv_obj_set_x(s_hdr_r, -8);
-    lv_obj_set_y(s_hdr_r, 4);
-    lv_obj_set_style_bg_color(s_hdr_r, lv_color_hex(0xDDE6F0), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_radius(s_hdr_r, 4, LV_PART_MAIN | LV_STATE_DEFAULT);
-    s_hdr_r_label = lv_label_create(s_hdr_r);
-    lv_obj_center(s_hdr_r_label);
-    lv_label_set_text(s_hdr_r_label, ">>");
-    lv_obj_add_event_cb(s_hdr_r, event_hdr_r, LV_EVENT_SHORT_CLICKED, nullptr);
-*/
     s_title_label = lv_label_create(s_screen);
     lv_obj_set_align(s_title_label, LV_ALIGN_TOP_MID);
     lv_obj_set_x(s_title_label, 0);
@@ -1609,12 +1612,13 @@ static void createScreenIfNeeded() {
     lv_obj_set_style_radius(s_right_meter_fill, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_clear_flag(s_right_meter_fill, LV_OBJ_FLAG_SCROLLABLE);
 
+
     s_preset_label = lv_label_create(s_screen);
-    lv_obj_set_align(s_preset_label, LV_ALIGN_BOTTOM_LEFT);
-    lv_obj_set_x(s_preset_label, 10);
-    lv_obj_set_y(s_preset_label, -30);
+    lv_obj_set_align(s_preset_label, LV_ALIGN_TOP_LEFT);
+    lv_obj_set_x(s_preset_label, 0);
+    lv_obj_set_y(s_preset_label, 54);
     lv_obj_set_style_text_font(s_preset_label, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_label_set_text(s_preset_label, "Preset: -");
+    lv_label_set_text(s_preset_label, T_PRESET " -");
 
     s_warning_label = lv_label_create(s_screen);
     lv_obj_set_width(s_warning_label, 100);
@@ -1624,7 +1628,7 @@ static void createScreenIfNeeded() {
     lv_obj_set_style_text_color(s_warning_label, lv_color_hex(0xF59E0B), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(s_warning_label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_long_mode(s_warning_label, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(s_warning_label, "warning label");
+    lv_label_set_text(s_warning_label, T_WARNING);
     lv_obj_add_flag(s_warning_label, LV_OBJ_FLAG_HIDDEN);
 
     s_btn_l = lv_btn_create(s_screen);
@@ -1637,7 +1641,7 @@ static void createScreenIfNeeded() {
     lv_obj_add_style(s_btn_l, &style_button_l_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
     s_btn_l_label = lv_label_create(s_btn_l);
     lv_obj_center(s_btn_l_label);
-    lv_label_set_text(s_btn_l_label, "Presets");
+    lv_label_set_text(s_btn_l_label, T_PRESETS);
     lv_obj_add_event_cb(s_btn_l, event_btn_l, LV_EVENT_CLICKED, nullptr);
 
     s_btn_m = lv_btn_create(s_screen);
@@ -1649,7 +1653,7 @@ static void createScreenIfNeeded() {
     lv_obj_add_style(s_btn_m, &style_button_m_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
     s_btn_m_label = lv_label_create(s_btn_m);
     lv_obj_center(s_btn_m_label);
-    lv_label_set_text(s_btn_m_label, "Pause");
+    lv_label_set_text(s_btn_m_label, T_PAUSE);
     lv_obj_add_event_cb(s_btn_m, event_btn_m, LV_EVENT_CLICKED, nullptr);
 
     s_btn_r = lv_btn_create(s_screen);
@@ -1662,7 +1666,7 @@ static void createScreenIfNeeded() {
     lv_obj_add_style(s_btn_r, &style_button_r_focused, LV_PART_MAIN | LV_STATE_FOCUSED);
     s_btn_r_label = lv_label_create(s_btn_r);
     lv_obj_center(s_btn_r_label);
-    lv_label_set_text(s_btn_r_label, "Modifier");
+    lv_label_set_text(s_btn_r_label, T_MODIFIER);
     lv_obj_add_event_cb(s_btn_r, event_btn_r, LV_EVENT_CLICKED, nullptr);
 
     s_help_label = lv_label_create(s_screen);
@@ -1673,7 +1677,6 @@ static void createScreenIfNeeded() {
     lv_obj_set_style_text_font(s_help_label, &lv_font_montserrat_10, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_color(s_help_label, lv_color_hex(0x94A3B8), LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_label_set_long_mode(s_help_label, LV_LABEL_LONG_WRAP);
-//    lv_label_set_text(s_help_label, "AP-Mode loading...");
     lv_label_set_text(s_help_label, "");
 }
 
@@ -1682,6 +1685,34 @@ static void resetLocalEncoders() {
     s_enc2 = encoder2.getCount();
     s_enc3 = encoder3.getCount();
     s_enc4 = encoder4.getCount();
+}
+
+static void syncApMotionGlobalsFromSettings() {
+    const float apSpeed = getSettingValue(speedControlName(), 0.0f);
+    speed = (apSpeed > 0.0f) ? apSpeed : 0.0f;
+}
+
+static void applyApModeOssmToggle(bool startRequested) {
+    syncApMotionGlobalsFromSettings();
+
+    const bool canRun = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
+    if (!canRun) return;
+
+    if (startRequested) {
+        if (!s_running) {
+            homebuttonmevent(nullptr);
+            s_running = true;
+        }
+        return;
+    }
+
+    if (s_running) {
+        homebuttonmevent(nullptr);
+        s_running = false;
+    } else {
+        homebuttonmevent(nullptr);
+        s_running = true;
+    }
 }
 
 static bool setSpeedValue(int value) {
@@ -1695,6 +1726,13 @@ static bool setSpeedValue(int value) {
     if (clamped > 0) s_last_nonzero_speed = clamped;
     s_read_count = -2;
     sendAdvancedControlIfLive(std::to_string(speedControlIndex()) + ":" + std::to_string(clamped) + ",");
+
+    if (clamped > 0) {
+        applyApModeOssmToggle(true);
+    } else if (s_running) {
+        applyApModeOssmToggle(false);
+    }
+
     return true;
 }
 

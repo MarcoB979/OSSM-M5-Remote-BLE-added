@@ -57,6 +57,72 @@ static bool  s_stroke_motion_cache_valid = false;
 static float s_last_stroke_speed = 0.0f;
 static float s_last_stroke_depth = 0.0f;
 static float s_last_stroke = 0.0f;
+static bool  s_last_stroke_ui_ossm_state = false;
+
+static int strokeRangeFromLimit(float limitValue)
+{
+    int limit = (int)(limitValue + 0.5f);
+    if (limit < 1) limit = 1;
+    return limit;
+}
+
+static void syncStrokeSliderRangesToLimits()
+{
+    if (ui_StrokeSpeedSlider) {
+        const int speedMax = strokeRangeFromLimit(speedlimit);
+        if (lv_slider_get_max_value(ui_StrokeSpeedSlider) != speedMax) {
+            lv_slider_set_range(ui_StrokeSpeedSlider, 0, speedMax);
+        }
+        if (speed > speedMax) {
+            speed = (float)speedMax;
+        }
+    }
+
+    if (ui_StrokeStrokeSlider) {
+        const int strokeMax = strokeRangeFromLimit(maxdepthinmm);
+        if (lv_slider_get_max_value(ui_StrokeStrokeSlider) != strokeMax) {
+            lv_slider_set_range(ui_StrokeStrokeSlider, 0, strokeMax);
+        }
+        if (stroke > strokeMax) {
+            stroke = (float)strokeMax;
+        }
+    }
+
+    if (ui_StrokeSensationSlider) {
+        const int sensationMin = -100;
+        const int sensationMax = 100;
+        if (lv_slider_get_min_value(ui_StrokeSensationSlider) != sensationMin ||
+            lv_slider_get_max_value(ui_StrokeSensationSlider) != sensationMax) {
+            lv_slider_set_range(ui_StrokeSensationSlider, sensationMin, sensationMax);
+        }
+        if (sensation < sensationMin) {
+            sensation = (float)sensationMin;
+        } else if (sensation > sensationMax) {
+            sensation = (float)sensationMax;
+        }
+    }
+}
+
+static void syncStrokeValueLabels()
+{
+    if (ui_StrokeSpeedValue) {
+        char sv[7];
+        dtostrf(speed, 6, 0, sv);
+        lv_label_set_text(ui_StrokeSpeedValue, sv);
+    }
+
+    if (ui_StrokeStrokeValue) {
+        char sv[7];
+        dtostrf(stroke, 6, 0, sv);
+        lv_label_set_text(ui_StrokeStrokeValue, sv);
+    }
+
+    if (ui_StrokeSensationValue) {
+        char sv[7];
+        dtostrf(sensation, 6, 0, sv);
+        lv_label_set_text(ui_StrokeSensationValue, sv);
+    }
+}
 
 static void flushStrokeMotionCommands(float motionSpeed, float motionDepth, float motionStroke, bool motionValueChanged)
 {
@@ -82,6 +148,8 @@ static void flushStrokeMotionCommands(float motionSpeed, float motionDepth, floa
 static void ui_event_Stroke(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
         if (s_Logo) lv_label_set_text(s_Logo, T_STROKE_SCREEN);
+        syncStrokeSliderRangesToLimits();
+        syncStrokeValueLabels();
         refreshStrokeStartStopUi();
         screenmachine(e);
     }
@@ -121,7 +189,10 @@ static void applyStrokeButtonMState(const char* text, lv_style_t* defaultStyle, 
 }
 
 void refreshStrokeStartStopUi() {
-    if (!s_ButtonM || !s_ButtonMText) return;
+    if (!s_ButtonM || !s_ButtonMText) {
+        Serial.println("refreshStrokeStartStopUi: s_ButtonM or s_ButtonMText is null");
+        return;
+    }
     if (OSSM_On == false) {
         applyStrokeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
     } else {
@@ -150,6 +221,8 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
         SendCommand(PATTERN, 0.0f, OSSM_ID);
     }
 
+    syncStrokeSliderRangesToLimits();
+
     // Encoder 1 — Speed
     if (ui_StrokeSpeedSlider && lv_slider_is_dragged(ui_StrokeSpeedSlider) == false) {
         changed = false;
@@ -173,7 +246,7 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
         motionValueChanged = true;
     }
 
-    // Encoder 2 — Stroke (motion range); depth auto-calculated as centre-minus-half
+    // Encoder 2 — Stroke (motion range); depth is the center point of the motion.
     if (ui_StrokeStrokeSlider && lv_slider_is_dragged(ui_StrokeStrokeSlider) == false) {
         changed = false;
         lv_slider_set_value(ui_StrokeStrokeSlider, stroke, LV_ANIM_OFF);
@@ -184,19 +257,29 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
             changed = true; stroke -= 1;
             encoder2.setCount(0);
         }
-        if (stroke <= 0.5)            { changed = true; stroke = 0; depth = 0; }
-        if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
+        if (stroke <= 0.5f) {
+            changed = true;
+            stroke = 0.0f;
+            depth = maxdepthinmm / 2.0f;
+        } else {
+            if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
+            depth = (maxdepthinmm / 2.0f) + (stroke / 2.0f);
+            if (depth > maxdepthinmm) { depth = maxdepthinmm; }
+        }
         if (changed) {
             char sv[7]; dtostrf(stroke, 6, 0, sv);
             if (ui_StrokeStrokeValue) lv_label_set_text(ui_StrokeStrokeValue, sv);
-            depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
-            if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
             motionValueChanged = true;
         }
     } else if (ui_StrokeStrokeSlider && lv_slider_get_value(ui_StrokeStrokeSlider) != (int)stroke) {
         stroke = lv_slider_get_value(ui_StrokeStrokeSlider);
-        depth = (maxdepthinmm / 2.0f) - (stroke / 2.0f);
-        if (depth <= 0.5f) {depth = 0.0f; stroke = 0.0f;}
+        if (stroke <= 0.5f) {
+            stroke = 0.0f;
+            depth = maxdepthinmm / 2.0f;
+        } else {
+            depth = (maxdepthinmm / 2.0f) + (stroke / 2.0f);
+            if (depth > maxdepthinmm) { depth = maxdepthinmm; }
+        }
         motionValueChanged = true;
     }
 
@@ -226,12 +309,13 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
     if (click2_short_waspressed) {
         _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     } else if (mxclick_short_waspressed) {
-        homebuttonmevent(NULL);
-        refreshStrokeStartStopUi();
+        homebuttonmevent(nullptr);
     } else if (click3_short_waspressed) {
         g_pattern_return_screen = ui_Stroke;
         _ui_screen_change(ui_Pattern, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     }
+
+    syncStrokeValueLabels();
 
     const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
     flushStrokeMotionCommands(speed, depth, stroke, motionValueChanged);
@@ -239,6 +323,12 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
     if (!wasMotionReady && isMotionReady && !OSSM_On) {
         homebuttonmevent(nullptr);
     }
+
+    const bool ossmStateChanged = (OSSM_On != s_last_stroke_ui_ossm_state);
+    if (ossmStateChanged) {
+        refreshStrokeStartStopUi();
+    }
+    s_last_stroke_ui_ossm_state = OSSM_On;
 }
 
 // ---------------------------------------------------------------------------
@@ -307,14 +397,14 @@ void ui_Stroke_screen_init() {
     // ---- Sliders ----
     s_SpeedL = createSliderRow(
         ui_Stroke, T_SPEED, -40,
-        0, (int)speedlimit, LV_SLIDER_MODE_NORMAL,
+        0, strokeRangeFromLimit(speedlimit), LV_SLIDER_MODE_NORMAL,
         &style_slider_track[0], &style_slider_indicator[0],
         (int)speed,
         &ui_StrokeSpeedSlider, &ui_StrokeSpeedValue);
 
     s_StrokeL = createSliderRow(
         ui_Stroke, T_STROKE, -4,
-        0, (int)maxdepthinmm, LV_SLIDER_MODE_NORMAL,
+        0, strokeRangeFromLimit(maxdepthinmm), LV_SLIDER_MODE_NORMAL,
         &style_slider_track[2], &style_slider_indicator[2],
         (int)stroke,
         &ui_StrokeStrokeSlider, &ui_StrokeStrokeValue);
@@ -330,6 +420,7 @@ void ui_Stroke_screen_init() {
     if (ui_StrokeSensationSlider) lv_obj_set_width(ui_StrokeSensationSlider, 170);
     // Hide the numeric value label for sensation (not needed in bator mode)
     if (ui_StrokeSensationValue) lv_obj_add_flag(ui_StrokeSensationValue, LV_OBJ_FLAG_HIDDEN);
+    syncStrokeValueLabels();
 
     // ---- Battery display (top-right, slot 7 — Stroke screen exclusive) ----
     ui_Batt7 = lv_label_create(ui_Stroke);
@@ -411,7 +502,7 @@ void ui_Stroke_screen_init() {
 
     s_ButtonMText = lv_label_create(s_ButtonM);
     lv_obj_set_align(s_ButtonMText, LV_ALIGN_CENTER);
-    lv_label_set_text(s_ButtonMText, T_START);
+    lv_label_set_text(s_ButtonMText, "BLABLA " T_START);
     lv_obj_add_style(s_ButtonMText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // Right — Pattern screen

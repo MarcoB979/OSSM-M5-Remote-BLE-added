@@ -26,6 +26,8 @@
 //#define T_RUNNING           "Running"
 #define T_PAUSE             "Pause"
 #define T_STOP              "STOP"
+#define T_CLOSE             "Close"
+#define T_BACK              "Back"
 #define T_FAIL              "Failed"
 //#define T_BLOCKED           "Blocked/Not Ready"
 #define T_CUM               "Cum"
@@ -122,7 +124,7 @@
 #define T_SCREEN_SETTINGS         "Settings"
 #define T_SCREEN_ADDONS           "Addons"
 #define T_SCREEN_COLORS           "Color Themes"
-#define T_SCREEN_PATTERN          "Pattern selection"
+#define T_SCREEN_PATTERN          "Patterns"
 #define T_SCREEN_TORQUE           "Torque"
 #define T_SCREEN_EJECT            "EJECT Cum Pump"
 
@@ -135,6 +137,17 @@
 #define T_ENABLEDISABLE           "Show/Hide"
 #define T_SHOWALL                 "Show All"
 
+//AP_Mode screen
+#define T_APMODE                  "AP Mode"
+#define T_FALLBACK                "Fallback"
+#define T_PRESET                  "Preset:"
+#define T_MOD                     "Mod for:"
+#define T_MODIFIER                "Modifier"
+#define T_PRESETS                 "Presets"
+#define T_WARNING                 "warning label"
+
 // disconnect warnings
 #define T_BLE_COMM_ERROR_TITLE   "BLE COMMUNICATION ERROR"
 #define T_BLE_COMM_ERROR_TEXT    "The BLE Communication with OSSM has failed.\nPlease restart or turn off your M5 remote."
+#define T_SHUTDOWN_SLEEP_TITLE       "Shutting down"
+#define T_SHUTDOWN_SLEEP_TEXT        "The M5 remote is shutting down.\nPress cancel to abort."
