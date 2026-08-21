@@ -2451,6 +2451,37 @@ static void checkBleDisconnectError()
     // s_notification_shown stays true so we don't spam the notification.
 }
 
+static void serviceAddonBackgroundConnect()
+{
+    static uint32_t s_next_probe_ms = 0;
+    static uint8_t s_probe_slot = 0;
+    static constexpr uint32_t INPUT_QUIET_WINDOW_MS = 350U;
+
+    const uint32_t nowMs = millis();
+    // Only probe when recent input traffic has settled to reduce user-visible lag.
+    if ((nowMs - last_activity_ms) < INPUT_QUIET_WINDOW_MS) {
+        return;
+    }
+
+    if (s_next_probe_ms != 0 && (int32_t)(nowMs - s_next_probe_ms) < 0) {
+        return;
+    }
+    s_next_probe_ms = nowMs + 1000U;
+
+    // Stagger probes: at most one addon connect attempt per scheduler tick.
+    if (s_probe_slot == 0) {
+        if (addonsIsEjectEnabled() && !EjectIsPaired()) {
+            (void)EjectTryConnectBackground();
+        }
+    } else {
+        if (addonsIsFistITEnabled() && !FistITIsPaired()) {
+            (void)FistITTryConnectBackground();
+        }
+    }
+
+    s_probe_slot ^= 1U;
+}
+
 // -------------------------------------------------------
 // Main Screen State Machine Loop
 // -------------------------------------------------------
@@ -2480,6 +2511,7 @@ void SetInitialValues() {
 
 void handleScreens() {
     checkBleDisconnectError();
+    serviceAddonBackgroundConnect();
     serviceHomeSpeedRamp();
 
     s_home_toggle_fired_this_loop = false;

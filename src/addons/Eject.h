@@ -37,6 +37,7 @@ void EjectHandleScreen(const struct ButtonEvents *events);
 
 bool EjectSendCommand(int command, float value);
 bool EjectTryConnectNow();
+bool EjectTryConnectBackground();
 void EjectToggle();        // Toggle on/off (uses internal state)
 bool EjectIsPaired();
 void EjectSetAddonEnabled(bool enabled);

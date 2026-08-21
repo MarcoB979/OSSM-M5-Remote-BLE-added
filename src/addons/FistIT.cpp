@@ -95,6 +95,10 @@ static NimBLERemoteCharacteristic* s_ble_rx = nullptr;
 static NimBLERemoteCharacteristic* s_ble_tx = nullptr;
 static uint32_t s_last_connect_attempt_ms = 0;
 static constexpr uint32_t FIST_CONNECT_RETRY_MS = 3000;
+static constexpr uint32_t FIST_BG_SCAN_MS = 120;
+static constexpr uint32_t FIST_FG_SCAN_MS = 600;
+static constexpr uint32_t FIST_BG_CONNECT_TIMEOUT_MS = 1200;
+static constexpr uint32_t FIST_FG_CONNECT_TIMEOUT_MS = 5000;
 static const char* FIST_BLE_DEVICE_NAME = "Fist-IT";
 static const char* FIST_BLE_SERVICE_UUID = "5f8bb6f0-9f17-4aa8-9c42-3d8b8b4d9001";
 static const char* FIST_BLE_RX_UUID = "5f8bb6f1-9f17-4aa8-9c42-3d8b8b4d9001";
@@ -195,7 +199,8 @@ static bool fistBleTryConnect(bool force = false)
   scanner->setInterval(160);
   scanner->setWindow(160);
 
-  NimBLEScanResults results = scanner->getResults(600, false);
+  const uint32_t scanMs = force ? FIST_FG_SCAN_MS : FIST_BG_SCAN_MS;
+  NimBLEScanResults results = scanner->getResults(scanMs, false);
   NimBLEAddress targetAddress;
   bool found = false;
   NimBLEUUID serviceUuid(FIST_BLE_SERVICE_UUID);
@@ -225,10 +230,11 @@ static bool fistBleTryConnect(bool force = false)
       return false;
     }
     s_ble_client->setConnectionParams(12, 12, 0, 150);
-    s_ble_client->setConnectTimeout(5000);
   } else if (s_ble_client->isConnected()) {
     s_ble_client->disconnect();
   }
+
+  s_ble_client->setConnectTimeout(force ? FIST_FG_CONNECT_TIMEOUT_MS : FIST_BG_CONNECT_TIMEOUT_MS);
 
   if (!s_ble_client->connect(targetAddress)) {
     fistBleResetClient();
@@ -599,6 +605,11 @@ bool FistITEnsureTxPeer()
 bool FistITTryConnectNow()
 {
   return fistBleTryConnect(true);
+}
+
+bool FistITTryConnectBackground()
+{
+  return fistBleTryConnect(false);
 }
 
 void FistITSetAddonEnabled(bool enabled)

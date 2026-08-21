@@ -94,6 +94,10 @@ static NimBLERemoteCharacteristic* e_ble_rx = nullptr;
 static NimBLERemoteCharacteristic* e_ble_tx = nullptr;
 static uint32_t e_last_connect_attempt_ms = 0;
 static constexpr uint32_t EJECT_CONNECT_RETRY_MS = 3000;
+static constexpr uint32_t EJECT_BG_SCAN_MS = 120;
+static constexpr uint32_t EJECT_FG_SCAN_MS = 600;
+static constexpr uint32_t EJECT_BG_CONNECT_TIMEOUT_MS = 1200;
+static constexpr uint32_t EJECT_FG_CONNECT_TIMEOUT_MS = 5000;
 static const char* EJECT_BLE_DEVICE_NAME = "Eject";
 static const char* EJECT_BLE_SERVICE_UUID = "5f8bb7f0-9f17-4aa8-9c42-3d8b8b4d9001";
 static const char* EJECT_BLE_RX_UUID = "5f8bb7f1-9f17-4aa8-9c42-3d8b8b4d9001";
@@ -412,7 +416,8 @@ static bool ejectBleTryConnect(bool force = false)
   scanner->setInterval(160);
   scanner->setWindow(160);
 
-  NimBLEScanResults results = scanner->getResults(600, false);
+  const uint32_t scanMs = force ? EJECT_FG_SCAN_MS : EJECT_BG_SCAN_MS;
+  NimBLEScanResults results = scanner->getResults(scanMs, false);
   NimBLEAddress targetAddress;
   bool found = false;
   NimBLEUUID serviceUuid(EJECT_BLE_SERVICE_UUID);
@@ -442,10 +447,11 @@ static bool ejectBleTryConnect(bool force = false)
       return false;
     }
     e_ble_client->setConnectionParams(12, 12, 0, 150);
-    e_ble_client->setConnectTimeout(5000);
   } else if (e_ble_client->isConnected()) {
     e_ble_client->disconnect();
   }
+
+  e_ble_client->setConnectTimeout(force ? EJECT_FG_CONNECT_TIMEOUT_MS : EJECT_BG_CONNECT_TIMEOUT_MS);
 
   if (!e_ble_client->connect(targetAddress)) {
     ejectBleResetClient();
@@ -599,6 +605,11 @@ bool EjectEnsureTxPeer()
 bool EjectTryConnectNow()
 {
   return ejectBleTryConnect(true);
+}
+
+bool EjectTryConnectBackground()
+{
+  return ejectBleTryConnect(false);
 }
 
 void EjectSetAddonEnabled(bool enabled)
