@@ -43,6 +43,7 @@ bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
                                      bool heartbeat);
 
 bool EjectSendCommand(int command, float value);
+bool EjectTryConnectNow();
 void EjectToggle();        // Toggle on/off (uses internal state)
 bool EjectIsPaired();
 void EjectSetAddonEnabled(bool enabled);

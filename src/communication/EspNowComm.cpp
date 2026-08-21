@@ -144,6 +144,9 @@ static bool isOssmMessage(const uint8_t *mac) {
 
 void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len)
 {
+  Serial.printf("ESP-NOW RX: from=%02X:%02X:%02X:%02X:%02X:%02X len=%d\n",
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], len);
+  LogDebugFormatted("Data received from MAC: %02X:%02X:%02X:%02X:%02X:%02X, Length: %d\n", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5], len);
   if (len < ESP_NOW_MSG_LEGACY_SIZE) {
     LogDebugFormatted("ESP-NOW: Reject short packet len=%d (min=%d)\n", len, ESP_NOW_MSG_LEGACY_SIZE);
     return;
@@ -154,13 +157,18 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len)
   memset(&incomingcontrol, 0, sizeof(incomingcontrol));
   const int copyLen = (len < ESP_NOW_MSG_FULL_SIZE) ? len : ESP_NOW_MSG_FULL_SIZE;
   memcpy(&incomingcontrol, incomingData, copyLen);
-  if (len < ESP_NOW_MSG_FULL_SIZE) {
-    incomingcontrol.esp_sender = 0;
-  }
+ 
+  LogDebugFormatted("Target: %d, Sender: %d, Command: %d, Value: %.2f, Heartbeat: %d\n",
+                    incomingcontrol.esp_target,
+                    incomingcontrol.esp_sender,
+                    incomingcontrol.esp_command,
+                    incomingcontrol.esp_value,
+                    incomingcontrol.esp_heartbeat ? 1 : 0);
 
-  LogDebug("Received ESP-NOW data");
+  LogDebugFormatted("Received ESP-NOW data from sender ID: %d, target ID: %d\n", incomingcontrol.esp_sender, incomingcontrol.esp_target);
 
   if(incomingcontrol.esp_sender == EJECT_ID) {
+    LogDebug("Received Eject ESP-NOW frame");
     if (EjectHandleIncomingEspNowFrame(mac,
                                      incomingcontrol.esp_target,
                                      incomingcontrol.esp_sender,
@@ -170,6 +178,7 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len)
       return;
     }
   } else if(incomingcontrol.esp_sender == FIST_ID) {
+    LogDebug("Received Fist-IT ESP-NOW frame");
     if (FistITHandleIncomingEspNowFrame(mac,
                                       incomingcontrol.esp_target,
                                       incomingcontrol.esp_sender,
@@ -180,6 +189,12 @@ void OnDataRecv(const uint8_t * mac, const uint8_t *incomingData, int len)
     }
   }
 
+    LogDebug("ESP-NOW: Not from Fist-IT or Eject, checking for OSSM pairing/limits");
+
+  if (len < ESP_NOW_MSG_FULL_SIZE) {
+    incomingcontrol.esp_sender = 0;
+  }
+  //OSSM messages are sent with sender blank (sender=0, so handle sender=0 messages as OSSM messages)
   if (incomingcontrol.esp_target == M5_ID && Ossm_paired == false && isOssmMessage(mac)) {
     // Guard against false pairing: legacy addon firmware can omit esp_sender,
     // which makes sender appear as 0 (same as legacy OSSM). For sender==0,
@@ -360,13 +375,14 @@ void espNowKickPairing()
   outgoingcontrol.esp_target = OSSM_ID;
   outgoingcontrol.esp_sender = M5_ID;  // Identify M5 as sender
   esp_now_send(OSSM_Address, (uint8_t*)&outgoingcontrol, sizeof(outgoingcontrol));
+  esp_now_send(BROADCAST_ADDR, (uint8_t*)&outgoingcontrol, sizeof(outgoingcontrol));
 }
 
 void EspNowWaitForPairingOrTimeout(uint32_t timeoutMs, uint32_t heartbeatIntervalMs)
 {
   uint32_t waitStartMs = millis();
   uint32_t lastHeartbeatMs = 0;
-
+  Serial.printf("Waiting for ESP-NOW pairing (timeout=%d ms, heartbeat interval=%d ms)\n", timeoutMs, heartbeatIntervalMs);
   while (!Ossm_paired && (millis() - waitStartMs) < timeoutMs) {
     if ((millis() - lastHeartbeatMs) >= heartbeatIntervalMs) {
       espNowKickPairing();
@@ -493,7 +509,7 @@ void espNowInit() {
   WiFi.mode(WIFI_STA);
   esp_wifi_set_channel(ESP_NOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
   LogDebugFormatted("ESP-NOW channel set to %d\n", ESP_NOW_CHANNEL);
-
+  LogDebugFormatted("M5 MAC Address: %s\n", WiFi.macAddress().c_str());
   if (esp_now_init() != ESP_OK) {
     Serial.println("Error initializing ESP-NOW");
   } else {

@@ -54,6 +54,19 @@ static bool isAddonTarget(int target) {
   return target == CUM || target == CUM_ID || target == FIST_ID;
 }
 
+static void tryConnectBleAddonsFromStart()
+{
+  // Explicitly allow addon connect attempts only from Start->Connect flow.
+  EjectSetAddonEnabled(true);
+  if (EjectTryConnectNow()) {
+    LogDebug("Eject addon connected over BLE from Start flow");
+  }
+  FistITSetAddonEnabled(true);
+  if (FistITTryConnectNow()) {
+    LogDebug("Fist-IT addon connected over BLE from Start flow");
+  }
+}
+
 }  // namespace
 
 // -------------------------------------------------------
@@ -92,6 +105,7 @@ void connectbutton(lv_event_t* e) {
   (void)e;
   //LogDebug("Connect button clicked");
   if (commGetMode() == COMM_MODE_ESPNOW || commGetMode() == COMM_MODE_BLE) {
+    tryConnectBleAddonsFromStart();
     return;
   }
   delay(2000);
@@ -109,6 +123,7 @@ void connectbutton(lv_event_t* e) {
     if (ui_Welcome) lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
     lv_refr_now(NULL);
     lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+    tryConnectBleAddonsFromStart();
     LogDebug("Connected via ESP-NOW");
     return;
   }
@@ -131,22 +146,25 @@ void connectbutton(lv_event_t* e) {
     lv_refr_now(NULL);
     LogDebug("Loading Menu screen...");
     lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
+    tryConnectBleAddonsFromStart();
     LogDebug("Connected via BLE");
 
     return;
   }
    else {
+    tryConnectBleAddonsFromStart();
     lv_obj_clear_flag(ui_StartButtonM, LV_OBJ_FLAG_HIDDEN); // Show the middle button
     lv_obj_clear_flag(ui_StartButtonR, LV_OBJ_FLAG_HIDDEN); // Show the right button
     // First failure: prompt the user to try once more before the sweep.
 //    if (ui_connect) lv_label_set_text(ui_connect, T_FAILED);
+    lv_obj_set_align(ui_Welcome, LV_ALIGN_CENTER);
     if (ui_Welcome) lv_label_set_text(ui_Welcome, T_FAILED);
     lv_refr_now(NULL);
   }
 }
 
 bool SendCommand(int Command, float Value, int Target) {
-  // Addon traffic always uses ESP-NOW so BLE OSSM control can coexist with addon modules.
+  // Addon traffic uses each addon's own transport layer.
   if (Target == CUM || Target == CUM_ID) {
     return EjectSendCommand(Command, Value);
   }

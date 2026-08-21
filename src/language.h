@@ -12,7 +12,7 @@
 //#define T_CONNECTED         "Connected"
 //#define T_DISCONNECTED      "Disconnected" 
 //#define T_LONG_WAIT         "This takes longer than expected..."
-#define T_FAILED            "Connection / homing failed\nTry again"
+#define T_FAILED            "Connection failed.. Wait for homeing\nto complete and retry"
 #define T_HOMING            "Homing..."
 #define T_BLECONNECTED      "Connected via Bluetooth"
 #define T_ESPCONNECTED      "Connected via Wifi (ESP-NOW)"

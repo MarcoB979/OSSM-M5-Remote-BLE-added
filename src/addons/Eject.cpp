@@ -1,8 +1,7 @@
 #include "Eject.h"
 
 #include <Arduino.h>
-#include <esp_now.h>
-#include <esp_wifi.h>
+#include <NimBLEDevice.h>
 #include <cstring>
 
 #include "main.h"
@@ -12,13 +11,12 @@
 #include "ui/ui_helpers.h"
 #include "display/colors.h"
 #include "display/styles.h"
-#include "communication/esp_nowCommunication.h"
 #include "buttonhandlers/ButtonHandlers.h"
 #include "screens/ScreenHandler.h"
 #include "config/debug.h"
-#include "addons/addonsStreaming.h"
 #include "language.h"
 #include "communication/EjectComm.h"
+#include "config/config_ids.h"
 
 // Single-definition of EJECT_ID (C linkage so C code can reference it)
 extern "C" const int EJECT_ID = 2;
@@ -88,52 +86,69 @@ static unsigned long e_ramp_ms = 0;
 static bool e_is_paired = false;
 static bool e_is_on = false;
 static bool e_addon_enabled = false;
-static uint8_t e_eject_addr[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-static constexpr uint8_t BROADCAST_ADDR[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-static constexpr int LEGACY_EJECT_ID = 2;
-static constexpr int LEGACY_M5_ID = M5_ID;
-static uint32_t e_last_pairing_heartbeat_ms = 0;
+static bool e_ble_init = false;
+static NimBLEClient* e_ble_client = nullptr;
+static NimBLERemoteCharacteristic* e_ble_rx = nullptr;
+static NimBLERemoteCharacteristic* e_ble_tx = nullptr;
+static const char* EJECT_BLE_DEVICE_NAME = "Eject";
+static const char* EJECT_BLE_SERVICE_UUID = "5f8bb7f0-9f17-4aa8-9c42-3d8b8b4d9001";
+static const char* EJECT_BLE_RX_UUID = "5f8bb7f1-9f17-4aa8-9c42-3d8b8b4d9001";
+static const char* EJECT_BLE_TX_UUID = "5f8bb7f2-9f17-4aa8-9c42-3d8b8b4d9001";
 static int e_peer_id = EJECT_ID;
 static int e_local_id = M5_ID;
 static bool e_flush_buttons_once = false;
 
-static void lockEspNowChannelIfConfigured(const char *reason)
+static void ejectBleResetClient()
 {
-  if (ESP_NOW_CHANNEL <= 0) {
-    return;
+  const bool wasPaired = e_is_paired;
+  e_ble_rx = nullptr;
+  e_ble_tx = nullptr;
+  e_is_paired = false;
+  if (wasPaired) {
+    screenRequestStatusStripRefresh();
   }
 
-  uint8_t current = 0;
-  wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
-  if (esp_wifi_get_channel(&current, &second) != ESP_OK) {
+  if (!e_ble_client) {
     return;
   }
-  if ((int)current == ESP_NOW_CHANNEL) {
-    return;
+  if (e_ble_client->isConnected()) {
+    e_ble_client->disconnect();
   }
-
-  esp_wifi_set_promiscuous(true);
-  esp_err_t setResult = esp_wifi_set_channel(ESP_NOW_CHANNEL, WIFI_SECOND_CHAN_NONE);
-  esp_wifi_set_promiscuous(false);
+  NimBLEDevice::deleteClient(e_ble_client);
+  e_ble_client = nullptr;
 }
 
-static bool ensurePeer(const uint8_t *addr)
+static void ejectBleNotifyCb(NimBLERemoteCharacteristic* ch, uint8_t* data, size_t len, bool isNotify)
 {
-  const bool isBroadcast = (addr[0] == 0xFF && addr[1] == 0xFF && addr[2] == 0xFF &&
-                            addr[3] == 0xFF && addr[4] == 0xFF && addr[5] == 0xFF);
-  if (isBroadcast) {
-    return true;
+  (void)ch;
+  (void)isNotify;
+
+  if (len != sizeof(EjectMessage)) {
+    LogDebugFormatted("Eject BLE RX invalid size=%d expected=%d\n", (int)len, (int)sizeof(EjectMessage));
+    return;
   }
 
-  if (esp_now_is_peer_exist(addr)) {
-    return true;
+  EjectMessage msg = {};
+  memcpy(&msg, data, sizeof(msg));
+  (void)EjectHandleIncomingEspNowFrame(nullptr,
+                                       msg.esp_target,
+                                       msg.esp_sender,
+                                       msg.esp_command,
+                                       msg.esp_value,
+                                       msg.esp_heartbeat);
+}
+
+static void ejectBleInitOnce()
+{
+  if (e_ble_init) {
+    return;
   }
 
-  esp_now_peer_info_t peerInfo = {};
-  memcpy(peerInfo.peer_addr, addr, 6);
-  peerInfo.channel = ESP_NOW_CHANNEL;
-  peerInfo.encrypt = false;
-  return (esp_now_add_peer(&peerInfo) == ESP_OK);
+  if (!NimBLEDevice::isInitialized()) {
+    NimBLEDevice::init("M5-Eject-Addon");
+  }
+  NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+  e_ble_init = true;
 }
 
 static void clearButtonFlags()
@@ -368,52 +383,90 @@ static int getRampedDetentDelta(int encoderId, int detents)
   return delta;
 }
 
-static void sendPairingHeartbeatIfNeeded()
+static bool ejectBleTryConnect()
 {
   if (!e_addon_enabled) {
-    return;
+    return false;
   }
 
-  if (e_is_paired) {
-    return;
-  }
-
-  const uint32_t nowMs = millis();
-  if ((nowMs - e_last_pairing_heartbeat_ms) < 1000UL) {
-    return;
-  }
-  e_last_pairing_heartbeat_ms = nowMs;
-
-  if (!ensurePeer(BROADCAST_ADDR)) {
-    return;
-  }
-
-  EjectMessage msg = {};
-  msg.esp_command = HEARTBEAT;
-  msg.esp_heartbeat = true;
-  msg.esp_target = EJECT_ID;
-  msg.esp_sender = M5_ID;
-  lockEspNowChannelIfConfigured("pair-heartbeat");
-  Serial.printf("ESP-NOW TX: to=%02X:%02X:%02X:%02X:%02X:%02X target=%d cmd=%d sender=%d hb=%d len=%u\n",
-                BROADCAST_ADDR[0], BROADCAST_ADDR[1], BROADCAST_ADDR[2], BROADCAST_ADDR[3], BROADCAST_ADDR[4], BROADCAST_ADDR[5],
-                msg.esp_target, msg.esp_command, msg.esp_sender, msg.esp_heartbeat ? 1 : 0, (unsigned)sizeof(msg));
-  esp_now_send(BROADCAST_ADDR, reinterpret_cast<uint8_t *>(&msg), sizeof(msg));
-}
-
-static void setPairedAddress(const uint8_t *mac)
-{
-  if (memcmp(e_eject_addr, mac, 6) == 0 && e_is_paired) {
-    return;
-  }
-
-  if (esp_now_is_peer_exist(e_eject_addr)) {
-    esp_now_del_peer(e_eject_addr);
-  }
-
-  memcpy(e_eject_addr, mac, 6);
-  if (ensurePeer(e_eject_addr)) {
+  if (e_ble_client && e_ble_client->isConnected() && e_ble_rx != nullptr) {
     e_is_paired = true;
+    return true;
   }
+
+  ejectBleInitOnce();
+
+  NimBLEScan* scanner = NimBLEDevice::getScan();
+  if (!scanner) {
+    return false;
+  }
+
+  scanner->stop();
+  scanner->clearResults();
+  scanner->setActiveScan(true);
+  scanner->setInterval(160);
+  scanner->setWindow(160);
+
+  NimBLEScanResults results = scanner->getResults(2000, false);
+  NimBLEAddress targetAddress;
+  bool found = false;
+  NimBLEUUID serviceUuid(EJECT_BLE_SERVICE_UUID);
+
+  for (int i = 0; i < results.getCount(); ++i) {
+    const NimBLEAdvertisedDevice* device = results.getDevice(i);
+    if (!device) {
+      continue;
+    }
+    const bool nameMatch = device->haveName() && (device->getName() == EJECT_BLE_DEVICE_NAME);
+    const bool serviceMatch = device->haveServiceUUID() && device->isAdvertisingService(serviceUuid);
+    if (nameMatch || serviceMatch) {
+      targetAddress = device->getAddress();
+      found = true;
+      break;
+    }
+  }
+  scanner->clearResults();
+
+  if (!found) {
+    return false;
+  }
+
+  if (!e_ble_client) {
+    e_ble_client = NimBLEDevice::createClient();
+    if (!e_ble_client) {
+      return false;
+    }
+    e_ble_client->setConnectionParams(12, 12, 0, 150);
+    e_ble_client->setConnectTimeout(5000);
+  } else if (e_ble_client->isConnected()) {
+    e_ble_client->disconnect();
+  }
+
+  if (!e_ble_client->connect(targetAddress)) {
+    ejectBleResetClient();
+    return false;
+  }
+
+  NimBLERemoteService* service = e_ble_client->getService(EJECT_BLE_SERVICE_UUID);
+  if (!service) {
+    ejectBleResetClient();
+    return false;
+  }
+
+  e_ble_rx = service->getCharacteristic(EJECT_BLE_RX_UUID);
+  e_ble_tx = service->getCharacteristic(EJECT_BLE_TX_UUID);
+  if (!e_ble_rx) {
+    ejectBleResetClient();
+    return false;
+  }
+
+  if (e_ble_tx && e_ble_tx->canNotify()) {
+    e_ble_tx->subscribe(true, ejectBleNotifyCb);
+  }
+
+  e_is_paired = true;
+  screenRequestStatusStripRefresh();
+  return true;
 }
 
 static bool applySliderFromEncoder(ESP32Encoder &encoder,
@@ -523,18 +576,22 @@ void EjectToggle()
 
 bool EjectIsPaired()
 {
-  return e_addon_enabled && e_is_paired;
+  return e_addon_enabled && e_is_paired && e_ble_client && e_ble_client->isConnected() && e_ble_rx != nullptr;
 }
 
 const uint8_t* EjectGetTxAddress()
 {
-  if (!e_addon_enabled) return BROADCAST_ADDR;
-  return e_is_paired ? e_eject_addr : BROADCAST_ADDR;
+  return nullptr;
 }
 
 bool EjectEnsureTxPeer()
 {
-  return ensurePeer(EjectGetTxAddress());
+  return e_ble_client && e_ble_client->isConnected() && e_ble_rx != nullptr;
+}
+
+bool EjectTryConnectNow()
+{
+  return ejectBleTryConnect();
 }
 
 void EjectSetAddonEnabled(bool enabled)
@@ -542,16 +599,9 @@ void EjectSetAddonEnabled(bool enabled)
   e_addon_enabled = enabled;
 
   if (!enabled) {
-    if (esp_now_is_peer_exist(e_eject_addr)) {
-      esp_now_del_peer(e_eject_addr);
-    }
-    e_is_paired = false;
+    ejectBleResetClient();
     e_is_on = false;
-    memset(e_eject_addr, 0xFF, sizeof(e_eject_addr));
   }
-
-  // Allow immediate heartbeat retry when enabled.
-  e_last_pairing_heartbeat_ms = 0;
 }
 
 bool EjectSendCommand(int command, float value)
@@ -560,12 +610,7 @@ bool EjectSendCommand(int command, float value)
     return false;
   }
 
-  if (!e_is_paired) {
-    sendPairingHeartbeatIfNeeded();
-    return false;
-  }
-
-  if (!ensurePeer(e_eject_addr)) {
+  if (!e_ble_client || !e_ble_client->isConnected() || e_ble_rx == nullptr) {
     return false;
   }
 
@@ -580,12 +625,21 @@ bool EjectSendCommand(int command, float value)
   msg.esp_target = e_peer_id;
   msg.esp_sender = e_local_id;
 
-  Serial.printf("ESP-NOW TX: to=%02X:%02X:%02X:%02X:%02X:%02X target=%d cmd=%d sender=%d hb=%d len=%u\n",
-                e_eject_addr[0], e_eject_addr[1], e_eject_addr[2], e_eject_addr[3], e_eject_addr[4], e_eject_addr[5],
-                msg.esp_target, msg.esp_command, msg.esp_sender, msg.esp_heartbeat ? 1 : 0, (unsigned)sizeof(msg));
-  esp_err_t result = esp_now_send(e_eject_addr, reinterpret_cast<uint8_t *>(&msg), sizeof(msg));
-  Serial.printf("ESP-NOW TX result=%d\n", (int)result);
-  return (result == ESP_OK);
+  bool writeOk = false;
+  if (e_ble_rx->canWrite()) {
+    writeOk = e_ble_rx->writeValue(reinterpret_cast<uint8_t *>(&msg), sizeof(msg), true);
+  } else if (e_ble_rx->canWriteNoResponse()) {
+    writeOk = e_ble_rx->writeValue(reinterpret_cast<uint8_t *>(&msg), sizeof(msg), false);
+  }
+
+  if (!writeOk) {
+    const bool wasPaired = e_is_paired;
+    e_is_paired = false;
+    if (wasPaired) {
+      screenRequestStatusStripRefresh();
+    }
+  }
+  return writeOk;
 }
 
 bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
@@ -603,11 +657,12 @@ bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
   }
 
   e_peer_id = sender;
-
-  // Only set paired address for this addon when the sender/target indicates
-  // the frame is intended for Eject (avoid stealing paired address from other addons)
   if (sender == EJECT_ID || target == EJECT_ID) {
-    setPairedAddress(mac);
+    (void)mac;
+    if (!e_is_paired) {
+      e_is_paired = true;
+      screenRequestStatusStripRefresh();
+    }
   }
 
   if (command == OFF) {
@@ -623,7 +678,6 @@ bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
 void EjectHandleScreen(const ButtonEvents &events)
 {
   EjectUiScreenCreate();
-  sendPairingHeartbeatIfNeeded();
 
   if (e_flush_buttons_once) {
     clearButtonFlags();

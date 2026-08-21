@@ -2149,7 +2149,7 @@ static void serviceHomeSpeedRamp()
 }
 
 void homebuttonmevent(lv_event_t * e) {
-    //LogDebug("HomeButton");
+    LogDebug("HomeButton");
         SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
     if (OSSM_On == false) {
         if (speed == 0 || stroke == 0 || depth == 0) return;
@@ -2163,14 +2163,14 @@ void homebuttonmevent(lv_event_t * e) {
             s_home_speed_ramp_active = (targetSpeed > HOME_START_RAMP_THRESHOLD);
             //SendCommand(SPEED, 1, OSSM_ID);
             SendCommand(ON, (float)startSpeed, OSSM_ID);
-            //OSSM_On = true;
+            OSSM_On = true;
             if (targetSpeed > HOME_START_RAMP_THRESHOLD) {
                 rampHomeStartSpeed(targetSpeed);
             }
         } else {
             SendCommand(SPEED, (float)targetSpeed, OSSM_ID);
             SendCommand(ON, (float)targetSpeed, OSSM_ID);
-            //OSSM_On = true;
+            OSSM_On = true;
         }
     } else {
         const int resumeSpeed = (int)(speed + 0.5f);
@@ -2193,6 +2193,7 @@ void homebuttonmevent(lv_event_t * e) {
             SendCommand(SPEED, (float)resumeSpeed, OSSM_ID);
         }
         SendCommand(OFF, 0.0, OSSM_ID);
+        OSSM_On = false;
         bleCommSetUnpauseSpeed(resumeSpeed);
     }
     // Stroke screen watches OSSM_On itself and will refresh its Start/Stop UI.
@@ -2489,11 +2490,18 @@ void SetInitialValues() {
         if (stroke <= 0.0f) {
             stroke = 0.0f;
             SendCommand(STROKE, stroke, OSSM_ID);
-        }    
-        if (depth <= 0.0f) {
-            depth = 50.0f;
-            SendCommand(DEPTH, depth, OSSM_ID);
         }
+        if(st_screens == ST_UI_STROKE) {
+            if (depth <= 0.0f) {
+                depth = 50.0f;
+                SendCommand(DEPTH, depth, OSSM_ID);
+            }
+        } else {
+            if (depth <= 0.0f) {
+                depth = 0.0f;
+                SendCommand(DEPTH, depth, OSSM_ID);
+            }
+        }    
 }
 
 void handleScreens() {
@@ -2579,7 +2587,13 @@ void handleScreens() {
 //            touch_disabled = true;
 //        }
         touch_disabled = false;
-        SetInitialValues();
+        if (lv_scr_act() == ui_Start && espNowIsPaired()) {
+            if (ui_Welcome) lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
+            _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+            screenmachine(nullptr);
+            break;
+        }
+        //SetInitialValues();
         if (click2_short_waspressed) {
             lv_obj_send_event(ui_StartButtonL, LV_EVENT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {

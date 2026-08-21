@@ -12,6 +12,7 @@
 #include "addons/AP-mode.h"
 #include "communication/EspNowComm.h"
 #include "communication/BleComm.h"
+#include "communication/CommManager.h"
 #include "../screens/ScreenHandler.h"
 #include "platform/PlatformCompat.h"
 #include <Preferences.h>
@@ -79,6 +80,8 @@ static AddonDef s_addon_defs[] = {
 static constexpr int NUM_ADDONS = (int)(sizeof(s_addon_defs) / sizeof(s_addon_defs[0]));
 static const int EJECT_ADDON_INDEX = 0;
 static const int FISTIT_ADDON_INDEX = 1;
+static const int APMODE_ADDON_INDEX = 2;
+static const int STREAMING_ADDON_INDEX = 3;
 
 static bool s_addons_manage_mode = false;  // true = visibility-management mode
 static int  s_addons_offset      = 0;      // index of first visible item in carousel
@@ -188,9 +191,11 @@ static void saveAddonEnabled(int addonIdx) {
 }
 
 static void buildEnabledList() {
+    const bool espNowMode = commIsEspNowMode();
     s_enabled_count = 0;
     for (int i = 0; i < NUM_ADDONS; i++) {
-        if (s_addon_defs[i].enabled) s_enabled_indices[s_enabled_count++] = i;
+        const bool blockedByTransport = espNowMode && (i == APMODE_ADDON_INDEX || i == STREAMING_ADDON_INDEX);
+        if (s_addon_defs[i].enabled && !blockedByTransport) s_enabled_indices[s_enabled_count++] = i;
     }
 }
 

@@ -193,7 +193,7 @@ void refreshStrokeStartStopUi() {
         Serial.println("refreshStrokeStartStopUi: s_ButtonM or s_ButtonMText is null");
         return;
     }
-    if (OSSM_On == false) {
+    if (OSSM_On) {
         applyStrokeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
     } else {
         applyStrokeButtonMState(T_RESUME, &style_button_stopped, &style_button_stopped_pressed);

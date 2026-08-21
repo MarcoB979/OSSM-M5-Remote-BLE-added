@@ -44,6 +44,7 @@ bool FistITHandleIncomingEspNowFrame(const uint8_t *mac,
 bool FistITSendCommand(int command, float value);
 void FistITToggle();        // Toggle on/off (uses internal state)
 bool FistITIsPaired();
+bool FistITTryConnectNow();
 void FistITSetAddonEnabled(bool enabled);
 const uint8_t* FistITGetTxAddress();
 bool FistITEnsureTxPeer();
