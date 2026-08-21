@@ -81,14 +81,16 @@ void buttonInit() {
     // - Shorter click window makes double-click recognition feel snappier.
     // - Keep long-press threshold unchanged.
     // - Slightly lower debounce keeps fast clicks reliable without phantom presses.
-    Button2.setDebounceMs(20); //left
-    Button3.setDebounceMs(20); //right
-    Button2.setClickMs(150);
-    Button3.setClickMs(150);
+    Button2.setDebounceMs(30); //left
+    Button3.setDebounceMs(30); //right
+    Button2.setClickMs(250);
+    // Give the right button a wider double-click window so addon toggle
+    // remains reliable after quick screen transitions.
+    Button3.setClickMs(380);
     Button2.setPressMs(500);  //pullout attached so keep long press shorter
     Button3.setPressMs(500);
-    Button1.setDebounceMs(20);  //mx middle
-    Button1.setClickMs(50);  //candidate for speed improvement: 100ms click window for encoder push-button makes double-click recognition feel snappier.
+    Button1.setDebounceMs(30);  //mx middle
+    Button1.setClickMs(120);  //reduce accidental short-click reports from encoder-button noise
     Button1.setPressMs(500);  //Emergency stop attached so keep long press shorter
 
     Button1.attachPress(mxpress);
@@ -107,6 +109,7 @@ void buttonInit() {
 // ---------------------------------------------------------------------------
 void mxpress() {
     mxpress_waspressed = true;
+    mxclick_short_waspressed = false;
     screensaver_check_activity();
 }
 
@@ -118,6 +121,7 @@ void mxclick() {
 
 void mxlong() {
     mxclick_long_waspressed = true;
+    mxclick_short_waspressed = false;
     vibrate(200, 200);
     screensaver_check_activity();
 }
@@ -130,12 +134,14 @@ void click2() {
 
 void click2long() {
     click2_long_waspressed = true;
+    click2_short_waspressed = false;
     vibrate(200, 200);
     screensaver_check_activity();
 }
 
 void c2double() {
     click2_double_waspressed = true;
+    click2_short_waspressed = false;
     vibrate(200, 200);
     screensaver_check_activity();
 }
@@ -148,12 +154,14 @@ void click3() {
 
 void c3long() {
     click3_long_waspressed = true;
+    click3_short_waspressed = false;
     vibrate(200, 200);
     screensaver_check_activity();
 }
 
 void c3double() {
     click3_double_waspressed = true;
+    click3_short_waspressed = false;
     vibrate(200, 200);
     screensaver_check_activity();
 }

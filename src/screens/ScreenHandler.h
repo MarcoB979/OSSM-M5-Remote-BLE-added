@@ -40,7 +40,6 @@ extern bool  touch_home;
 extern bool  strokeinvert_mode;
 extern bool  ble_force_homeing;
 extern bool  touch_disabled;
-extern bool  EJECT_On;
 extern bool  rstate;
 
 // ---- Lifecycle ----

@@ -13,8 +13,8 @@
 #include "display/styles.h"
 #include "buttonhandlers/ButtonHandlers.h"
 #include "screens/ScreenHandler.h"
+#include "communication/CommManager.h"
 #include "config/debug.h"
-#include "communication/FistComm.h"
 #include "config/config_ids.h"
 
 #ifdef FIST_ID
@@ -22,6 +22,8 @@
 #endif
 // Single-definition of FIST_ID (C linkage so C code can reference it)
 extern "C" const int FIST_ID = 3;
+
+static bool handleIncomingState(int target, int sender, int command);
 
 lv_obj_t *ui_FistIT = nullptr;
 
@@ -91,6 +93,8 @@ static bool s_ble_init = false;
 static NimBLEClient* s_ble_client = nullptr;
 static NimBLERemoteCharacteristic* s_ble_rx = nullptr;
 static NimBLERemoteCharacteristic* s_ble_tx = nullptr;
+static uint32_t s_last_connect_attempt_ms = 0;
+static constexpr uint32_t FIST_CONNECT_RETRY_MS = 3000;
 static const char* FIST_BLE_DEVICE_NAME = "Fist-IT";
 static const char* FIST_BLE_SERVICE_UUID = "5f8bb6f0-9f17-4aa8-9c42-3d8b8b4d9001";
 static const char* FIST_BLE_RX_UUID = "5f8bb6f1-9f17-4aa8-9c42-3d8b8b4d9001";
@@ -145,12 +149,7 @@ static void fistBleNotifyCb(NimBLERemoteCharacteristic* ch, uint8_t* data, size_
 
   FistMessage msg = {};
   memcpy(&msg, data, sizeof(msg));
-  (void)FistITHandleIncomingEspNowFrame(nullptr,
-                                        msg.esp_target,
-                                        msg.esp_sender,
-                                        msg.esp_command,
-                                        msg.esp_value,
-                                        msg.esp_heartbeat);
+  (void)handleIncomingState(msg.esp_target, msg.esp_sender, msg.esp_command);
 }
 
 static void fistBleInitOnce()
@@ -166,11 +165,17 @@ static void fistBleInitOnce()
   s_ble_init = true;
 }
 
-static bool fistBleTryConnect()
+static bool fistBleTryConnect(bool force = false)
 {
   if (!s_addon_enabled) {
     return false;
   }
+
+  const uint32_t nowMs = millis();
+  if (!force && s_last_connect_attempt_ms != 0 && (nowMs - s_last_connect_attempt_ms) < FIST_CONNECT_RETRY_MS) {
+    return false;
+  }
+  s_last_connect_attempt_ms = nowMs;
 
   if (s_ble_client && s_ble_client->isConnected() && s_ble_rx != nullptr) {
     s_is_paired = true;
@@ -190,7 +195,7 @@ static bool fistBleTryConnect()
   scanner->setInterval(160);
   scanner->setWindow(160);
 
-  NimBLEScanResults results = scanner->getResults(2000, false);
+  NimBLEScanResults results = scanner->getResults(600, false);
   NimBLEAddress targetAddress;
   bool found = false;
   NimBLEUUID serviceUuid(FIST_BLE_SERVICE_UUID);
@@ -530,11 +535,13 @@ static bool applySliderFromEncoder(ESP32Encoder &encoder,
 static void toggleOnOff()
 {
   if (s_is_on) {
-    FistITSendCommand(OFF, 0.0f);
-    s_is_on = false;
+    if (FistITSendCommand(OFF, 0.0f)) {
+      s_is_on = false;
+    }
   } else {
-    FistITSendCommand(ON, 0.0f);
-    s_is_on = true;
+    if (FistITSendCommand(ON, 0.0f)) {
+      s_is_on = true;
+    }
   }
   refreshValueLabels();
 }
@@ -591,7 +598,7 @@ bool FistITEnsureTxPeer()
 
 bool FistITTryConnectNow()
 {
-  return fistBleTryConnect();
+  return fistBleTryConnect(true);
 }
 
 void FistITSetAddonEnabled(bool enabled)
@@ -610,9 +617,8 @@ bool FistITSendCommand(int command, float value)
     return false;
   }
 
-  if (!s_is_paired) {
-    (void)fistBleTryConnect();
-    return false;
+  if (!s_is_paired || !s_ble_client || !s_ble_client->isConnected() || s_ble_rx == nullptr) {
+    (void)fistBleTryConnect(false);
   }
 
   if (!s_ble_client || !s_ble_client->isConnected() || s_ble_rx == nullptr) {
@@ -643,23 +649,14 @@ bool FistITSendCommand(int command, float value)
   return writeOk;
 }
 
-bool FistITHandleIncomingEspNowFrame(const uint8_t *mac,
-                                     int target,
-                                     int sender,
-                                     int command,
-                                     float value,
-                                     bool heartbeat)
+static bool handleIncomingState(int target, int sender, int command)
 {
-  (void)value;
-  (void)heartbeat;
-
   if (!s_addon_enabled) {
     return false;
   }
 
   s_peer_id = sender;
   if (sender == FIST_ID || target == FIST_ID) {
-    (void)mac;
     if (!s_is_paired) {
       s_is_paired = true;
       screenRequestStatusStripRefresh();
@@ -679,6 +676,10 @@ bool FistITHandleIncomingEspNowFrame(const uint8_t *mac,
 void FistITHandleScreen(const ButtonEvents &events)
 {
   createScreenIfNeeded();
+
+  if (!FistITIsPaired()) {
+    (void)fistBleTryConnect(false);
+  }
 
   if (s_flush_buttons_once) {
     clearButtonFlags();
@@ -716,39 +717,4 @@ extern "C" void FistITHandleScreen(const struct ButtonEvents *events)
   FistITHandleScreen(*events);
 }
 
-bool fistCommIsFrame(const struct_message& msg)
-{
-  const int announcedId = (int)(msg.esp_value + (msg.esp_value >= 0 ? 0.5f : -0.5f));
-  return (msg.esp_target == FIST_ID ||
-          msg.esp_command == FIST_SPEED ||
-          msg.esp_command == FIST_ROTATION ||
-          msg.esp_command == FIST_PAUSE ||
-          msg.esp_command == FIST_ACCEL ||
-          ((msg.esp_command == CONNECT || msg.esp_command == CONN || msg.esp_command == HEARTBEAT) &&
-           announcedId == FIST_ID));
-}
 
-void fistCommHandleFrame(const uint8_t* mac, const struct_message& msg)
-{
-  (void)FistITHandleIncomingEspNowFrame(mac,
-                                        msg.esp_target,
-                                        msg.esp_sender,
-                                        msg.esp_command,
-                                        msg.esp_value,
-                                        msg.esp_heartbeat);
-}
-
-bool fistCommIsConnected()
-{
-  return FistITIsPaired();
-}
-
-const uint8_t* fistCommGetTxAddress()
-{
-  return FistITGetTxAddress();
-}
-
-bool fistCommEnsureTxPeer()
-{
-  return FistITEnsureTxPeer();
-}

@@ -12,7 +12,7 @@
 #include "main.h"
 #include "config/config_ids.h"
 #include "display/styles.h"
-#include "communication/EspNowComm.h"
+#include "addonsStreaming.h"
 #include "communication/CommManager.h"
 #include "communication/BleComm.h"
 #include "screens/ScreenHandler.h"
@@ -306,8 +306,15 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
         SendCommand(SENSATION, sensation, OSSM_ID);
     }
 
-    if (click2_short_waspressed) {
-        _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+    if (click2_long_waspressed) {
+        if (addonsIsEjectEnabled() && ejectPaired()) {
+            g_addon_return_screen = lv_scr_act();
+            _ui_screen_change(ui_EJECTSettings, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        }
+    } else if (click2_double_waspressed) {
+        ejectcreampie(nullptr);
+    } else if (click2_short_waspressed) {
+        pullOut(nullptr);
     } else if (mxclick_short_waspressed) {
         homebuttonmevent(nullptr);
     } else if (click3_short_waspressed) {

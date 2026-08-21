@@ -5,7 +5,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-// ---- Command states sent over ESP-NOW ----
+// ---- Command states  ----
 #define CONN         0
 #define SPEED        1
 #define DEPTH        2

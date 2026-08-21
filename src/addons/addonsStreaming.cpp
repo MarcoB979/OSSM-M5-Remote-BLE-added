@@ -10,7 +10,6 @@
 #include "addons/Eject.h"
 #include "addons/FistIT.h"
 #include "addons/AP-mode.h"
-#include "communication/EspNowComm.h"
 #include "communication/BleComm.h"
 #include "communication/CommManager.h"
 #include "../screens/ScreenHandler.h"
@@ -63,8 +62,8 @@ extern lv_obj_t *g_addon_return_screen;
 
 
 //for new addons: add a line here with the code what screen to activate when the addon is selected in the menu, and a default enabled/disabled state. The screen activation code should be a function that prepares the screen (e.g. updates slider values from current addon state) and then calls _ui_screen_change() to switch to it.
-static void activateEject()     { g_addon_return_screen = lv_scr_act(); EjectPrepareScreen(); _ui_screen_change(EjectGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
-static void activateFistIT()    { g_addon_return_screen = lv_scr_act(); FistITPrepareScreen(); _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
+static void activateEject()     { g_addon_return_screen = lv_scr_act(); (void)EjectTryConnectNow(); EjectPrepareScreen(); _ui_screen_change(EjectGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
+static void activateFistIT()    { g_addon_return_screen = lv_scr_act(); (void)FistITTryConnectNow(); FistITPrepareScreen(); _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateStreaming() { _ui_screen_change(ui_Streaming,       LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateAPMode()    { g_addon_return_screen = lv_scr_act(); APModePrepareScreen(); _ui_screen_change(APModeGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 
@@ -191,11 +190,9 @@ static void saveAddonEnabled(int addonIdx) {
 }
 
 static void buildEnabledList() {
-    const bool espNowMode = commIsEspNowMode();
     s_enabled_count = 0;
     for (int i = 0; i < NUM_ADDONS; i++) {
-        const bool blockedByTransport = espNowMode && (i == APMODE_ADDON_INDEX || i == STREAMING_ADDON_INDEX);
-        if (s_addon_defs[i].enabled && !blockedByTransport) s_enabled_indices[s_enabled_count++] = i;
+        if (s_addon_defs[i].enabled) s_enabled_indices[s_enabled_count++] = i;
     }
 }
 
@@ -219,11 +216,11 @@ bool addonsIsEjectEnabled(void) {
 
 
 bool ejectPaired(void) {
-    return espNowIsEjectConnected();
+    return EjectIsPaired();
 }
 
 bool FistITPaired(void) {
-    return espNowIsFistConnected();
+    return FistITIsPaired();
 }
 
 // ── Manage-mode enter / exit ──────────────────────────────────────────────────
@@ -1031,7 +1028,7 @@ void ui_Streaming_screen_init(void) {
 
     s_streaming_btn_r_text = lv_label_create(ui_StreamingButtonR);
     lv_obj_center(s_streaming_btn_r_text);
-    lv_label_set_text(s_streaming_btn_r_text, T_ADDONS);
+    lv_label_set_text(s_streaming_btn_r_text, T_BACK);
 }
 
 void ui_Addons_screen_init(void) {

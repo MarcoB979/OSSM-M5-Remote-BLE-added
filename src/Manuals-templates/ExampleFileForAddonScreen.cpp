@@ -10,7 +10,6 @@
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
 #include "display/styles.h"
-#include "communication/esp_nowCommunication.h"
 #include "buttonhandlers/ButtonHandlers.h"
 #include "screens/ScreenHandler.h"
 #include "config/debug.h"

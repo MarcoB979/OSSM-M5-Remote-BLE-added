@@ -298,7 +298,7 @@ static void ui_event_HomeButtonL(lv_event_t * e)
     } else if(event == LV_EVENT_DOUBLE_CLICKED) {
         printf("HomeButtonL double clicked - Ejecting");
         ejectcreampie(e);
-    } else if(event == LV_EVENT_CLICKED){
+    } else if(event == LV_EVENT_SHORT_CLICKED){
         printf("HomeButtonL clicked - pulling out");
         pullOut(e);
         screenmachine(e);

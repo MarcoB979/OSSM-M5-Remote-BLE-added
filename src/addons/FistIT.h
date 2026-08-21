@@ -34,13 +34,6 @@ lv_obj_t *FistITGetScreen();
 void FistITHandleScreen(const struct ButtonEvents *events);
 #endif
 
-bool FistITHandleIncomingEspNowFrame(const uint8_t *mac,
-                                     int target,
-                                     int sender,
-                                     int command,
-                                     float value,
-                                     bool heartbeat);
-
 bool FistITSendCommand(int command, float value);
 void FistITToggle();        // Toggle on/off (uses internal state)
 bool FistITIsPaired();

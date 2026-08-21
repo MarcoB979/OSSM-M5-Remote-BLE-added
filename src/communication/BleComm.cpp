@@ -8,7 +8,7 @@
 #include <cstring>
 #include <queue>
 
-#include "EspNowComm.h"
+#include "CommManager.h"
 #include "../config/debug.h"
 #include "../main.h"
 #include "../screens/ScreenHandler.h"

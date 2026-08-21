@@ -15,7 +15,6 @@
 #include "../addons/FistIT.h"
 #include "../addons/AP-mode.h"
 #include "../addons/addonsStreaming.h"
-#include "../communication/EspNowComm.h"
 #include "../communication/CommManager.h"
 #include "../communication/BleComm.h"
 #include "../display/colors.h"
@@ -180,7 +179,6 @@ bool touch_disabled = true;  // TOUCH TEMPRARILY DISABLED BECAUSE OF PROBLEMS IN
 bool SafeStartStop   = false;
 bool onoff          = false;
 bool rstate         = false;
-bool EJECT_On       = false;
 
 // ---- Screensaver / Power management (ported from backup firmware) ----
 int            g_brightness_value       = 180;
@@ -478,9 +476,8 @@ static void updateStatusStrip() {
         snprintf(labelText, sizeof(labelText), " ");
     }
 
-    const bool ejectPaired = espNowIsEjectConnected();
-    const bool fistPaired = espNowIsFistConnected();
-    const bool espPaired = espNowIsPaired();
+    const bool ejectPaired = EjectIsPaired();
+    const bool fistPaired = FistITIsPaired();
     for (size_t i = 0; i < 12; ++i) {
         lv_obj_t* label = statusLabels[i];
         if (label == nullptr) continue;
@@ -496,12 +493,7 @@ static void updateStatusStrip() {
             lv_obj_set_align(statusESPIcons[i], LV_ALIGN_LEFT_MID);
             lv_obj_set_x(statusESPIcons[i], iconX);
             lv_obj_set_y(statusESPIcons[i], -102);
-                if (espPaired) {
-                lv_obj_clear_flag(statusESPIcons[i], LV_OBJ_FLAG_HIDDEN);
-                iconX += lv_obj_get_width(statusESPIcons[i]) + 2;
-            } else {
-                lv_obj_add_flag(statusESPIcons[i], LV_OBJ_FLAG_HIDDEN);
-            }
+            lv_obj_add_flag(statusESPIcons[i], LV_OBJ_FLAG_HIDDEN);
         }
 
         if (statusFistIcons[i] != nullptr) {
@@ -1779,7 +1771,7 @@ void screenmachine(lv_event_t * e) {
         // If this is the very first time Home is opened while connected,
         // send Pattern 2 (Simple Stroke) to OSSM and update UI labels.
         if (!s_initial_pattern_sent) {
-            if (bleCommIsConnected() || espNowIsPaired()) {
+            if (bleCommIsConnected()) {
                 s_initial_pattern_sent = true;
                 // Update roller/labels to reflect pattern 2 if UI objects exist
                 if (ui_PatternS) {
@@ -1831,7 +1823,7 @@ void screenmachine(lv_event_t * e) {
         st_screens = ST_UI_PATTERN;
 
         if (commIsBleMode()) {
-            if (readPatternsFromOSSM() && newPatternIsReadFromOSSM && patternString.length() > 0) {
+            if (newPatternIsReadFromOSSM && patternString.length() > 0) {
                 lv_roller_set_options(ui_PatternS, patternString.c_str(), LV_ROLLER_MODE_NORMAL);
                 uint16_t optionCount = (uint16_t)lv_roller_get_option_count(ui_PatternS);
                 if (optionCount > 0) {
@@ -1841,6 +1833,14 @@ void screenmachine(lv_event_t * e) {
                     lv_roller_set_selected(ui_PatternS, pattern, LV_ANIM_OFF);
                 }
                 newPatternIsReadFromOSSM = false;
+            } else {
+                uint16_t optionCount = (uint16_t)lv_roller_get_option_count(ui_PatternS);
+                if (optionCount > 0) {
+                    if (pattern < 0 || pattern >= (int)optionCount) {
+                        pattern = 0;
+                    }
+                    lv_roller_set_selected(ui_PatternS, pattern, LV_ANIM_OFF);
+                }
             }
         } else {
             // Keep ESP-NOW flow on default UI-defined patterns.
@@ -1992,7 +1992,6 @@ void pullOut(lv_event_t * e) {
 
 void emergencyStop(lv_event_t * e) {
     pullOut(e);
-    EJECT_On = false;
     
     // turn off fist-it and send that command to Fist-IT, regardless of whatever screen we are in
     SendCommand(OFF, 0.0, FIST_ID);
@@ -2001,33 +2000,11 @@ void emergencyStop(lv_event_t * e) {
 }
 
 void ejectcreampie(lv_event_t * e) {
-    if (EJECT_On == true) {
+    (void)e;
+    if (ui_HomeButtonL) {
         lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
-        SendCommand(ON, 0.0, EJECT_ID);    
-        EJECT_On = false;
-    } else {
-        lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
-//        depth  = 0;
-//        speed  = 0;
-//        stroke = 0;
-//        SendCommand(SETUP_D_I, 0.0, OSSM_ID);
-//        SendCommand(DEPTH, depth, OSSM_ID);
-//        screenmachine(e);
-        SendCommand(ON, 0.0, EJECT_ID);    
-        EJECT_On = true;
     }
-}
-
-void toggleFistIT(lv_event_t * e) {
-    if (EJECT_On == true) {
-        lv_obj_clear_state(ui_HomeButtonR, LV_STATE_CHECKED);
-        SendCommand(ON, 0.0, EJECT_ID);    
-        EJECT_On = false;
-    } else {
-        lv_obj_clear_state(ui_HomeButtonR, LV_STATE_CHECKED);
-        SendCommand(ON, 0.0, EJECT_ID);    
-        EJECT_On = true;
-    }
+    EjectToggle();
 }
 
 void savepattern(lv_event_t * e) {
@@ -2411,9 +2388,6 @@ static void flushMotionCommands(float motionSpeed,
 // -------------------------------------------------------
 static void checkBleDisconnectError()
 {
-    // ESP-NOW connections don't use BLE — this check is BLE-specific.
-    if (commIsEspNowMode()) return;
-
     static bool          s_was_connected      = false;
     static unsigned long s_disconnect_ms      = 0;
     static bool          s_notification_shown = false;
@@ -2539,21 +2513,25 @@ void handleScreens() {
 
     {
         static bool s_prev_ble_connected = false;
-        static bool s_prev_espnow_paired = false;
         static bool s_prev_eject_paired = false;
         static bool s_prev_fist_paired = false;
         static bool s_prev_homing = false;
         static int  s_prev_homing_dir = 0;
+        static uint32_t s_last_status_refresh_ms = 0;
 
         const bool bleConnected = bleCommIsConnected();
-        const bool espNowPaired = espNowIsPaired();
-        const bool ejectPaired = espNowIsEjectConnected();
-        const bool fistPaired = espNowIsFistConnected();
+        const bool ejectPaired = EjectIsPaired();
+        const bool fistPaired = FistITIsPaired();
         const bool isHoming = bleCommIsHoming();
         const int homingDir = isHoming ? bleCommGetHomingDirection() : 0;
+        const uint32_t nowMs = millis();
+
+        // Keep status visuals fresh while BLE polling updates machine state.
+        if (bleConnected && (nowMs - s_last_status_refresh_ms) >= 250U) {
+            g_status_strip_refresh_requested = true;
+        }
 
         if (bleConnected != s_prev_ble_connected ||
-            espNowPaired != s_prev_espnow_paired ||
             ejectPaired != s_prev_eject_paired ||
             fistPaired != s_prev_fist_paired ||
             isHoming != s_prev_homing ||
@@ -2564,8 +2542,8 @@ void handleScreens() {
         if (g_status_strip_refresh_requested) {
             updateStatusStrip();
             g_status_strip_refresh_requested = false;
+            s_last_status_refresh_ms = nowMs;
             s_prev_ble_connected = bleConnected;
-            s_prev_espnow_paired = espNowPaired;
             s_prev_eject_paired = ejectPaired;
             s_prev_fist_paired = fistPaired;
             s_prev_homing = isHoming;
@@ -2587,8 +2565,8 @@ void handleScreens() {
 //            touch_disabled = true;
 //        }
         touch_disabled = false;
-        if (lv_scr_act() == ui_Start && espNowIsPaired()) {
-            if (ui_Welcome) lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
+        if (lv_scr_act() == ui_Start && bleCommIsConnected()) {
+            if (ui_Welcome) lv_label_set_text(ui_Welcome, T_BLECONNECTED);
             _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
             screenmachine(nullptr);
             break;
@@ -2816,7 +2794,7 @@ void handleScreens() {
         } else if (click2_double_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_DOUBLE_CLICKED, NULL);
         } else if (click2_short_waspressed) {
-            lv_obj_send_event(ui_HomeButtonL, LV_EVENT_CLICKED, NULL);
+            lv_obj_send_event(ui_HomeButtonL, LV_EVENT_SHORT_CLICKED, NULL);
         } else if (mxclick_short_waspressed) {
             requestHomeButtonToggleOnce();
         } else if (mxclick_long_waspressed) {
@@ -2862,12 +2840,20 @@ void handleScreens() {
 
         updateHomeButtonMState();
 
-        if (FistITPaired()) {
-            lv_label_set_text(ui_HomeButtonRText, T_PATTERN_Button "   F");
+        if (ui_HomeButtonRText) {
+            if (FistITPaired()) {
+                lv_label_set_text(ui_HomeButtonRText, T_PATTERN_Button "   F");
+            } else {
+                lv_label_set_text(ui_HomeButtonRText, T_PATTERN_Button);
+            }
         }
 
-        if (EjectIsPaired()) {
-            lv_label_set_text(ui_HomeButtonLText, T_HOMEL "       E");
+        if (ui_HomeButtonLText) {
+            if (EjectIsPaired()) {
+                lv_label_set_text(ui_HomeButtonLText, T_HOMEL "       E");
+            } else {
+                lv_label_set_text(ui_HomeButtonLText, T_HOMEL);
+            }
         }
     }
     break;

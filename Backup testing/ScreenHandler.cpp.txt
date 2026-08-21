@@ -15,7 +15,6 @@
 #include "../addons/FistIT.h"
 #include "../addons/AP-mode.h"
 #include "../addons/addonsStreaming.h"
-#include "../communication/EspNowComm.h"
 #include "../communication/CommManager.h"
 #include "../communication/BleComm.h"
 #include "../display/colors.h"

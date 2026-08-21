@@ -2,7 +2,6 @@
 
 #include "../addons/Eject.h"
 #include "../addons/FistIT.h"
-#include "EspNowComm.h"
 #include "BleComm.h"
 #include "../config/config_ids.h"
 #include "../config/debug.h"
@@ -10,6 +9,9 @@
 #include "../screens/ScreenHandler.h"
 #include "../ui/ui.h"
 #include "language.h"
+
+bool Ossm_paired = false;
+volatile bool OSSM_On = false;
 
 namespace {
 
@@ -24,34 +26,13 @@ static void setMode(CommTransportMode mode) {
   if (mode == COMM_MODE_BLE) {
     speedlimit = 100.0f;
     maxdepthinmm = 100.0f;
-    // Suspend the ESP-NOW heartbeat task while BLE is active so it doesn't
-    // broadcast stale pairing packets or interfere with BLE coexistence.
-    if (eRemote_t) vTaskSuspend(eRemote_t);
-  } else {
-    // Resume the ESP-NOW task whenever BLE is not active so auto-reconnect
-    // (or re-pairing after BLE drop) can proceed normally.
-    if (eRemote_t) vTaskResume(eRemote_t);
   }
 }
 
-// Tracks how many consecutive times both ESP-NOW and BLE have failed.
-// First failure  (g_failedAttempts == 1): show "try again" hint.
-// Second failure (g_failedAttempts == 2): escalate to multi-channel sweep.
-// Reset to 0 on any successful connection or after the sweep completes.
 static int g_failedAttempts = 0;
 
-static bool tryEspNowFastConnect() {
-
-  for (int i = 0; i < 5; ++i) {
-    espNowKickPairing();
-    delay(500);
-    if (espNowIsPaired()) return true;
-  }
-  return false;
-}
-
 static bool isAddonTarget(int target) {
-  return target == CUM || target == CUM_ID || target == FIST_ID;
+  return target == CUM || target == EJECT_ID || target == FIST_ID;
 }
 
 static void tryConnectBleAddonsFromStart()
@@ -64,6 +45,18 @@ static void tryConnectBleAddonsFromStart()
   FistITSetAddonEnabled(true);
   if (FistITTryConnectNow()) {
     LogDebug("Fist-IT addon connected over BLE from Start flow");
+  }
+}
+
+static void tryPreloadBlePatternCatalogOnce()
+{
+  // Best-effort preload so Pattern screen does not need to perform a
+  // synchronous BLE read during navigation.
+  bleCommResetPatternReadState();
+  if (readPatternsFromOSSM()) {
+    LogDebug("OSSM pattern catalog cached from BLE connect flow");
+  } else {
+    LogDebug("OSSM pattern catalog preload skipped/failed");
   }
 }
 
@@ -81,9 +74,6 @@ void commInit() {
 }
 
 CommTransportMode commGetMode() {
-  if (g_mode == COMM_MODE_ESPNOW && !espNowIsPaired()) {
-    setMode(COMM_MODE_NONE);
-  }
   if (g_mode == COMM_MODE_BLE && !bleCommIsConnected()) {
     setMode(COMM_MODE_NONE);
   }
@@ -94,17 +84,13 @@ bool commIsBleMode() {
   return commGetMode() == COMM_MODE_BLE;
 }
 
-bool commIsEspNowMode() {
-  return commGetMode() == COMM_MODE_ESPNOW;
-}
-
 // -------------------------------------------------------
 // Public UI Connect Flow
 // -------------------------------------------------------
 void connectbutton(lv_event_t* e) {
   (void)e;
   //LogDebug("Connect button clicked");
-  if (commGetMode() == COMM_MODE_ESPNOW || commGetMode() == COMM_MODE_BLE) {
+  if (commGetMode() == COMM_MODE_BLE) {
     tryConnectBleAddonsFromStart();
     return;
   }
@@ -113,33 +99,15 @@ void connectbutton(lv_event_t* e) {
 //  if (ui_connect) lv_label_set_text(ui_connect, T_AUTOCONNECTING);
   if (ui_Welcome) lv_label_set_text(ui_Welcome, T_AUTOCONNECTING);
   lv_refr_now(NULL);  // force immediate render — lv_task_handler() is re-entrant-blocked inside an event callback
-
-  // ── Tier 1: ESP-NOW (channel 1, standard path) ─────────────────────────
-  if (tryEspNowFastConnect()) {
-
-    g_failedAttempts = 0;
-    setMode(COMM_MODE_ESPNOW);
-//    if (ui_connect) lv_label_set_text(ui_connect, T_ESPCONNECTED);
-    if (ui_Welcome) lv_label_set_text(ui_Welcome, T_ESPCONNECTED);
-    lv_refr_now(NULL);
-    lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
-    tryConnectBleAddonsFromStart();
-    LogDebug("Connected via ESP-NOW");
-    return;
-  }
-
-  // ── Tier 2: BLE fallback ────────────────────────────────────────────────
-  LogDebug("ESP-NOW connect failed, trying BLE...");
 //  if (ui_connect) lv_label_set_text(ui_connect, T_SEARCHING_BLE);
   if (ui_Welcome) lv_label_set_text(ui_Welcome, T_SEARCHING_BLE);
   lv_refr_now(NULL);
-  // BLE is initialised lazily so the BLE controller is offline during the
-  // ESP-NOW window above (prevents coexistence contention on broadcasts).
   bleCommInit();
   if (bleCommTryConnect()) {
     g_failedAttempts = 0;
     LogDebug("BLE device found, connecting...");
     setMode(COMM_MODE_BLE);
+    tryPreloadBlePatternCatalogOnce();
     LogDebug("BLE connection established");
 //    if (ui_connect) lv_label_set_text(ui_connect, T_BLECONNECTED);
     if (ui_Welcome) lv_label_set_text(ui_Welcome, T_BLECONNECTED);
@@ -147,7 +115,6 @@ void connectbutton(lv_event_t* e) {
     LogDebug("Loading Menu screen...");
     lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);
     tryConnectBleAddonsFromStart();
-    LogDebug("Connected via BLE");
 
     return;
   }
@@ -165,14 +132,14 @@ void connectbutton(lv_event_t* e) {
 
 bool SendCommand(int Command, float Value, int Target) {
   // Addon traffic uses each addon's own transport layer.
-  if (Target == CUM || Target == CUM_ID) {
+  if (Target == CUM || Target == EJECT_ID) {
     return EjectSendCommand(Command, Value);
   }
   if (Target == FIST_ID) {
     return FistITSendCommand(Command, Value);
   }
 
-  // OSSM traffic prefers BLE when available, with ESP-NOW as fallback.
+  // OSSM traffic is BLE-only.
   if (bleCommIsConnected()) {
     if (commGetMode() != COMM_MODE_BLE) {
       setMode(COMM_MODE_BLE);
@@ -182,28 +149,14 @@ bool SendCommand(int Command, float Value, int Target) {
     return bleCommSendAppCommand(Command, Value, speed, depth, stroke, maxdepthinmm, speedlimit);
   }
 
-  if (espNowIsPaired()) {
-    if (commGetMode() != COMM_MODE_ESPNOW) {
-      setMode(COMM_MODE_ESPNOW);
-    }
-    return espNowSendCommand(Command, Value, Target);
-  }
-
   CommTransportMode mode = commGetMode();
   if (mode == COMM_MODE_NONE) {
-    if (espNowIsPaired()) {
-      setMode(COMM_MODE_ESPNOW);
-      mode = COMM_MODE_ESPNOW;
-    } else if (bleCommIsConnected()) {
+    if (bleCommIsConnected()) {
       setMode(COMM_MODE_BLE);
       mode = COMM_MODE_BLE;
     } else {
       return false;
     }
-  }
-
-  if (mode == COMM_MODE_ESPNOW) {
-    return espNowSendCommand(Command, Value, Target);
   }
 
   if (mode == COMM_MODE_BLE) {

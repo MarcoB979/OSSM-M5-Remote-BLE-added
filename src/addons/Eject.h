@@ -1,6 +1,6 @@
-#pragma once
 
 #include <stdint.h>
+#pragma once
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,13 +34,6 @@ void EjectPrepareScreen();
 lv_obj_t *EjectGetScreen();
 void EjectHandleScreen(const struct ButtonEvents *events);
 #endif
-
-bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
-                                     int target,
-                                     int sender,
-                                     int command,
-                                     float value,
-                                     bool heartbeat);
 
 bool EjectSendCommand(int command, float value);
 bool EjectTryConnectNow();

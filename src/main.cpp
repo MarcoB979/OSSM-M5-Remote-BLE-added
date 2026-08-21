@@ -13,7 +13,6 @@
 #include "addons/Eject.h"
 #include "addons/FistIT.h"
 #include "addons/AP-mode.h"
-#include "communication/EspNowComm.h"
 #include "communication/CommManager.h"
 #include "screens/ScreenHandler.h"
 #include "display/DisplaySetup.h"
@@ -39,7 +38,6 @@ void setup(){
   M5.Power.setChargeCurrent(BATTERY_CHARGE_CURRENT);
   LogDebug("\n Starting");      // Start LogDebug
 
-  espNowInit();
   EjectSetAddonEnabled(true);
   FistITSetAddonEnabled(true);
   APModeSetAddonEnabled(true);
@@ -67,4 +65,3 @@ void loop()
 }
 
 // Screen event callbacks and handler moved to src/screens/ScreenHandler.cpp
-// ESP-NOW communication moved to src/communication/EspNowComm.cpp

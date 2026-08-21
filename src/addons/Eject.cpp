@@ -13,13 +13,15 @@
 #include "display/styles.h"
 #include "buttonhandlers/ButtonHandlers.h"
 #include "screens/ScreenHandler.h"
+#include "communication/CommManager.h"
 #include "config/debug.h"
 #include "language.h"
-#include "communication/EjectComm.h"
 #include "config/config_ids.h"
 
 // Single-definition of EJECT_ID (C linkage so C code can reference it)
 extern "C" const int EJECT_ID = 2;
+
+static bool handleIncomingState(int target, int sender, int command);
 
 bool ejectUnload = false;
 
@@ -90,6 +92,8 @@ static bool e_ble_init = false;
 static NimBLEClient* e_ble_client = nullptr;
 static NimBLERemoteCharacteristic* e_ble_rx = nullptr;
 static NimBLERemoteCharacteristic* e_ble_tx = nullptr;
+static uint32_t e_last_connect_attempt_ms = 0;
+static constexpr uint32_t EJECT_CONNECT_RETRY_MS = 3000;
 static const char* EJECT_BLE_DEVICE_NAME = "Eject";
 static const char* EJECT_BLE_SERVICE_UUID = "5f8bb7f0-9f17-4aa8-9c42-3d8b8b4d9001";
 static const char* EJECT_BLE_RX_UUID = "5f8bb7f1-9f17-4aa8-9c42-3d8b8b4d9001";
@@ -130,12 +134,7 @@ static void ejectBleNotifyCb(NimBLERemoteCharacteristic* ch, uint8_t* data, size
 
   EjectMessage msg = {};
   memcpy(&msg, data, sizeof(msg));
-  (void)EjectHandleIncomingEspNowFrame(nullptr,
-                                       msg.esp_target,
-                                       msg.esp_sender,
-                                       msg.esp_command,
-                                       msg.esp_value,
-                                       msg.esp_heartbeat);
+  (void)handleIncomingState(msg.esp_target, msg.esp_sender, msg.esp_command);
 }
 
 static void ejectBleInitOnce()
@@ -383,11 +382,17 @@ static int getRampedDetentDelta(int encoderId, int detents)
   return delta;
 }
 
-static bool ejectBleTryConnect()
+static bool ejectBleTryConnect(bool force = false)
 {
   if (!e_addon_enabled) {
     return false;
   }
+
+  const uint32_t nowMs = millis();
+  if (!force && e_last_connect_attempt_ms != 0 && (nowMs - e_last_connect_attempt_ms) < EJECT_CONNECT_RETRY_MS) {
+    return false;
+  }
+  e_last_connect_attempt_ms = nowMs;
 
   if (e_ble_client && e_ble_client->isConnected() && e_ble_rx != nullptr) {
     e_is_paired = true;
@@ -407,7 +412,7 @@ static bool ejectBleTryConnect()
   scanner->setInterval(160);
   scanner->setWindow(160);
 
-  NimBLEScanResults results = scanner->getResults(2000, false);
+  NimBLEScanResults results = scanner->getResults(600, false);
   NimBLEAddress targetAddress;
   bool found = false;
   NimBLEUUID serviceUuid(EJECT_BLE_SERVICE_UUID);
@@ -525,11 +530,13 @@ static bool applySliderFromEncoder(ESP32Encoder &encoder,
 static void toggleOnOff()
 {
   if (e_is_on) {
-    EjectSendCommand(OFF, 0.0f);
-    e_is_on = false;
+    if (EjectSendCommand(OFF, 0.0f)) {
+      e_is_on = false;
+    }
   } else {
-    EjectSendCommand(ON, 0.0f);
-    e_is_on = true;
+    if (EjectSendCommand(ON, 0.0f)) {
+      e_is_on = true;
+    }
   }
   refreshValueLabels();
 }
@@ -591,7 +598,7 @@ bool EjectEnsureTxPeer()
 
 bool EjectTryConnectNow()
 {
-  return ejectBleTryConnect();
+  return ejectBleTryConnect(true);
 }
 
 void EjectSetAddonEnabled(bool enabled)
@@ -608,6 +615,10 @@ bool EjectSendCommand(int command, float value)
 {
   if (!e_addon_enabled) {
     return false;
+  }
+
+  if (!e_ble_client || !e_ble_client->isConnected() || e_ble_rx == nullptr) {
+    (void)ejectBleTryConnect(false);
   }
 
   if (!e_ble_client || !e_ble_client->isConnected() || e_ble_rx == nullptr) {
@@ -642,23 +653,14 @@ bool EjectSendCommand(int command, float value)
   return writeOk;
 }
 
-bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
-                                     int target,
-                                     int sender,
-                                     int command,
-                                     float value,
-                                     bool heartbeat)
+static bool handleIncomingState(int target, int sender, int command)
 {
-  (void)value;
-  (void)heartbeat;
-
   if (!e_addon_enabled) {
     return false;
   }
 
   e_peer_id = sender;
   if (sender == EJECT_ID || target == EJECT_ID) {
-    (void)mac;
     if (!e_is_paired) {
       e_is_paired = true;
       screenRequestStatusStripRefresh();
@@ -678,6 +680,10 @@ bool EjectHandleIncomingEspNowFrame(const uint8_t *mac,
 void EjectHandleScreen(const ButtonEvents &events)
 {
   EjectUiScreenCreate();
+
+  if (!EjectIsPaired()) {
+    (void)ejectBleTryConnect(false);
+  }
 
   if (e_flush_buttons_once) {
     clearButtonFlags();
@@ -727,40 +733,4 @@ extern "C" void EjectHandleScreen(const struct ButtonEvents *events)
   EjectHandleScreen(*events);
 }
 
-bool ejectCommIsFrame(const struct_message& msg)
-{
-  const int announcedId = (int)(msg.esp_value + (msg.esp_value >= 0 ? 0.5f : -0.5f));
-  return (msg.esp_target == CUM ||
-          msg.esp_target == CUM_ID ||
-          msg.esp_command == CUMSPEED ||
-          msg.esp_command == CUMTIME ||
-          msg.esp_command == CUMSIZE ||
-          msg.esp_command == CUMACCEL ||
-          ((msg.esp_command == CONNECT || msg.esp_command == CONN || msg.esp_command == HEARTBEAT) &&
-           announcedId == CUM_ID));
-}
 
-void ejectCommHandleFrame(const uint8_t* mac, const struct_message& msg)
-{
-  (void)EjectHandleIncomingEspNowFrame(mac,
-                                       msg.esp_target,
-                                       msg.esp_sender,
-                                       msg.esp_command,
-                                       msg.esp_value,
-                                       msg.esp_heartbeat);
-}
-
-bool ejectCommIsConnected()
-{
-  return EjectIsPaired();
-}
-
-const uint8_t* ejectCommGetTxAddress()
-{
-  return EjectGetTxAddress();
-}
-
-bool ejectCommEnsureTxPeer()
-{
-  return EjectEnsureTxPeer();
-}

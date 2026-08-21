@@ -10,7 +10,6 @@ void bleCommInit();
 bool bleCommTryConnect();
 bool bleCommIsConnected();
 
-// RADR-compatible app command mapping (SPEED/DEPTH/... constants from EspNowComm.h)
 bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
                            float currentDepth, float currentStroke,
                            float maxDepthMm, float maxSpeedValue);
@@ -47,3 +46,9 @@ extern bool newPatternIsReadFromOSSM;
 extern String patternString;
 bool readPatternsFromOSSM();
 void bleCommResetPatternReadState();
+// ---- Shared runtime variables ----
+extern bool               Ossm_paired;
+extern volatile bool      OSSM_On;
+extern int pattern;
+extern float speedlimit;
+extern float maxdepthinmm;
