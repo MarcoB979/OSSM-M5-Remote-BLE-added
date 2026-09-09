@@ -22,6 +22,20 @@ void bleCommSetEnabled(bool enabled);
 bool bleCommIsEnabled();
 bool bleCommIsHoming();
 bool bleCommHasFreshState();
+
+// Latest confirmed values reported by OSSM. The BLE task owns the cache;
+// callers receive a consistent snapshot for use on the UI task.
+struct BleConfirmedValues {
+    uint32_t revision;
+    float speed;
+    float depth;
+    float stroke;
+    float sensation;
+    float minPosition;
+    float maxPosition;
+};
+bool bleCommGetConfirmedValues(BleConfirmedValues* outValues);
+
 int bleCommGetHomingDirection();
 float bleCommGetConfirmedPosition();
 int bleCommSetUnpauseSpeed(float speedValue);

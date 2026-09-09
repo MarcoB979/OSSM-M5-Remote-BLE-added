@@ -42,6 +42,8 @@ float speed     = 0.0f;
 float depth     = 0.0f;
 float stroke    = 0.0f;
 float sensation = 0.0f;
+float minPos    = 0.0f;
+float maxPos    = 100.0f;
 float torqe_f   = 100.0f;
 float torqe_r   = -180.0f;
 float cum_time  = 0.0f;
@@ -91,6 +93,12 @@ enum SpeedBehavior {
 };
 static int s_speed_behavior_profile = SPEED_BEHAVIOR_STANDARD;
 static bool  s_stroke_influences_depth = false;
+static uint32_t s_last_speed_sync_revision = 0;
+static uint32_t s_last_motion_sync_revision = 0;
+static uint32_t s_last_sensation_sync_revision = 0;
+static uint32_t s_last_rail_sync_revision = 0;
+static uint32_t s_last_local_motion_input_ms = 0;
+static constexpr uint32_t LOCAL_MOTION_SYNC_HOLDOFF_MS = 250;
 static float s_manual_rail_length_mm = 0.0f;
 static bool s_home_speed_ramp_active = false;
 static int s_home_speed_ramp_current = 0;
@@ -601,6 +609,48 @@ static void syncHomeSensationSliderToTransport() {
     if (sensation < desiredMin) sensation = (float)desiredMin;
     if (sensation > desiredMax) sensation = (float)desiredMax;
     lv_slider_set_value(ui_homesensationslider, (int)sensation, LV_ANIM_OFF);
+}
+static void syncHomeValuesFromOssm(bool speedDragged, bool depthDragged,
+                                   bool strokeDragged, bool sensationDragged) {
+    BleConfirmedValues confirmed{};
+    if (!bleCommGetConfirmedValues(&confirmed)) return;
+
+    const bool localInputActive = (millis() - s_last_local_motion_input_ms) < LOCAL_MOTION_SYNC_HOLDOFF_MS;
+    if (localInputActive) return;
+
+    if (!speedDragged && confirmed.revision != s_last_speed_sync_revision) {
+        speed = confirmed.speed;
+        if (ui_homespeedslider) {
+            lv_slider_set_value(ui_homespeedslider, (int)(speed + 0.5f), LV_ANIM_OFF);
+        }
+        s_last_speed_sync_revision = confirmed.revision;
+    }
+
+    // Depth and stroke describe one rail range, so apply them together after
+    // both controls are released to avoid showing a mixed intermediate range.
+    if (!depthDragged && !strokeDragged && confirmed.revision != s_last_motion_sync_revision) {
+        depth = confirmed.depth;
+        stroke = confirmed.stroke;
+        minPos = confirmed.minPosition;
+        maxPos = confirmed.maxPosition;
+        if (ui_homedepthslider) {
+            lv_slider_set_value(ui_homedepthslider, (int)(depth + 0.5f), LV_ANIM_OFF);
+        }
+        s_last_motion_sync_revision = confirmed.revision;
+        s_last_rail_sync_revision = confirmed.revision;
+    } else if (confirmed.revision != s_last_rail_sync_revision) {
+        minPos = confirmed.minPosition;
+        maxPos = confirmed.maxPosition;
+        if (!depthDragged && !strokeDragged) s_last_rail_sync_revision = confirmed.revision;
+    }
+
+    if (!sensationDragged && confirmed.revision != s_last_sensation_sync_revision) {
+        sensation = confirmed.sensation;
+        if (ui_homesensationslider) {
+            lv_slider_set_value(ui_homesensationslider, (int)sensation, LV_ANIM_OFF);
+        }
+        s_last_sensation_sync_revision = confirmed.revision;
+    }
 }
 
 // -------------------------------------------------------
@@ -2629,8 +2679,19 @@ void handleScreens() {
 //        }
         touch_disabled = true;
         const bool invertStroke = ui_strokeinvert && lv_obj_has_state(ui_strokeinvert, LV_STATE_CHECKED);
+        const bool speedSliderDragged = lv_slider_is_dragged(ui_homespeedslider);
         const bool depthSliderDragged = lv_slider_is_dragged(ui_homedepthslider);
         const bool strokeSliderDragged = lv_slider_is_dragged(ui_homestrokeslider);
+        const bool sensationSliderDragged = lv_slider_is_dragged(ui_homesensationslider);
+        const bool speedEncoderPending = labs(encoder1.getCount()) >= 2;
+        const bool depthEncoderPending = labs(encoder2.getCount()) >= 2;
+        const bool strokeEncoderPending = labs(encoder3.getCount()) >= 2;
+        const bool sensationEncoderPending = labs(encoder4.getCount()) >= 2;
+
+        syncHomeValuesFromOssm(speedSliderDragged || speedEncoderPending,
+                   depthSliderDragged || depthEncoderPending,
+                   strokeSliderDragged || strokeEncoderPending,
+                   sensationSliderDragged || sensationEncoderPending);
 
         const bool wasMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         bool homeMotionValueChanged = false;
@@ -2789,6 +2850,7 @@ void handleScreens() {
         updateVisualSpeedRatioFromUi(homeSpeedValueChanged, speed, stroke);
 
         // Encoder 4 — Sensation
+        bool homeSensationValueChanged = false;
         if (lv_slider_is_dragged(ui_homesensationslider) == false) {
             changed = false;
             lv_slider_set_value(ui_homesensationslider, sensation, LV_ANIM_OFF);
@@ -2804,6 +2866,12 @@ void handleScreens() {
         } else if (lv_slider_get_value(ui_homesensationslider) != sensation) {
             sensation = lv_slider_get_value(ui_homesensationslider);
             SendCommand(SENSATION, sensation, OSSM_ID);
+            changed = true;
+        }
+        homeSensationValueChanged = changed;
+
+        if (homeMotionValueChanged || homeSensationValueChanged) {
+            s_last_local_motion_input_ms = millis();
         }
 
         if (s_force_home_restore_pending) {

@@ -28,6 +28,7 @@ typedef enum NotificationResult {
 // ---- Shared screen state (defined in ScreenHandler.cpp) ----
 extern int   st_screens;
 extern float speed, depth, stroke, sensation;
+extern float minPos, maxPos;
 extern float torqe_f, torqe_r;
 extern int   pattern;
 extern char  patternstr[20];

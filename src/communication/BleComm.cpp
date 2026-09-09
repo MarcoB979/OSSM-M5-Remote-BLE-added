@@ -92,6 +92,9 @@ struct ConfirmedMachineState {
   float stroke = 0.0f;
   float sensation = 0.0f;
   float pattern = 0.0f;
+  float minPosition = 0.0f;
+  float maxPosition = 100.0f;
+  uint32_t revision = 0;
 };
 
 static ConfirmedMachineState g_confirmedState;
@@ -338,6 +341,16 @@ static void updateCachedMachineState(const String& stateRaw) {
   float parsedDepth = extractJsonNumberValue(stateRaw, "depth");
   float parsedPattern = extractJsonNumberValue(stateRaw, "pattern");
   float parsedPosition = extractJsonNumberValue(stateRaw, "position");
+  float parsedMin = extractJsonNumberValue(stateRaw, "minPosition");
+  float parsedMax = extractJsonNumberValue(stateRaw, "maxPosition");
+
+  const bool valuesChanged = !g_confirmedState.valid ||
+      (parsedSpeed >= 0.0f && parsedSpeed != g_confirmedState.speed) ||
+      (parsedDepth >= 0.0f && parsedDepth != g_confirmedState.depth) ||
+      (parsedStroke >= 0.0f && parsedStroke != g_confirmedState.stroke) ||
+      (parsedSensation >= 0.0f && parsedSensation != g_confirmedState.sensation) ||
+      (parsedMin >= 0.0f && parsedMin != g_confirmedState.minPosition) ||
+      (parsedMax >= 0.0f && parsedMax != g_confirmedState.maxPosition);
 
   g_confirmedState.valid = true;
   g_confirmedState.raw = stateRaw;
@@ -349,6 +362,9 @@ static void updateCachedMachineState(const String& stateRaw) {
   if (parsedStroke >= 0.0f) g_confirmedState.stroke = parsedStroke;
   if (parsedSensation >= 0.0f) g_confirmedState.sensation = parsedSensation;
   if (parsedPattern >= 0.0f) g_confirmedState.pattern = parsedPattern;
+  if (parsedMin >= 0.0f) g_confirmedState.minPosition = parsedMin;
+  if (parsedMax >= 0.0f) g_confirmedState.maxPosition = parsedMax;
+  if (valuesChanged) ++g_confirmedState.revision;
 
   if (parsedSpeed >= 0.0f) {
     OSSM_On = parsedSpeed > 0.5f;
@@ -967,6 +983,21 @@ bool bleCommIsEnabled() {
 
 bool bleCommHasFreshState() {
   return hasFreshState();
+}
+
+bool bleCommGetConfirmedValues(BleConfirmedValues* outValues) {
+  if (!outValues || !g_confirmedState.valid || !hasFreshState()) return false;
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  outValues->revision = g_confirmedState.revision;
+  outValues->speed = g_confirmedState.speed;
+  outValues->depth = g_confirmedState.depth;
+  outValues->stroke = g_confirmedState.stroke;
+  outValues->sensation = (g_confirmedState.sensation * 2.0f) - 100.0f;
+  outValues->minPosition = g_confirmedState.minPosition;
+  outValues->maxPosition = g_confirmedState.maxPosition;
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+  return true;
 }
 
 bool bleCommIsHoming() {
