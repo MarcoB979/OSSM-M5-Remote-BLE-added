@@ -13,7 +13,9 @@
 #include "addons/Eject.h"
 #include "addons/FistIT.h"
 #include "addons/AP-mode.h"
+#include "addons/addonsStreaming.h"
 #include "communication/CommManager.h"
+#include "communication/BleComm.h"
 #include "screens/ScreenHandler.h"
 #include "display/DisplaySetup.h"
 #include <M5Unified.h>
@@ -38,8 +40,9 @@ void setup(){
   M5.Power.setChargeCurrent(BATTERY_CHARGE_CURRENT);
   LogDebug("\n Starting");      // Start LogDebug
 
-  EjectSetAddonEnabled(true);
-  FistITSetAddonEnabled(true);
+  bleCommRegisterMainTask();
+  EjectSetAddonEnabled(addonsIsEjectEnabled());
+  FistITSetAddonEnabled(addonsIsFistITEnabled());
   APModeSetAddonEnabled(true);
   commInit();
   displayInit();  // display, LVGL, touchpad
@@ -55,12 +58,19 @@ void setup(){
 void loop()
 {
   screen_power_tick();
+  //LogDebug("Loop tick");
   M5.update();
+  //LogDebug("M5 update done");
   lv_task_handler();
+  //LogDebug("LVGL task handler done"); 
   Button1.tick();
+  //LogDebug("Button1 tick done");
   Button2.tick();
+  //LogDebug("Button2 tick done");
   Button3.tick();
+  //LogDebug("Button3 tick done");
   handleScreens();
+  //LogDebug("handleScreens done");
   delay(5);
 }
 

@@ -55,6 +55,8 @@ static NimBLERemoteCharacteristic* g_adv_config = nullptr;
 static NimBLERemoteCharacteristic* g_adv_control = nullptr;
 static NimBLERemoteCharacteristic* g_adv_presets = nullptr;
 static SemaphoreHandle_t g_bleMutex = nullptr;
+static SemaphoreHandle_t g_modeReadyMutex = nullptr;
+static TaskHandle_t g_mainTaskHandle = nullptr;
 static TaskHandle_t g_pollTask = nullptr;
 static TaskHandle_t g_txTask = nullptr;
 static SemaphoreHandle_t g_txSem = nullptr;
@@ -65,6 +67,7 @@ struct TxQueueItem {
   String cmd;
   bool requireConfirm;
   bool isRealtime;
+  bool needsMotionReady;
 };
 static std::queue<TxQueueItem> g_txQueue;
 static float g_lastRunSpeed = 0.0f;
@@ -138,6 +141,11 @@ static float extractJsonNumberValue(const String& text, const String& key) {
 }
 
 static void pumpUiDuringModeWait() {
+  // ensureStrokeEngineOrStreamingReady() now also runs on bleTxTask; LVGL is
+  // not thread-safe, so only pump it when called back on the main UI task.
+  if (g_mainTaskHandle != nullptr && xTaskGetCurrentTaskHandle() != g_mainTaskHandle) {
+    return;
+  }
   // Keep status icons and screen rendering responsive while mode gating loops.
   screenForceStatusStripRefreshNow();
   lv_task_handler();
@@ -470,7 +478,7 @@ static bool waitForStrokeEngineOrStreamingReady(uint32_t timeoutMs) {
   return false;
 }
 
-static bool ensureStrokeEngineOrStreamingReady() {
+static bool ensureStrokeEngineOrStreamingReadyImpl() {
   if (!bleCommTryConnect()) return false;
 
   bleReadStateOnce();
@@ -522,6 +530,19 @@ static bool ensureStrokeEngineOrStreamingReady() {
   return waitForStrokeEngineOrStreamingReady(10000);
 }
 
+// Serializes ensureStrokeEngineOrStreamingReadyImpl() since it now runs from
+// both the main thread (bleCommGoToStrokeEngine callers) and bleTxTask
+// (queued motion commands) — the underlying BLE calls/state are not safe
+// for two concurrent callers.
+static bool ensureStrokeEngineOrStreamingReady() {
+  if (!g_modeReadyMutex || xSemaphoreTake(g_modeReadyMutex, pdMS_TO_TICKS(25000)) != pdTRUE) {
+    return false;
+  }
+  const bool ok = ensureStrokeEngineOrStreamingReadyImpl();
+  xSemaphoreGive(g_modeReadyMutex);
+  return ok;
+}
+
 static bool isRealtimeSetCommand(const String& cmd, String* outType = nullptr) {
   if (!cmd.startsWith("set:")) return false;
   int colon = cmd.indexOf(':', 4);
@@ -534,7 +555,7 @@ static bool isRealtimeSetCommand(const String& cmd, String* outType = nullptr) {
   return true;
 }
 
-static bool queueCommand(const String& cmd, bool requireConfirm = true) {
+static bool queueCommand(const String& cmd, bool requireConfirm = true, bool needsMotionReady = false) {
   if (cmd.length() == 0) return false;
   if (!g_bleMutex) return false;
 
@@ -604,6 +625,7 @@ static bool queueCommand(const String& cmd, bool requireConfirm = true) {
   item.cmd = normalized;
   item.requireConfirm = requireConfirm;
   item.isRealtime = dedupeType;
+  item.needsMotionReady = needsMotionReady;
   g_txQueue.push(item);
   xSemaphoreGive(g_bleMutex);
 
@@ -722,6 +744,13 @@ static void bleTxTask(void*) {
         break;
       }
 
+      if (item.needsMotionReady && !ensureStrokeEngineOrStreamingReady()) {
+        // Mode never became ready (OSSM stuck/unreachable) — drop this stale
+        // motion command instead of silently writing into the wrong mode.
+        vTaskDelay(pdMS_TO_TICKS(8));
+        continue;
+      }
+
       if (item.isRealtime) {
         uint32_t nowMs = millis();
         uint32_t elapsedMs = nowMs - lastRealtimeTxMs;
@@ -756,9 +785,12 @@ String patternString;
 // -------------------------------------------------------
 // Public BLE lifecycle
 // -------------------------------------------------------
+void bleCommRegisterMainTask() {
+  g_mainTaskHandle = xTaskGetCurrentTaskHandle();
+}
+
 void bleCommInit() {
   newPatternIsReadFromOSSM = false;
-
   if (!g_bleInit) {
     if (!NimBLEDevice::isInitialized()) {
       NimBLEDevice::init("M5-OSSM-Remote");
@@ -768,6 +800,9 @@ void bleCommInit() {
   }
   if (!g_bleMutex) {
     g_bleMutex = xSemaphoreCreateMutex();
+  }
+  if (!g_modeReadyMutex) {
+    g_modeReadyMutex = xSemaphoreCreateMutex();
   }
   if (!g_txSem) {
     g_txSem = xSemaphoreCreateBinary();
@@ -981,12 +1016,9 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
        appCommand == SENSATION || appCommand == PATTERN || appCommand == ON ||
        appCommand == OFF);
 
-  if (isMotionControl) {
-    // Keep fast path cheap: only run full readiness check when mode/state are not already known-good.
-    if (!(hasFreshState() && (g_machineMode == MachineMode::StrokeEngine || g_machineMode == MachineMode::Streaming))) {
-      if (!ensureStrokeEngineOrStreamingReady()) return false;
-    }
-  }
+  // Mode-readiness (up to ~20s of retries/waits) is deferred to bleTxTask via
+  // TxQueueItem::needsMotionReady below, so callers on the UI/main thread
+  // never block on it (see queueCommand() at the bottom of this function).
 
   if (appCommand == SETUP_D_I) {
     return queueCommand("go:simplePenetration", true);
@@ -1096,7 +1128,7 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
 
   const bool isRealtime = (appCommand == SPEED || appCommand == DEPTH || appCommand == STROKE ||
                            appCommand == SENSATION || appCommand == PATTERN);
-  return queueCommand(cmd, !isRealtime);
+  return queueCommand(cmd, !isRealtime, isMotionControl);
 }
 
 bool bleCommIsMenu() {

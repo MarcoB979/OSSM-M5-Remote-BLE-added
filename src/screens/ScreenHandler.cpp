@@ -1747,8 +1747,6 @@ void brightness_slider_event_cb(lv_event_t *e)
 // Screen event callbacks (registered via ui.c / ui.h)
 // -------------------------------------------------------
 
-static bool screenSuspendsAddonBleProbing(int screen);
-
 void screenmachine(lv_event_t * e) {
     // Clear any lingering LVGL touch-press tracking from the previous screen.
     // Without this, a button tap that causes a screen transition can leak into
@@ -1902,19 +1900,7 @@ void screenmachine(lv_event_t * e) {
 //        }
         st_screens = ST_UI_APMODE;
     }
-
-    // Suspend Fist-IT/Eject background BLE scans (~120ms each) while on a
-    // screen that never uses them, so they don't compete with that screen's
-    // own redraws; restore the user's addon settings when leaving it.
-    const bool nowSuspends = screenSuspendsAddonBleProbing(st_screens);
-    const bool wasSuspending = screenSuspendsAddonBleProbing(prevScreenForAddonGate);
-    if (nowSuspends && !wasSuspending) {
-        EjectSetAddonEnabled(false);
-        FistITSetAddonEnabled(false);
-    } else if (!nowSuspends && wasSuspending) {
-        EjectSetAddonEnabled(addonsIsEjectEnabled());
-        FistITSetAddonEnabled(addonsIsFistITEnabled());
-    }
+    (void)prevScreenForAddonGate;
 }
 
 // -------------------------------------------------------
@@ -2468,27 +2454,11 @@ static void checkBleDisconnectError()
     // s_notification_shown stays true so we don't spam the notification.
 }
 
-// Screens that never use Fist-IT/Eject and whose blocking BLE background
-// scans (~120ms each) should be suspended so they don't fight with
-// per-frame LVGL redraws. Add new addon-incompatible screens here.
-static bool screenSuspendsAddonBleProbing(int screen) {
-    switch (screen) {
-        case ST_UI_APMODE:
-            return true;
-        default:
-            return false;
-    }
-}
-
 static void serviceAddonBackgroundConnect()
 {
     static uint32_t s_next_probe_ms = 0;
     static uint8_t s_probe_slot = 0;
     static constexpr uint32_t INPUT_QUIET_WINDOW_MS = 350U;
-
-    if (screenSuspendsAddonBleProbing(st_screens)) {
-        return;
-    }
 
     const uint32_t nowMs = millis();
     // Only probe when recent input traffic has settled to reduce user-visible lag.

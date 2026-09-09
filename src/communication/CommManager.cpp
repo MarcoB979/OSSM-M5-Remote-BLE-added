@@ -2,6 +2,7 @@
 
 #include "../addons/Eject.h"
 #include "../addons/FistIT.h"
+#include "../addons/addonsStreaming.h"
 #include "BleComm.h"
 #include "../config/config_ids.h"
 #include "../config/debug.h"
@@ -37,14 +38,24 @@ static bool isAddonTarget(int target) {
 
 static void tryConnectBleAddonsFromStart()
 {
-  // Explicitly allow addon connect attempts only from Start->Connect flow.
-  EjectSetAddonEnabled(true);
-  if (EjectTryConnectNow()) {
-    LogDebug("Eject addon connected over BLE from Start flow");
+  // Only probe/connect addons the user actually enabled in ui_addons;
+  // otherwise force them fully disabled so they never scan or connect.
+  if (addonsIsEjectEnabled()) {
+    EjectSetAddonEnabled(true);
+    if (EjectTryConnectNow()) {
+      LogDebug("Eject addon connected over BLE from Start flow");
+    }
+  } else {
+    EjectSetAddonEnabled(false);
   }
-  FistITSetAddonEnabled(true);
-  if (FistITTryConnectNow()) {
-    LogDebug("Fist-IT addon connected over BLE from Start flow");
+
+  if (addonsIsFistITEnabled()) {
+    FistITSetAddonEnabled(true);
+    if (FistITTryConnectNow()) {
+      LogDebug("Fist-IT addon connected over BLE from Start flow");
+    }
+  } else {
+    FistITSetAddonEnabled(false);
   }
 }
 
@@ -126,6 +137,7 @@ void connectbutton(lv_event_t* e) {
 //    if (ui_connect) lv_label_set_text(ui_connect, T_FAILED);
     lv_obj_set_align(ui_Welcome, LV_ALIGN_CENTER);
     if (ui_Welcome) lv_label_set_text(ui_Welcome, T_FAILED);
+    LogDebug("BLE connection failed");
     lv_refr_now(NULL);
   }
 }

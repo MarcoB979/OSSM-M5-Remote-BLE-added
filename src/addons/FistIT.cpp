@@ -196,8 +196,12 @@ static bool fistBleTryConnect(bool force = false)
   scanner->stop();
   scanner->clearResults();
   scanner->setActiveScan(true);
-  scanner->setInterval(160);
-  scanner->setWindow(160);
+  // Interval > window (duty cycle < 100%) leaves radio time free for the
+  // active OSSM GATT connection; interval == window (continuous scan)
+  // starves that connection's scheduled events and causes multi-second
+  // stalls on every screen while this background probe runs.
+  scanner->setInterval(96);
+  scanner->setWindow(32);
 
   const uint32_t scanMs = force ? FIST_FG_SCAN_MS : FIST_BG_SCAN_MS;
   NimBLEScanResults results = scanner->getResults(scanMs, false);

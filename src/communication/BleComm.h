@@ -9,6 +9,9 @@ extern bool showBlePollSerial;
 void bleCommInit();
 bool bleCommTryConnect();
 bool bleCommIsConnected();
+// Records the calling task as the UI/main task so background BLE tasks know
+// when it's unsafe to touch LVGL (call once from setup(), on the main task).
+void bleCommRegisterMainTask();
 
 bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
                            float currentDepth, float currentStroke,

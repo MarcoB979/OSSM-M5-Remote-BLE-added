@@ -187,6 +187,15 @@ static void saveAddonEnabled(int addonIdx) {
     snprintf(key, sizeof(key), "addon_%d", addonIdx);
     prefs.putBool(key, s_addon_defs[addonIdx].enabled);
     prefs.end();
+
+    // Apply immediately so turning an addon off here also stops/disconnects
+    // its BLE scanning/polling right away rather than at next boot/connect.
+    const bool enabled = s_addon_defs[addonIdx].enabled;
+    if (addonIdx == EJECT_ADDON_INDEX) {
+        EjectSetAddonEnabled(enabled);
+    } else if (addonIdx == FISTIT_ADDON_INDEX) {
+        FistITSetAddonEnabled(enabled);
+    }
 }
 
 static void buildEnabledList() {
