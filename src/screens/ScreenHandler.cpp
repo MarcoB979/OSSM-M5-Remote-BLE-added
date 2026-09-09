@@ -615,7 +615,15 @@ static void syncHomeValuesFromOssm(bool speedDragged, bool depthDragged,
     if (localInputActive || speedDragged || depthDragged || strokeDragged || sensationDragged) return;
 
     if (!speedDragged) {
-        speed = confirmed.speed;
+        if (confirmed.speed > 0.5f) {
+            bleCommSetUnpauseSpeed(confirmed.speed);
+            speed = confirmed.speed;
+        } else {
+            // OSSM reports zero while paused, but keep the configured speed
+            // visible so MX can resume the same speed without a UI jump.
+            const float pausedSpeed = (float)bleCommGetUnpauseSpeed();
+            speed = (pausedSpeed > 0.0f) ? pausedSpeed : confirmed.speed;
+        }
         if (ui_homespeedslider) {
             lv_slider_set_value(ui_homespeedslider, (int)(speed + 0.5f), LV_ANIM_OFF);
         }
@@ -637,6 +645,24 @@ static void syncHomeValuesFromOssm(bool speedDragged, bool depthDragged,
         sensation = confirmed.sensation;
         if (ui_homesensationslider) {
             lv_slider_set_value(ui_homesensationslider, (int)sensation, LV_ANIM_OFF);
+        }
+    }
+
+    if (ui_PatternS && patternString.length() > 0) {
+        // Apply the OSSM-provided catalog before validating the confirmed
+        // pattern. OSSM Lite can add entries beyond the standard patterns.
+        if (newPatternIsReadFromOSSM) {
+            lv_roller_set_options(ui_PatternS, patternString.c_str(), LV_ROLLER_MODE_NORMAL);
+            newPatternIsReadFromOSSM = false;
+        }
+
+        const uint16_t optionCount = (uint16_t)lv_roller_get_option_count(ui_PatternS);
+        if (confirmed.pattern >= 0 && confirmed.pattern < (int)optionCount) {
+            pattern = confirmed.pattern;
+            lv_roller_set_selected(ui_PatternS, pattern, LV_ANIM_OFF);
+            lv_roller_get_selected_str(ui_PatternS, patternstr, sizeof(patternstr));
+            if (ui_HomePatternLabel) lv_label_set_text(ui_HomePatternLabel, patternstr);
+            if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
         }
     }
 }
@@ -2009,7 +2035,12 @@ void pullOut(lv_event_t * e) {
         speed = 20;
         SendCommand(SPEED, speed, OSSM_ID);
     }
-    int speed_time = (5000*(20/speed));
+    // The pull-out notification is modal. Avoid division by zero when OSSM is
+    // already stopped, and cap the wait so a low speed cannot trap the UI.
+    const float pullOutSpeed = (speed > 0.1f) ? speed : 20.0f;
+    int speed_time = (int)(5000.0f * (20.0f / pullOutSpeed));
+    if (speed_time < 1000) speed_time = 1000;
+    if (speed_time > 15000) speed_time = 15000;
     SendCommand(DEPTH, 0, OSSM_ID);
     SendCommand(STROKE, 0.1, OSSM_ID); // set a tiny stroke to ensure we exit the stroke pattern if active
     speed = 0;
@@ -2170,7 +2201,13 @@ void homebuttonmevent(lv_event_t * e) {
     LogDebug("HomeButton");
         SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
     if (OSSM_On == false) {
-        if (speed == 0 || stroke == 0 || depth == 0) return;
+        if (speed <= 0.0f) {
+            speed = (float)bleCommGetUnpauseSpeed();
+            if (speed > 0.0f && ui_homespeedslider) {
+                lv_slider_set_value(ui_homespeedslider, (int)(speed + 0.5f), LV_ANIM_OFF);
+            }
+        }
+        if (speed <= 0.0f || stroke <= 0.0f || depth <= 0.0f) return;
         applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
         lv_refr_now(NULL);
         const float startCommandedSpeed = resolveVisualCompensatedSpeed(speed, stroke);
@@ -2882,10 +2919,13 @@ void handleScreens() {
 
         if (click2_long_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_LONG_PRESSED, NULL);
+            break;
         } else if (click2_double_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_DOUBLE_CLICKED, NULL);
+            break;
         } else if (click2_short_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_SHORT_CLICKED, NULL);
+            break;
         } else if (mxclick_short_waspressed) {
             requestHomeButtonToggleOnce();
         } else if (mxclick_long_waspressed) {
@@ -2908,6 +2948,7 @@ void handleScreens() {
                 g_addon_return_screen = lv_scr_act();
                 FistITPrepareScreen();
                 _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+                break;
             }
             sensation = 0;
         } else if (click3_double_waspressed) {
@@ -2916,6 +2957,7 @@ void handleScreens() {
             }
         } else if (click3_short_waspressed) {
             lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
+            break;
         }
         const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         flushMotionCommands(speed, depth, stroke, homeMotionValueChanged, true);

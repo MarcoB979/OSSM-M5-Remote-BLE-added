@@ -31,6 +31,7 @@ struct BleConfirmedValues {
     float depth;
     float stroke;
     float sensation;
+    int pattern;
     float minPosition;
     float maxPosition;
 };

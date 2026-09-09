@@ -81,17 +81,19 @@ void buttonInit() {
     // - Shorter click window makes double-click recognition feel snappier.
     // - Keep long-press threshold unchanged.
     // - Slightly lower debounce keeps fast clicks reliable without phantom presses.
-    Button2.setDebounceMs(30); //left
     Button3.setDebounceMs(30); //right
-    Button2.setClickMs(250);
+    Button3.setPressMs(500);
+    Button3.setClickMs(380);
     // Give the right button a wider double-click window so addon toggle
     // remains reliable after quick screen transitions.
-    Button3.setClickMs(380);
+
+    Button2.setDebounceMs(30); //left
     Button2.setPressMs(500);  //pullout attached so keep long press shorter
-    Button3.setPressMs(500);
+    Button2.setClickMs(250);
+    
     Button1.setDebounceMs(30);  //mx middle
-    Button1.setClickMs(120);  //reduce accidental short-click reports from encoder-button noise
     Button1.setPressMs(500);  //Emergency stop attached so keep long press shorter
+    Button1.setClickMs(120);  //reduce accidental short-click reports from encoder-button noise
 
     Button1.attachPress(mxpress);
     Button1.attachClick(mxclick);
@@ -108,18 +110,21 @@ void buttonInit() {
 // OneButton callbacks
 // ---------------------------------------------------------------------------
 void mxpress() {
+    Serial.println("mx pressed");
     mxpress_waspressed = true;
     mxclick_short_waspressed = false;
     screensaver_check_activity();
 }
 
 void mxclick() {
+    Serial.println("mx clicked");
     mxclick_short_waspressed = true;
     vibrate(200, 200);
     screensaver_check_activity();
 }
 
 void mxlong() {
+    Serial.println("mx long pressed");
     mxclick_long_waspressed = true;
     mxclick_short_waspressed = false;
     vibrate(200, 200);
@@ -127,12 +132,14 @@ void mxlong() {
 }
 
 void click2() {
+    Serial.println("click2 short pressed");
     click2_short_waspressed = true;
     vibrate(200, 200);
     screensaver_check_activity();
 }
 
 void click2long() {
+    Serial.println("click2 long pressed");
     click2_long_waspressed = true;
     click2_short_waspressed = false;
     vibrate(200, 200);
@@ -140,6 +147,7 @@ void click2long() {
 }
 
 void c2double() {
+    Serial.println("click2 double pressed");
     click2_double_waspressed = true;
     click2_short_waspressed = false;
     vibrate(200, 200);
@@ -147,12 +155,14 @@ void c2double() {
 }
 
 void click3() {
+    Serial.println("click3 short pressed");
     click3_short_waspressed = true;
     vibrate(200, 200);
     screensaver_check_activity();
 }
 
 void c3long() {
+    Serial.println("click3 long pressed");
     click3_long_waspressed = true;
     click3_short_waspressed = false;
     vibrate(200, 200);

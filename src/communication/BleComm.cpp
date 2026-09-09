@@ -366,6 +366,12 @@ static void updateCachedMachineState(const String& stateRaw) {
   if (parsedMax >= 0.0f) g_confirmedState.maxPosition = parsedMax;
   if (valuesChanged) ++g_confirmedState.revision;
 
+  // Keep the last nonzero OSSM speed available for MX resume after the
+  // confirmed running speed drops to zero during a pause/stop.
+  if (parsedSpeed > 0.5f) {
+    bleStoreUnpauseSpeed(parsedSpeed);
+  }
+
   if (parsedSpeed >= 0.0f) {
     OSSM_On = parsedSpeed > 0.5f;
   }
@@ -564,7 +570,8 @@ static bool isRealtimeSetCommand(const String& cmd, String* outType = nullptr) {
   int colon = cmd.indexOf(':', 4);
   if (colon <= 4) return false;
   String type = cmd.substring(4, colon);
-  if (!(type == "speed" || type == "depth" || type == "stroke" || type == "sensation" || type == "pattern")) {
+    if (!(type == "speed" || type == "depth" || type == "stroke" ||
+      type == "min" || type == "max" || type == "sensation" || type == "pattern")) {
     return false;
   }
   if (outType) *outType = type;
@@ -589,8 +596,8 @@ static bool queueCommand(const String& cmd, bool requireConfirm = true, bool nee
     if (s.indexOf(':', colon2 + 1) >= 0) return false;
 
     String type = s.substring(colon1 + 1, colon2);
-    if (!(type == "depth" || type == "sensation" || type == "pattern" ||
-          type == "speed" || type == "stroke")) {
+        if (!(type == "depth" || type == "sensation" || type == "pattern" ||
+          type == "speed" || type == "stroke" || type == "min" || type == "max")) {
       return false;
     }
 
@@ -996,6 +1003,7 @@ bool bleCommGetConfirmedValues(BleConfirmedValues* outValues) {
   outValues->depth = g_confirmedState.depth;
   outValues->stroke = g_confirmedState.stroke;
   outValues->sensation = (g_confirmedState.sensation * 2.0f) - 100.0f;
+  outValues->pattern = (int)(g_confirmedState.pattern + 0.5f);
   outValues->minPosition = g_confirmedState.minPosition;
   outValues->maxPosition = g_confirmedState.maxPosition;
   if (g_bleMutex) xSemaphoreGive(g_bleMutex);
@@ -1161,7 +1169,30 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
 
   const bool isRealtime = (appCommand == SPEED || appCommand == DEPTH || appCommand == STROKE ||
                            appCommand == SENSATION || appCommand == PATTERN);
-  return queueCommand(cmd, !isRealtime, isMotionControl);
+  bool queued = queueCommand(cmd, !isRealtime, isMotionControl);
+
+  // OSSM Lite represents depth/stroke as rail boundaries. Keep the legacy
+  // depth/stroke command for older OSSM firmware, then send the explicit
+  // max/min values so both firmware generations receive the same intent.
+  if (appCommand == DEPTH || appCommand == STROKE) {
+    const float targetDepth = (appCommand == DEPTH) ? value : currentDepth;
+    const float targetStroke = (appCommand == STROKE) ? value : currentStroke;
+    const int targetMax = clampPercent(targetDepth);
+    const int targetMin = clampPercent(targetDepth - targetStroke);
+
+    if (appCommand == DEPTH) {
+      const bool maxQueued = queueCommand(String("set:max:") + String(targetMax) + "\n", false, isMotionControl);
+      queued = maxQueued && queued;
+    }
+    const bool minQueued = queueCommand(String("set:min:") + String(targetMin) + "\n", false, isMotionControl);
+    queued = minQueued && queued;
+    if (appCommand == STROKE) {
+      const bool maxQueued = queueCommand(String("set:max:") + String(targetMax) + "\n", false, isMotionControl);
+      queued = maxQueued && queued;
+    }
+  }
+
+  return queued;
 }
 
 bool bleCommIsMenu() {
