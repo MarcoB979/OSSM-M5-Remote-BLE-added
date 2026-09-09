@@ -93,10 +93,6 @@ enum SpeedBehavior {
 };
 static int s_speed_behavior_profile = SPEED_BEHAVIOR_STANDARD;
 static bool  s_stroke_influences_depth = false;
-static uint32_t s_last_speed_sync_revision = 0;
-static uint32_t s_last_motion_sync_revision = 0;
-static uint32_t s_last_sensation_sync_revision = 0;
-static uint32_t s_last_rail_sync_revision = 0;
 static uint32_t s_last_local_motion_input_ms = 0;
 static constexpr uint32_t LOCAL_MOTION_SYNC_HOLDOFF_MS = 250;
 static float s_manual_rail_length_mm = 0.0f;
@@ -616,19 +612,18 @@ static void syncHomeValuesFromOssm(bool speedDragged, bool depthDragged,
     if (!bleCommGetConfirmedValues(&confirmed)) return;
 
     const bool localInputActive = (millis() - s_last_local_motion_input_ms) < LOCAL_MOTION_SYNC_HOLDOFF_MS;
-    if (localInputActive) return;
+    if (localInputActive || speedDragged || depthDragged || strokeDragged || sensationDragged) return;
 
-    if (!speedDragged && confirmed.revision != s_last_speed_sync_revision) {
+    if (!speedDragged) {
         speed = confirmed.speed;
         if (ui_homespeedslider) {
             lv_slider_set_value(ui_homespeedslider, (int)(speed + 0.5f), LV_ANIM_OFF);
         }
-        s_last_speed_sync_revision = confirmed.revision;
     }
 
     // Depth and stroke describe one rail range, so apply them together after
     // both controls are released to avoid showing a mixed intermediate range.
-    if (!depthDragged && !strokeDragged && confirmed.revision != s_last_motion_sync_revision) {
+    if (!depthDragged && !strokeDragged) {
         depth = confirmed.depth;
         stroke = confirmed.stroke;
         minPos = confirmed.minPosition;
@@ -636,20 +631,13 @@ static void syncHomeValuesFromOssm(bool speedDragged, bool depthDragged,
         if (ui_homedepthslider) {
             lv_slider_set_value(ui_homedepthslider, (int)(depth + 0.5f), LV_ANIM_OFF);
         }
-        s_last_motion_sync_revision = confirmed.revision;
-        s_last_rail_sync_revision = confirmed.revision;
-    } else if (confirmed.revision != s_last_rail_sync_revision) {
-        minPos = confirmed.minPosition;
-        maxPos = confirmed.maxPosition;
-        if (!depthDragged && !strokeDragged) s_last_rail_sync_revision = confirmed.revision;
     }
 
-    if (!sensationDragged && confirmed.revision != s_last_sensation_sync_revision) {
+    if (!sensationDragged) {
         sensation = confirmed.sensation;
         if (ui_homesensationslider) {
             lv_slider_set_value(ui_homesensationslider, (int)sensation, LV_ANIM_OFF);
         }
-        s_last_sensation_sync_revision = confirmed.revision;
     }
 }
 
@@ -2733,7 +2721,7 @@ void handleScreens() {
                 speed += speedStep;
                 encoder1.setCount(0);
             }
-            if (speed <= 0)          { changed = true; speed = 0; }
+            if (speed < 0)           { changed = true; speed = 0; }
             if (speed > speedlimit) { changed = true; speed = speedlimit; }
             if (changed) { 
                 lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
@@ -2765,7 +2753,7 @@ void handleScreens() {
                 }
                 encoder2.setCount(0);
             }
-            if (depth <= 0)            { changed = true; depth = 0; stroke = 0; }   //here is the error
+            if (depth < 0)             { changed = true; depth = 0; stroke = 0; }
             if (depth > maxdepthinmm) { changed = true; depth = maxdepthinmm; }
             if (stroke > depth)         { changed = true; stroke = depth; }
             if (changed && (depth != prevDepth || stroke != prevStroke)) {
@@ -2795,7 +2783,7 @@ void handleScreens() {
                 stroke += invertStroke ? -strokeStep : strokeStep;
                 encoder3.setCount(0);
             }
-            if (stroke <= 0)            { changed = true; stroke = 0; }
+            if (stroke < 0)             { changed = true; stroke = 0; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
             
             if (s_stroke_influences_depth) {
@@ -2861,7 +2849,7 @@ void handleScreens() {
                 encoder4.setCount(0);
             }
             if (sensation < -100)   { changed = true; sensation = -100; }
-            if (sensation > 100) { changed = true; sensation = 100; }
+            if (sensation > 100)     { changed = true; sensation = 100; }
             if (changed) { SendCommand(SENSATION, sensation, OSSM_ID); }
         } else if (lv_slider_get_value(ui_homesensationslider) != sensation) {
             sensation = lv_slider_get_value(ui_homesensationslider);

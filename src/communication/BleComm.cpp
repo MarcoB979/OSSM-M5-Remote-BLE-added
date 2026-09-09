@@ -674,7 +674,9 @@ static bool waitForConfirmedStateUpdate(uint32_t timeoutMs, uint32_t previousUpd
 // -------------------------------------------------------
 static void blePollTask(void*) {
   for (;;) {
-    if (g_bleEnabled && bleCommIsConnected()) {
+    // A live BLE connection remains authoritative even if the transport mode
+    // briefly transitions through NONE during startup or reconnect handling.
+    if (bleCommIsConnected()) {
       if (bleReadStateOnce()) {
         ++g_pollReadOkCount;
       } else {
