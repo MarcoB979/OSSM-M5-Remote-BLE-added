@@ -13,6 +13,7 @@ void addonsActivateSelection(void);
 void addonsSyncSelectionVisual(void);
 bool addonsIsFistITEnabled(void);
 bool addonsIsEjectEnabled(void);
+bool addonsIsCoyoteEnabled(void);
 bool ejectPaired(void);
 bool FistITPaired(void);
 #ifdef __cplusplus

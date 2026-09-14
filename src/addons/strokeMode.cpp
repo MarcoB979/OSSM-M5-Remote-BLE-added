@@ -58,6 +58,10 @@ static float s_last_stroke_speed = 0.0f;
 static float s_last_stroke_depth = 0.0f;
 static float s_last_stroke = 0.0f;
 static bool  s_last_stroke_ui_ossm_state = false;
+// Suppresses syncStrokeValuesFromOssm() briefly after local input, so the
+// user's own change isn't immediately overwritten by stale confirmed state.
+static uint32_t s_last_stroke_local_input_ms = 0;
+static constexpr uint32_t STROKE_LOCAL_MOTION_SYNC_HOLDOFF_MS = 250;
 
 static int strokeRangeFromLimit(float limitValue)
 {
@@ -227,11 +231,10 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
     if (ui_StrokeSpeedSlider && lv_slider_is_dragged(ui_StrokeSpeedSlider) == false) {
         changed = false;
         lv_slider_set_value(ui_StrokeSpeedSlider, speed, LV_ANIM_OFF);
-        if (encoder1.getCount() >= 2) {
-            changed = true; speed += 1;
-            encoder1.setCount(0);
-        } else if (encoder1.getCount() <= -2) {
-            changed = true; speed -= 1;
+        const int speedStep = screenEncoderRampStep(0, encoder1.getCount());
+        if (speedStep != 0) {
+            changed = true;
+            speed += speedStep;
             encoder1.setCount(0);
         }
         if (speed < 0)          { changed = true; speed = 0; }
@@ -250,11 +253,10 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
     if (ui_StrokeStrokeSlider && lv_slider_is_dragged(ui_StrokeStrokeSlider) == false) {
         changed = false;
         lv_slider_set_value(ui_StrokeStrokeSlider, stroke, LV_ANIM_OFF);
-        if (encoder2.getCount() >= 2) {
-            changed = true; stroke += 1;
-            encoder2.setCount(0);
-        } else if (encoder2.getCount() <= -2) {
-            changed = true; stroke -= 1;
+        const int strokeStep = screenEncoderRampStep(1, encoder2.getCount());
+        if (strokeStep != 0) {
+            changed = true;
+            stroke += strokeStep;
             encoder2.setCount(0);
         }
         if (stroke <= 0.5f) {
@@ -287,11 +289,10 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
     if (ui_StrokeSensationSlider && lv_slider_is_dragged(ui_StrokeSensationSlider) == false) {
         changed = false;
         lv_slider_set_value(ui_StrokeSensationSlider, sensation, LV_ANIM_OFF);
-        if (encoder4.getCount() >= 2) {
-            changed = true; sensation += 2;
-            encoder4.setCount(0);
-        } else if (encoder4.getCount() <= -2) {
-            changed = true; sensation -= 2;
+        const int sensationStep = screenEncoderRampStep(3, encoder4.getCount());
+        if (sensationStep != 0) {
+            changed = true;
+            sensation += sensationStep * 2;
             encoder4.setCount(0);
         }
         if (sensation < -100) { changed = true; sensation = -100; }
@@ -314,7 +315,9 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
     } else if (click2_double_waspressed) {
         ejectcreampie(nullptr);
     } else if (click2_short_waspressed) {
-        pullOut(nullptr);
+        // Left button is labeled "Menu" (see T_MENU below) — it must return
+        // to the menu screen, not trigger a pull-out.
+        _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     } else if (mxclick_short_waspressed) {
         homebuttonmevent(nullptr);
     } else if (click3_short_waspressed) {

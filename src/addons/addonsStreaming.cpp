@@ -9,6 +9,7 @@
 #include "buttonhandlers/ButtonHandlers.h"
 #include "addons/Eject.h"
 #include "addons/FistIT.h"
+#include "addons/Coyote.h"
 #include "addons/AP-mode.h"
 #include "communication/BleComm.h"
 #include "communication/CommManager.h"
@@ -64,6 +65,7 @@ extern lv_obj_t *g_addon_return_screen;
 //for new addons: add a line here with the code what screen to activate when the addon is selected in the menu, and a default enabled/disabled state. The screen activation code should be a function that prepares the screen (e.g. updates slider values from current addon state) and then calls _ui_screen_change() to switch to it.
 static void activateEject()     { g_addon_return_screen = lv_scr_act(); (void)EjectTryConnectNow(); EjectPrepareScreen(); _ui_screen_change(EjectGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateFistIT()    { g_addon_return_screen = lv_scr_act(); (void)FistITTryConnectNow(); FistITPrepareScreen(); _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
+static void activateCoyote()    { g_addon_return_screen = lv_scr_act(); (void)CoyoteTryConnectNow(); CoyotePrepareScreen(); _ui_screen_change(CoyoteGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateStreaming() { _ui_screen_change(ui_Streaming,       LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateAPMode()    { g_addon_return_screen = lv_scr_act(); APModePrepareScreen(); _ui_screen_change(APModeGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 
@@ -74,6 +76,7 @@ static AddonDef s_addon_defs[] = {
     { "Fist-IT",   true, activateFistIT    },
     { "Advanced Penetration",   true, activateAPMode    },
     { "Streaming", true, activateStreaming },
+    { "Coyote",    true, activateCoyote    },
 };
 // Keep this in sync with s_addon_defs[] entries above.
 static constexpr int NUM_ADDONS = (int)(sizeof(s_addon_defs) / sizeof(s_addon_defs[0]));
@@ -81,6 +84,7 @@ static const int EJECT_ADDON_INDEX = 0;
 static const int FISTIT_ADDON_INDEX = 1;
 static const int APMODE_ADDON_INDEX = 2;
 static const int STREAMING_ADDON_INDEX = 3;
+static const int COYOTE_ADDON_INDEX = 4;
 
 static bool s_addons_manage_mode = false;  // true = visibility-management mode
 static int  s_addons_offset      = 0;      // index of first visible item in carousel
@@ -195,6 +199,8 @@ static void saveAddonEnabled(int addonIdx) {
         EjectSetAddonEnabled(enabled);
     } else if (addonIdx == FISTIT_ADDON_INDEX) {
         FistITSetAddonEnabled(enabled);
+    } else if (addonIdx == COYOTE_ADDON_INDEX) {
+        CoyoteSetAddonEnabled(enabled);
     }
 }
 
@@ -219,6 +225,17 @@ bool addonsIsEjectEnabled(void) {
     Preferences prefs;
     prefs.begin("addons", true);
     bool enabled = prefs.getBool("addon_0", s_addon_defs[EJECT_ADDON_INDEX].enabled);
+    prefs.end();
+    return enabled;
+}
+
+bool addonsIsCoyoteEnabled(void) {
+    // Read persisted value directly so this works even before Addons screen loads.
+    Preferences prefs;
+    prefs.begin("addons", true);
+    char key[12];
+    snprintf(key, sizeof(key), "addon_%d", COYOTE_ADDON_INDEX);
+    bool enabled = prefs.getBool(key, s_addon_defs[COYOTE_ADDON_INDEX].enabled);
     prefs.end();
     return enabled;
 }

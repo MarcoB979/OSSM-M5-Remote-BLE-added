@@ -29,6 +29,20 @@ static const char* ADVANCED_CONFIG_CHAR_UUID = "4F53534D-6164-7661-6E63-6564636F
 static const char* ADVANCED_CONTROL_CHAR_UUID = "4F53534D-6164-7661-6E63-6564636F6E74";
 static const char* ADVANCED_PRESETS_CHAR_UUID = "4F53534D-6164-7661-6E63-656470727374";
 
+// New OSSM service (4f53534d-0000-...): individual setpoint and live
+// per-stroke telemetry characteristics (mirrors OSSM src/services/
+// communication/nimble.h).
+static const char* OSSM_NEW_SERVICE_UUID = "4f53534d-0000-0000-0000-000000000000";
+static const char* OSSM_SPEED_CHAR_UUID = "4f53534d-436f-6d6d-6f6e-005370656564";
+static const char* OSSM_MAXDEP_CHAR_UUID = "4f53534d-436f-6d6d-6f6e-4d6178446570";
+static const char* OSSM_MINDEP_CHAR_UUID = "4f53534d-436f-6d6d-6f6e-4d696e446570";
+static const char* OSSM_SENSAT_CHAR_UUID = "4f53534d-456e-6769-6e65-536174696f6e";
+static const char* OSSM_SENPAT_CHAR_UUID = "4f53534d-456e-6769-6e65-50617465726e";
+static const char* OSSM_STATE_CHAR_UUID = "4f53534d-5374-6174-654d-616368696e65";
+static const char* OSSM_STRPOS_CHAR_UUID = "4f53534d-456e-6769-6e65-537472506f73";
+static const char* OSSM_STRSPD_CHAR_UUID = "4f53534d-456e-6769-6e65-537472537064";
+static const char* OSSM_STRACC_CHAR_UUID = "4f53534d-456e-6769-6e65-537472416363";
+
 static constexpr uint32_t BLE_STATE_POLL_MS = 20;
 static constexpr uint32_t STATE_FRESH_TIMEOUT_MS = 1200;
 
@@ -54,6 +68,15 @@ static NimBLERemoteCharacteristic* g_adv_status = nullptr;
 static NimBLERemoteCharacteristic* g_adv_config = nullptr;
 static NimBLERemoteCharacteristic* g_adv_control = nullptr;
 static NimBLERemoteCharacteristic* g_adv_presets = nullptr;
+static NimBLERemoteCharacteristic* g_speed = nullptr;
+static NimBLERemoteCharacteristic* g_maxDep = nullptr;
+static NimBLERemoteCharacteristic* g_minDep = nullptr;
+static NimBLERemoteCharacteristic* g_sensation = nullptr;
+static NimBLERemoteCharacteristic* g_pattern = nullptr;
+static NimBLERemoteCharacteristic* g_stateName = nullptr;
+static NimBLERemoteCharacteristic* g_railPos = nullptr;
+static NimBLERemoteCharacteristic* g_strokeSpeed = nullptr;
+static NimBLERemoteCharacteristic* g_railAccel = nullptr;
 static SemaphoreHandle_t g_bleMutex = nullptr;
 static SemaphoreHandle_t g_modeReadyMutex = nullptr;
 static TaskHandle_t g_mainTaskHandle = nullptr;
@@ -76,6 +99,7 @@ static String g_machineStateName;
 static uint32_t g_lastStateUpdateMs = 0;
 static uint32_t g_lastPollInfoMs = 0;
 static uint32_t g_lastRawStateLogMs = 0;
+static uint32_t g_lastTelemetryLogMs = 0;
 static uint32_t g_pollReadOkCount = 0;
 static uint32_t g_pollReadFailCount = 0;
 static float g_unpauseSpeed = 0.0f;
@@ -94,6 +118,9 @@ struct ConfirmedMachineState {
   float pattern = 0.0f;
   float minPosition = 0.0f;
   float maxPosition = 100.0f;
+  float railPos = -1.0f;      // Live per-stroke rail position (% of travel), from OSSM telemetry
+  float strokeSpeed = -1.0f;  // Live per-stroke cruise speed (% of max), from OSSM telemetry
+  float railAccel = -1.0f;    // Acceleration used to reach strokeSpeed (% of max), from OSSM telemetry
   uint32_t revision = 0;
 };
 
@@ -203,6 +230,15 @@ static void bleResetClient() {
   g_adv_config = nullptr;
   g_adv_control = nullptr;
   g_adv_presets = nullptr;
+  g_speed = nullptr;
+  g_maxDep = nullptr;
+  g_minDep = nullptr;
+  g_sensation = nullptr;
+  g_pattern = nullptr;
+  g_stateName = nullptr;
+  g_railPos = nullptr;
+  g_strokeSpeed = nullptr;
+  g_railAccel = nullptr;
 
   if (!g_client) return;
 
@@ -391,6 +427,31 @@ static void stateNotify(NimBLERemoteCharacteristic*, uint8_t* data, size_t len, 
   if (!data || len == 0) return;
   String s((const char*)data, len);
   updateCachedMachineState(s);
+}
+
+// Shared handler for the new OSSM service's numeric characteristics. Each
+// notification carries a single value that maps straight onto one cached
+// field. The legacy JSON state path remains the fallback for everything
+// else (state name, buffer, etc.) and for the OSSM_On side effects.
+static void numericNotify(NimBLERemoteCharacteristic* chr, uint8_t* data, size_t len, bool) {
+  if (!chr || !data || len == 0) return;
+  const float value = String((const char*)data, len).toFloat();
+  const NimBLEUUID uuid = chr->getUUID();
+  if (uuid == NimBLEUUID(OSSM_SPEED_CHAR_UUID))       g_confirmedState.speed = value;
+  else if (uuid == NimBLEUUID(OSSM_MAXDEP_CHAR_UUID)) g_confirmedState.maxPosition = value;
+  else if (uuid == NimBLEUUID(OSSM_MINDEP_CHAR_UUID)) g_confirmedState.minPosition = value;
+  else if (uuid == NimBLEUUID(OSSM_SENSAT_CHAR_UUID)) g_confirmedState.sensation = value;
+  else if (uuid == NimBLEUUID(OSSM_SENPAT_CHAR_UUID)) g_confirmedState.pattern = value;
+  else if (uuid == NimBLEUUID(OSSM_STRPOS_CHAR_UUID)) g_confirmedState.railPos = value;
+  else if (uuid == NimBLEUUID(OSSM_STRSPD_CHAR_UUID)) g_confirmedState.strokeSpeed = value;
+  else if (uuid == NimBLEUUID(OSSM_STRACC_CHAR_UUID)) g_confirmedState.railAccel = value;
+}
+
+static void stateNameNotify(NimBLERemoteCharacteristic*, uint8_t* data, size_t len, bool) {
+  if (!data || len == 0) return;
+  String s((const char*)data, len);
+  g_machineStateName = s;
+  g_machineMode = parseMachineMode(s);
 }
 
 // -------------------------------------------------------
@@ -686,12 +747,13 @@ static void blePollTask(void*) {
     if (bleCommIsConnected()) {
       if (bleReadStateOnce()) {
         ++g_pollReadOkCount;
-      } else {
+
+              } else {
         ++g_pollReadFailCount;
       }
     }
 
-    /*{
+    /*if (ShowBleRawState) {
       const uint32_t now = millis();
       if ((now - g_lastRawStateLogMs) >= 1000U) {
         if (g_confirmedState.raw.length() > 0) {
@@ -735,6 +797,27 @@ static void blePollTask(void*) {
           speedlimit);
         g_lastPollInfoMs = now;
       }
+    #endif
+
+    #ifdef SHOW_TELEMETRY
+    {
+      const uint32_t now = millis();
+      if ((now - g_lastTelemetryLogMs) >= 1000) {
+        g_lastTelemetryLogMs = now;
+        LogDebugFormatted(
+          "[TELEM] %s speed=%.1f min=%.1f max=%.1f sens=%.1f pat=%.0f rail=%.1f/%.1f/%.1f fresh=%d\n",
+          g_machineStateName.length() ? g_machineStateName.c_str() : "-",
+          g_confirmedState.speed,
+          g_confirmedState.minPosition,
+          g_confirmedState.maxPosition,
+          g_confirmedState.sensation,
+          g_confirmedState.pattern,
+          g_confirmedState.railPos,
+          g_confirmedState.strokeSpeed,
+          g_confirmedState.railAccel,
+          hasFreshState() ? 1 : 0);
+      }
+    }
     #endif
 
     vTaskDelay(pdMS_TO_TICKS(BLE_STATE_POLL_MS));
@@ -949,6 +1032,16 @@ bool bleCommTryConnect() {
     if (!g_adv_config) g_adv_config = service->getCharacteristic(NimBLEUUID(ADVANCED_CONFIG_CHAR_UUID));
     if (!g_adv_control) g_adv_control = service->getCharacteristic(NimBLEUUID(ADVANCED_CONTROL_CHAR_UUID));
     if (!g_adv_presets) g_adv_presets = service->getCharacteristic(NimBLEUUID(ADVANCED_PRESETS_CHAR_UUID));
+
+    if (!g_speed) g_speed = service->getCharacteristic(NimBLEUUID(OSSM_SPEED_CHAR_UUID));
+    if (!g_maxDep) g_maxDep = service->getCharacteristic(NimBLEUUID(OSSM_MAXDEP_CHAR_UUID));
+    if (!g_minDep) g_minDep = service->getCharacteristic(NimBLEUUID(OSSM_MINDEP_CHAR_UUID));
+    if (!g_sensation) g_sensation = service->getCharacteristic(NimBLEUUID(OSSM_SENSAT_CHAR_UUID));
+    if (!g_pattern) g_pattern = service->getCharacteristic(NimBLEUUID(OSSM_SENPAT_CHAR_UUID));
+    if (!g_stateName) g_stateName = service->getCharacteristic(NimBLEUUID(OSSM_STATE_CHAR_UUID));
+    if (!g_railPos) g_railPos = service->getCharacteristic(NimBLEUUID(OSSM_STRPOS_CHAR_UUID));
+    if (!g_strokeSpeed) g_strokeSpeed = service->getCharacteristic(NimBLEUUID(OSSM_STRSPD_CHAR_UUID));
+    if (!g_railAccel) g_railAccel = service->getCharacteristic(NimBLEUUID(OSSM_STRACC_CHAR_UUID));
   }
 
   if (!g_cmd || !g_cmd->canWrite()) {
@@ -965,6 +1058,23 @@ bool bleCommTryConnect() {
   if (g_state && g_state->canNotify()) {
     g_state->subscribe(true, stateNotify);
   }
+
+  // New OSSM service: subscribe to the individual setpoint and live
+  // telemetry characteristics. Best effort — older OSSM firmware may not
+  // expose all of them.
+  auto subscribeNumeric = [](NimBLERemoteCharacteristic* chr) {
+    if (chr && chr->canNotify()) chr->subscribe(true, numericNotify);
+  };
+  subscribeNumeric(g_speed);
+  subscribeNumeric(g_maxDep);
+  subscribeNumeric(g_minDep);
+  subscribeNumeric(g_sensation);
+  subscribeNumeric(g_pattern);
+  subscribeNumeric(g_railPos);
+  subscribeNumeric(g_strokeSpeed);
+  subscribeNumeric(g_railAccel);
+  if (g_stateName && g_stateName->canNotify()) g_stateName->subscribe(true, stateNameNotify);
+
   g_lastStateUpdateMs = 0;
   const bool stateOk = bleReadStateOnce();
   logAdvancedSnapshotOnConnect();
@@ -1000,8 +1110,10 @@ bool bleCommGetConfirmedValues(BleConfirmedValues* outValues) {
   if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
   outValues->revision = g_confirmedState.revision;
   outValues->speed = g_confirmedState.speed;
-  outValues->depth = g_confirmedState.depth;
-  outValues->stroke = g_confirmedState.stroke;
+  // Depth and stroke follow the OSSM min/max model: depth == maxPosition and
+  // stroke is the travel range between the two, never read from the wire.
+  outValues->depth = g_confirmedState.maxPosition;
+  outValues->stroke = g_confirmedState.maxPosition - g_confirmedState.minPosition;
   outValues->sensation = (g_confirmedState.sensation * 2.0f) - 100.0f;
   outValues->pattern = (int)(g_confirmedState.pattern + 0.5f);
   outValues->minPosition = g_confirmedState.minPosition;
@@ -1012,6 +1124,18 @@ bool bleCommGetConfirmedValues(BleConfirmedValues* outValues) {
 
 bool bleCommIsHoming() {
   return hasFreshState() && g_machineMode == MachineMode::Homing;
+}
+
+
+bool bleCommGetRailTelemetry(BleRailTelemetry* outValues) {
+  if (!outValues || !g_confirmedState.valid || !hasFreshState()) return false;
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  outValues->railPos = g_confirmedState.railPos;
+  outValues->strokeSpeed = g_confirmedState.strokeSpeed;
+  outValues->railAccel = g_confirmedState.railAccel;
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+  return true;
 }
 
 int bleCommGetHomingDirection() {

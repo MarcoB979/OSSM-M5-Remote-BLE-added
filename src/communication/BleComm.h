@@ -17,11 +17,14 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
                            float currentDepth, float currentStroke,
                            float maxDepthMm, float maxSpeedValue);
 
+                           // Thread-safe BLE mutex access for cross-client operation synchronization
+
 // State-machine polling helpers
 void bleCommSetEnabled(bool enabled);
 bool bleCommIsEnabled();
 bool bleCommIsHoming();
 bool bleCommHasFreshState();
+void bleCommUnlock();
 
 // Latest confirmed values reported by OSSM. The BLE task owns the cache;
 // callers receive a consistent snapshot for use on the UI task.
@@ -36,6 +39,16 @@ struct BleConfirmedValues {
     float maxPosition;
 };
 bool bleCommGetConfirmedValues(BleConfirmedValues* outValues);
+
+// Live per-stroke rail telemetry (position/speed/acceleration), updated once
+// per stroke by the OSSM's StrokeEngine telemetry callback. Returns false if
+// no fresh state has been received yet. See OSSM_STROKE_TELEMETRY_PR.md.
+struct BleRailTelemetry {
+    float railPos = -1.0f;      // % of travel
+    float strokeSpeed = -1.0f;  // % of max speed
+    float railAccel = -1.0f;    // % of max acceleration
+};
+bool bleCommGetRailTelemetry(BleRailTelemetry* outValues);
 
 int bleCommGetHomingDirection();
 float bleCommGetConfirmedPosition();

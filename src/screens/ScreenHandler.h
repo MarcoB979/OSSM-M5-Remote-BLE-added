@@ -24,10 +24,12 @@ typedef enum NotificationResult {
 #define ST_UI_FISTIT        18
 #define ST_UI_APMODE        19
 #define ST_UI_SETTINGS      20
+#define ST_UI_COYOTE        21
 
 // ---- Shared screen state (defined in ScreenHandler.cpp) ----
 extern int   st_screens;
 extern float speed, depth, stroke, sensation;
+extern float minPos, maxPos;
 extern float minPos, maxPos;
 extern float torqe_f, torqe_r;
 extern int   pattern;
@@ -64,6 +66,9 @@ void enterDeepSleep();
 void screen_power_tick();
 void ResetButtons();
 void resetEncoderCounts();
+// Maps a raw encoder tick count to a ramped step size (1-6) based on the
+// user's Encoder ramp profile and turn speed; shared by Home and Stroke.
+int screenEncoderRampStep(int encoderIndex, long count);
 // ---- Notification overlay ----
 #ifdef __cplusplus
 int showNotification(const char *title,

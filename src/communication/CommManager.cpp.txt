@@ -2,7 +2,6 @@
 
 #include "../addons/Eject.h"
 #include "../addons/FistIT.h"
-#include "../addons/Coyote.h"
 #include "../addons/addonsStreaming.h"
 #include "BleComm.h"
 #include "../config/config_ids.h"
@@ -59,14 +58,7 @@ static void tryConnectBleAddonsFromStart()
     FistITSetAddonEnabled(false);
   }
 
-  if (addonsIsCoyoteEnabled()) {
-    CoyoteSetAddonEnabled(true);
-    if (CoyoteTryConnectNow()) {
-      LogDebug("Coyote addon connected over BLE from Start flow");
-    }
-  } else {
-    CoyoteSetAddonEnabled(false);
-  }
+  
 }
 
 static void tryPreloadBlePatternCatalogOnce()

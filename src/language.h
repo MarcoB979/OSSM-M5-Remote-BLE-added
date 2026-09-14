@@ -137,6 +137,16 @@
 #define T_ENABLEDISABLE           "Show/Hide"
 #define T_SHOWALL                 "Show All"
 
+// Coyote (estim) screen
+#define T_COYOTE_SCREEN           "Coyote"
+#define T_COYOTE_FREQUENCY        "Frequency"
+#define T_COYOTE_INTENSITY        "Intensity"
+#define T_COYOTE_SENSATION        "Sensation"
+#define T_COYOTE_CHANNEL          "Channel(s)"
+#define T_COYOTE_SPEED_SENS       "Speed Sens."
+#define T_COYOTE_ACCEL_SENS       "Accel Sens."
+#define T_PAIR                    "Pair"
+
 //AP_Mode screen
 #define T_APMODE                  "AP Mode"
 #define T_FALLBACK                "Fallback"
@@ -149,5 +159,6 @@
 // disconnect warnings
 #define T_BLE_COMM_ERROR_TITLE   "BLE COMMUNICATION ERROR"
 #define T_BLE_COMM_ERROR_TEXT    "The BLE Communication with OSSM has failed.\nPlease restart or turn off your M5 remote."
-#define T_SHUTDOWN_SLEEP_TITLE       "Shutting down"
-#define T_SHUTDOWN_SLEEP_TEXT        "The M5 remote is shutting down.\nPress cancel to abort."
+#define T_SHUTDOWN_SLEEP_TITLE   "Shutting down"
+#define T_SHUTDOWN_SLEEP_TEXT    "The M5 remote is shutting down.\nPress cancel to abort."
+#define T_RECONNECT              "Re-connect"

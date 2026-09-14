@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../../OSSM_OFFICIAL/OSSM-Lite_Multiple_BLE-kopie/Software"
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"functional": "cpp",
+			"m5core2.h": "c",
+			"string": "cpp"
+		}
+	}
+}

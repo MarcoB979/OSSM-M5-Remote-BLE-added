@@ -12,6 +12,7 @@
 #include "buttonhandlers/ButtonHandlers.h"
 #include "addons/Eject.h"
 #include "addons/FistIT.h"
+#include "addons/Coyote.h"
 #include "addons/AP-mode.h"
 #include "addons/addonsStreaming.h"
 #include "communication/CommManager.h"
@@ -43,6 +44,7 @@ void setup(){
   bleCommRegisterMainTask();
   EjectSetAddonEnabled(addonsIsEjectEnabled());
   FistITSetAddonEnabled(addonsIsFistITEnabled());
+  CoyoteSetAddonEnabled(addonsIsCoyoteEnabled());
   APModeSetAddonEnabled(true);
   commInit();
   displayInit();  // display, LVGL, touchpad
@@ -69,6 +71,7 @@ void loop()
   //LogDebug("Button2 tick done");
   Button3.tick();
   //LogDebug("Button3 tick done");
+  CoyoteBackgroundTick();
   handleScreens();
   //LogDebug("handleScreens done");
   delay(5);

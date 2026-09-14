@@ -13,6 +13,7 @@
 #include "../buttonhandlers/ButtonHandlers.h"
 #include "../addons/Eject.h"
 #include "../addons/FistIT.h"
+#include "../addons/Coyote.h"
 #include "../addons/AP-mode.h"
 #include "../addons/addonsStreaming.h"
 #include "../communication/CommManager.h"
@@ -79,6 +80,10 @@ static bool  s_motion_command_cache_valid = false;
 static float s_last_motion_speed = 0.0f;
 static float s_last_motion_depth = 0.0f;
 static float s_last_motion_stroke = 0.0f;
+// Suppresses syncHomeValuesFromOssm() briefly after local input, so the
+// user's own change isn't immediately overwritten by not-yet-updated confirmed state.
+static uint32_t s_last_local_motion_input_ms = 0;
+static constexpr uint32_t LOCAL_MOTION_SYNC_HOLDOFF_MS = 250;
 static bool  s_zero_stroke_depth_jog_active = false;
 static float s_zero_stroke_depth_target = 0.0f;
 static int   s_zero_stroke_depth_direction = 0;
@@ -93,8 +98,6 @@ enum SpeedBehavior {
 };
 static int s_speed_behavior_profile = SPEED_BEHAVIOR_STANDARD;
 static bool  s_stroke_influences_depth = false;
-static uint32_t s_last_local_motion_input_ms = 0;
-static constexpr uint32_t LOCAL_MOTION_SYNC_HOLDOFF_MS = 250;
 static float s_manual_rail_length_mm = 0.0f;
 static bool s_home_speed_ramp_active = false;
 static int s_home_speed_ramp_current = 0;
@@ -201,15 +204,22 @@ static uint32_t s_encoder_last_step_ms[4] = {0, 0, 0, 0};
 static constexpr uint32_t ENCODER_RAMP_MEDIUM_MS = 120;
 static constexpr uint32_t ENCODER_RAMP_FAST_MS = 45;
 
-static int homeStepFromEncoderCount(int encoderIndex, long count)
+int screenEncoderRampStep(int encoderIndex, long count)
 {
     if (encoderIndex < 0 || encoderIndex >= 4) return 0;
 
+    // ESP32Encoder attachHalfQuad() reports 2 raw counts per mechanical detent.
+    // Convert to whole detents first so a fast flick that accumulates several
+    // detents between loop iterations (loop() only polls every few ms) is
+    // never silently dropped — only the *ramp multiplier* below depends on
+    // timing, the base detent count is always honored in full.
+    static constexpr long COUNTS_PER_DETENT = 2;
     const long magnitude = labs(count);
-    if (magnitude < 2) return 0;
+    const long detents = magnitude / COUNTS_PER_DETENT;
+    if (detents < 1) return 0;
 
     if (s_encoder_ramp_profile == ENCODER_RAMP_NONE) {
-        return (count > 0) ? 1 : -1;
+        return (count > 0) ? (int)detents : -(int)detents;
     }
 
     const uint32_t nowMs = millis();
@@ -217,29 +227,29 @@ static int homeStepFromEncoderCount(int encoderIndex, long count)
     const uint32_t elapsedMs = (lastMs == 0U) ? UINT32_MAX : (nowMs - lastMs);
     s_encoder_last_step_ms[encoderIndex] = nowMs;
 
-    int step = 1;
+    int multiplier = 1;
     if (elapsedMs <= ENCODER_RAMP_FAST_MS) {
         if (s_encoder_ramp_profile == ENCODER_RAMP_MEDIUM) {
-            step = 3;
+            multiplier = 3;
         } else if (s_encoder_ramp_profile == ENCODER_RAMP_HIGH) {
-            step = 4;
+            multiplier = 4;
         } else if (s_encoder_ramp_profile == ENCODER_RAMP_AGGRESSIVE) {
-            step = 6;
+            multiplier = 6;
         }
     } else if (elapsedMs <= ENCODER_RAMP_MEDIUM_MS) {
         if (s_encoder_ramp_profile == ENCODER_RAMP_MEDIUM) {
-            step = 2;
+            multiplier = 2;
         } else if (s_encoder_ramp_profile == ENCODER_RAMP_HIGH) {
-            step = 3;
+            multiplier = 3;
         } else if (s_encoder_ramp_profile == ENCODER_RAMP_AGGRESSIVE) {
-            step = 4;
+            multiplier = 4;
         }
     }
 
-    if (step < 1) step = 1;
-    if (step > 6) step = 6;
+    long step = detents * multiplier;
+    if (step > 24) step = 24;
 
-    return (count > 0) ? step : -step;
+    return (count > 0) ? (int)step : -(int)step;
 }
 
 static constexpr int EJECT_ICON_W = 14;
@@ -250,6 +260,8 @@ static constexpr int HOME_ICON_W = 18;
 static constexpr int HOME_ICON_H = 22;
 static constexpr int ESP_ICON_W = 21;
 static constexpr int ESP_ICON_H = 18;
+static constexpr int COYOTE_ICON_W = 20;
+static constexpr int COYOTE_ICON_H = 20;
 
 static const char* const EJECT_ICON_MASK[EJECT_ICON_H] = {
 "...###.........",
@@ -342,6 +354,54 @@ static const char* const ESP_ICON_MASK[ESP_ICON_H] = {
 "......#########......"
 };
 
+// Simple lightning-bolt glyph for the Coyote (e-stim) status icon.
+static const char* const COYOTE_ICON_MASK[COYOTE_ICON_H] = {
+ ".......######.......",
+ ".....##......##.....",
+ "...##..#....#..##...",
+ "..#...##....##...#..",
+ ".#....###..###....#.",
+ "#....##########...#.",
+ "#....##########...#.",
+ "#....#.######.#...#.",
+ "#...##..####..##..#.",
+ "#...##...##...##..#.",
+ "#...###......###..#.",
+ "#....###..##.###..#.",
+ "#....##########...#.",
+ "#......######.....#.",
+ ".#......####.....#..",
+ "..#......##.....#...",
+ "...##..........##...",
+ ".....##......##.....",
+ ".......######.......",
+ "...................."
+};
+
+// Simple lightning-bolt glyph for the Coyote (e-stim) status icon.
+static const char* const COYOTE_ON_ICON_MASK[COYOTE_ICON_H] = {
+ "....................",
+ "......########......",
+ "....###.####.###....",
+ "..####..####..####..",
+ ".#####...##...#####.",
+ "#####..........#####",
+ "#####..........#####",
+ "#####.#......#.#####",
+ "####..##....##..####",
+ "####..###..###..####",
+ "####...######...####",
+ "#####...##..#...####",
+ "#####..........#####",
+ "#######......#######",
+ ".#######....#######.",
+ "..#######..#######..",
+ "....############....",
+ "......########......",
+ "....................",
+ "...................."
+};
+
 
 // -------------------------------------------------------
 // Status Strip Rendering Helpers
@@ -399,14 +459,36 @@ static lv_obj_t* createStatusHomeIcon(lv_obj_t* parent) {
     return icon;
 }
 
+static lv_obj_t* createStatusCoyoteIcon(lv_obj_t* parent) {
+    static uint8_t iconBuffer[LV_CANVAS_BUF_SIZE(32, 32, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+    static bool iconReady = false;
+    lv_obj_t* icon = createStatusIconBase(parent, COYOTE_ICON_W, COYOTE_ICON_H);
+    if (!icon) return nullptr;
+    icons_render_mask_canvas(icon, iconBuffer, iconReady, COYOTE_ICON_MASK, COYOTE_ICON_W, COYOTE_ICON_H,
+                             getActiveBackgroundColor(), getActiveTextPrimaryColor());
+    return icon;
+}
+
+static lv_obj_t* createStatusCoyoteOnIcon(lv_obj_t* parent) {
+    static uint8_t iconBuffer[LV_CANVAS_BUF_SIZE(32, 32, 32, LV_DRAW_BUF_STRIDE_ALIGN)];
+    static bool iconReady = false;
+    lv_obj_t* icon = createStatusIconBase(parent, COYOTE_ICON_W, COYOTE_ICON_H);
+    if (!icon) return nullptr;
+    icons_render_mask_canvas(icon, iconBuffer, iconReady, COYOTE_ON_ICON_MASK, COYOTE_ICON_W, COYOTE_ICON_H,
+                             getActiveBackgroundColor(), getActiveTextPrimaryColor());
+    return icon;
+}
+
 
 static void updateStatusStrip() {
-    static lv_obj_t* statusLabels[12] = { nullptr };
-    static lv_obj_t* statusEjectIcons[12] = { nullptr };
-    static lv_obj_t* statusFistIcons[12] = { nullptr };
-    static lv_obj_t* statusHomeIcons[12] = { nullptr };
-    static lv_obj_t* statusESPIcons[12] = { nullptr };
-    lv_obj_t* statusScreens[12] = {
+    static lv_obj_t* statusLabels[13] = { nullptr };
+    static lv_obj_t* statusEjectIcons[13] = { nullptr };
+    static lv_obj_t* statusFistIcons[13] = { nullptr };
+    static lv_obj_t* statusHomeIcons[13] = { nullptr };
+    static lv_obj_t* statusESPIcons[13] = { nullptr };
+    static lv_obj_t* statusCoyoteIcons[13] = { nullptr };
+    static lv_obj_t* statusCoyoteOnIcons[13] = { nullptr };
+    lv_obj_t* statusScreens[13] = {
         ui_Start,
         ui_Home,
         ui_Pattern,
@@ -419,9 +501,10 @@ static void updateStatusStrip() {
         ui_FistIT,
         ui_Stroke,
         APModeGetScreen(),
+        ui_Coyote,
     };
 
-    for (size_t i = 0; i < 12; ++i) {
+    for (size_t i = 0; i < 13; ++i) {
         if (statusLabels[i] != nullptr) continue;
         if (statusScreens[i] == nullptr) continue;
 
@@ -453,6 +536,12 @@ static void updateStatusStrip() {
         if (statusHomeIcons[i] == nullptr) {
             statusHomeIcons[i] = createStatusHomeIcon(statusScreens[i]);
         }
+        if (statusCoyoteIcons[i] == nullptr) {
+            statusCoyoteIcons[i] = createStatusCoyoteIcon(statusScreens[i]);
+        }
+        if (statusCoyoteOnIcons[i] == nullptr) {
+            statusCoyoteOnIcons[i] = createStatusCoyoteOnIcon(statusScreens[i]);
+        }
     }
 
     char labelText[48];
@@ -482,7 +571,9 @@ static void updateStatusStrip() {
 
     const bool ejectPaired = EjectIsPaired();
     const bool fistPaired = FistITIsPaired();
-    for (size_t i = 0; i < 12; ++i) {
+    const bool coyotePaired = CoyoteIsPaired();
+    const bool coyoteOn = CoyoteIsOn();
+    for (size_t i = 0; i < 13; ++i) {
         lv_obj_t* label = statusLabels[i];
         if (label == nullptr) continue;
 
@@ -521,6 +612,30 @@ static void updateStatusStrip() {
                 iconX += lv_obj_get_width(statusEjectIcons[i]) + 2;
             } else {
                 lv_obj_add_flag(statusEjectIcons[i], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+
+        if (statusCoyoteIcons[i] != nullptr) {
+            lv_obj_set_align(statusCoyoteIcons[i], LV_ALIGN_LEFT_MID);
+            lv_obj_set_x(statusCoyoteIcons[i], iconX);
+            lv_obj_set_y(statusCoyoteIcons[i], -102);
+            if (coyotePaired && !coyoteOn) {
+                lv_obj_clear_flag(statusCoyoteIcons[i], LV_OBJ_FLAG_HIDDEN);
+                iconX += lv_obj_get_width(statusCoyoteIcons[i]) + 2;
+            } else {
+                lv_obj_add_flag(statusCoyoteIcons[i], LV_OBJ_FLAG_HIDDEN);
+            }
+        }
+
+        if (statusCoyoteOnIcons[i] != nullptr) {
+            lv_obj_set_align(statusCoyoteOnIcons[i], LV_ALIGN_LEFT_MID);
+            lv_obj_set_x(statusCoyoteOnIcons[i], iconX);
+            lv_obj_set_y(statusCoyoteOnIcons[i], -102);
+            if (coyoteOn) {
+                lv_obj_clear_flag(statusCoyoteOnIcons[i], LV_OBJ_FLAG_HIDDEN);
+                iconX += lv_obj_get_width(statusCoyoteOnIcons[i]) + 2;
+            } else {
+                lv_obj_add_flag(statusCoyoteOnIcons[i], LV_OBJ_FLAG_HIDDEN);
             }
         }
 
@@ -606,6 +721,13 @@ static void syncHomeSensationSliderToTransport() {
     if (sensation > desiredMax) sensation = (float)desiredMax;
     lv_slider_set_value(ui_homesensationslider, (int)sensation, LV_ANIM_OFF);
 }
+
+// Pulls the OSSM-confirmed state (as last reported over BLE, regardless of
+// which physically-connected M5 remote caused the change) into the Home
+// screen's local UI state — this is what keeps multiple remotes in sync.
+// Skipped per-control while that control is being actively driven locally
+// (dragged or mid-encoder-turn), and briefly after local input settles, so
+// the user's own edit is never stomped by stale confirmed state.
 static void syncHomeValuesFromOssm(bool speedDragged, bool depthDragged,
                                    bool strokeDragged, bool sensationDragged) {
     BleConfirmedValues confirmed{};
@@ -618,6 +740,7 @@ static void syncHomeValuesFromOssm(bool speedDragged, bool depthDragged,
         if (confirmed.speed > 0.5f) {
             bleCommSetUnpauseSpeed(confirmed.speed);
             speed = confirmed.speed;
+            s_last_motion_speed = speed;
         } else {
             // OSSM reports zero while paused, but keep the configured speed
             // visible so MX can resume the same speed without a UI jump.
@@ -1958,6 +2081,8 @@ void screenmachine(lv_event_t * e) {
 //            resetEncoderCounts();
 //        }
         st_screens = ST_UI_FISTIT;
+    } else if (lv_scr_act() == ui_Coyote) {
+        st_screens = ST_UI_COYOTE;
     } else if (APModeOwnsActiveScreen()) {
 //        if (st_screens != ST_UI_APMODE) {
 //            resetEncoderCounts();
@@ -2035,12 +2160,7 @@ void pullOut(lv_event_t * e) {
         speed = 20;
         SendCommand(SPEED, speed, OSSM_ID);
     }
-    // The pull-out notification is modal. Avoid division by zero when OSSM is
-    // already stopped, and cap the wait so a low speed cannot trap the UI.
-    const float pullOutSpeed = (speed > 0.1f) ? speed : 20.0f;
-    int speed_time = (int)(5000.0f * (20.0f / pullOutSpeed));
-    if (speed_time < 1000) speed_time = 1000;
-    if (speed_time > 15000) speed_time = 15000;
+    int speed_time = (5000*(20/speed));
     SendCommand(DEPTH, 0, OSSM_ID);
     SendCommand(STROKE, 0.1, OSSM_ID); // set a tiny stroke to ensure we exit the stroke pattern if active
     speed = 0;
@@ -2201,13 +2321,7 @@ void homebuttonmevent(lv_event_t * e) {
     LogDebug("HomeButton");
         SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
     if (OSSM_On == false) {
-        if (speed <= 0.0f) {
-            speed = (float)bleCommGetUnpauseSpeed();
-            if (speed > 0.0f && ui_homespeedslider) {
-                lv_slider_set_value(ui_homespeedslider, (int)(speed + 0.5f), LV_ANIM_OFF);
-            }
-        }
-        if (speed <= 0.0f || stroke <= 0.0f || depth <= 0.0f) return;
+        if (speed == 0 || stroke == 0 || depth == 0) return;
         applyHomeButtonMState(T_STOP, &style_button_running, &style_button_running_pressed);
         lv_refr_now(NULL);
         const float startCommandedSpeed = resolveVisualCompensatedSpeed(speed, stroke);
@@ -2517,13 +2631,14 @@ static void checkBleDisconnectError()
         T_BLE_COMM_ERROR_TEXT,
         0,      // no auto-dismiss
         true,   T_RESTART,
-        true,   T_TURN_OFF,
+        true,   T_RECONNECT,
         false);
 
     if (result == NOTIFICATION_RESULT_LEFT) {
         esp_restart();
     } else if (result == NOTIFICATION_RESULT_RIGHT) {
-        M5.Power.powerOff();
+        //M5.Power.powerOff();
+        connectbutton(nullptr);
     }
     // If neither button was pressed (shouldn't happen), fall through —
     // s_notification_shown stays true so we don't spam the notification.
@@ -2551,13 +2666,17 @@ static void serviceAddonBackgroundConnect()
         if (addonsIsEjectEnabled() && !EjectIsPaired()) {
             (void)EjectTryConnectBackground();
         }
-    } else {
+    } else if (s_probe_slot == 1) {
         if (addonsIsFistITEnabled() && !FistITIsPaired()) {
             (void)FistITTryConnectBackground();
         }
+    } else {
+        if (addonsIsCoyoteEnabled() && !CoyoteIsPaired()) {
+            (void)CoyoteTryConnectBackground();
+        }
     }
 
-    s_probe_slot ^= 1U;
+    s_probe_slot = (uint8_t)((s_probe_slot + 1U) % 3U);
 }
 
 // -------------------------------------------------------
@@ -2625,6 +2744,7 @@ void handleScreens() {
         static bool s_prev_ble_connected = false;
         static bool s_prev_eject_paired = false;
         static bool s_prev_fist_paired = false;
+        static bool s_prev_coyote_on = false;
         static bool s_prev_homing = false;
         static int  s_prev_homing_dir = 0;
         static uint32_t s_last_status_refresh_ms = 0;
@@ -2632,6 +2752,7 @@ void handleScreens() {
         const bool bleConnected = bleCommIsConnected();
         const bool ejectPaired = EjectIsPaired();
         const bool fistPaired = FistITIsPaired();
+        const bool coyoteOn = CoyoteIsOn();
         const bool isHoming = bleCommIsHoming();
         const int homingDir = isHoming ? bleCommGetHomingDirection() : 0;
         const uint32_t nowMs = millis();
@@ -2644,6 +2765,7 @@ void handleScreens() {
         if (bleConnected != s_prev_ble_connected ||
             ejectPaired != s_prev_eject_paired ||
             fistPaired != s_prev_fist_paired ||
+            coyoteOn != s_prev_coyote_on ||
             isHoming != s_prev_homing ||
             homingDir != s_prev_homing_dir) {
             g_status_strip_refresh_requested = true;
@@ -2656,6 +2778,7 @@ void handleScreens() {
             s_prev_ble_connected = bleConnected;
             s_prev_eject_paired = ejectPaired;
             s_prev_fist_paired = fistPaired;
+            s_prev_coyote_on = coyoteOn;
             s_prev_homing = isHoming;
             s_prev_homing_dir = homingDir;
         }
@@ -2752,13 +2875,13 @@ void handleScreens() {
         //bool updateMXbutton = false;
         if (lv_slider_is_dragged(ui_homespeedslider) == false) {
             changed = false;
-            const int speedStep = homeStepFromEncoderCount(0, encoder1.getCount());
+            const int speedStep = screenEncoderRampStep(0, encoder1.getCount());
             if (speedStep != 0) {
                 changed = true;
                 speed += speedStep;
                 encoder1.setCount(0);
             }
-            if (speed < 0)           { changed = true; speed = 0; }
+            if (speed <= 0)          { changed = true; speed = 0; }
             if (speed > speedlimit) { changed = true; speed = speedlimit; }
             if (changed) { 
                 lv_slider_set_value(ui_homespeedslider, speed, LV_ANIM_OFF);
@@ -2780,7 +2903,7 @@ void handleScreens() {
             changed = false;
             const float prevDepth = depth;
             const float prevStroke = stroke;
-            const int depthStep = homeStepFromEncoderCount(1, encoder2.getCount());
+            const int depthStep = screenEncoderRampStep(1, encoder2.getCount());
             if (depthStep != 0) {
                 changed = true;
                 depth += depthStep;
@@ -2790,7 +2913,7 @@ void handleScreens() {
                 }
                 encoder2.setCount(0);
             }
-            if (depth < 0)             { changed = true; depth = 0; stroke = 0; }
+            if (depth <= 0)            { changed = true; depth = 0; stroke = 0; }   //here is the error
             if (depth > maxdepthinmm) { changed = true; depth = maxdepthinmm; }
             if (stroke > depth)         { changed = true; stroke = depth; }
             if (changed && (depth != prevDepth || stroke != prevStroke)) {
@@ -2814,13 +2937,13 @@ void handleScreens() {
             changed = false;
             const float prevDepth = depth;
             const float prevStroke = stroke;
-            const int strokeStep = homeStepFromEncoderCount(2, encoder3.getCount());
+            const int strokeStep = screenEncoderRampStep(2, encoder3.getCount());
             if (strokeStep != 0) {
                 changed = true;
                 stroke += invertStroke ? -strokeStep : strokeStep;
                 encoder3.setCount(0);
             }
-            if (stroke < 0)             { changed = true; stroke = 0; }
+            if (stroke <= 0)            { changed = true; stroke = 0; }
             if (stroke > maxdepthinmm) { changed = true; stroke = maxdepthinmm; }
             
             if (s_stroke_influences_depth) {
@@ -2835,20 +2958,9 @@ void handleScreens() {
                 }
             }
 
-            if (invertStroke) {
-                if(lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_RANGE) {
-                    lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_RANGE);
-                }
-                lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
-                lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
-            }
-            else {
-                if(lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_NORMAL) {
-                    lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_NORMAL);
-                }
-                lv_bar_set_start_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
-                lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
-            }
+            // Widget push (bar mode/range recompute) is handled once below by
+            // syncHomeMotionUi(), gated on an actual value change, instead of
+            // unconditionally here every loop.
 
             if (changed && (depth != prevDepth || stroke != prevStroke)) {
                 //LogDebug("Possible error 3");
@@ -2867,7 +2979,23 @@ void handleScreens() {
         }
             homeMotionValueChanged = homeMotionValueChanged || changed;
             homeStrokeValueChanged = homeStrokeValueChanged || changed;
-        syncHomeMotionUi(invertStroke);
+
+        // Only push depth/stroke to their LVGL widgets (bar mode/range recalculation
+        // is noticeably heavier than a plain slider) when something actually moved —
+        // doing this unconditionally every loop starved encoder polling and made
+        // depth/stroke feel laggier than the speed encoder.
+        static float s_last_synced_depth = -1.0f;
+        static float s_last_synced_stroke = -1.0f;
+        static int   s_last_synced_invert = -1;
+        const bool depthStrokeUiStale =
+            (depth != s_last_synced_depth) || (stroke != s_last_synced_stroke) ||
+            ((int)invertStroke != s_last_synced_invert);
+        if (depthStrokeUiStale) {
+            syncHomeMotionUi(invertStroke);
+            s_last_synced_depth = depth;
+            s_last_synced_stroke = stroke;
+            s_last_synced_invert = (int)invertStroke;
+        }
 
         if (homeStrokeValueChanged && stroke <= 0.001f) {
             resetVisualSpeedRatioState();
@@ -2879,21 +3007,21 @@ void handleScreens() {
         if (lv_slider_is_dragged(ui_homesensationslider) == false) {
             changed = false;
             lv_slider_set_value(ui_homesensationslider, sensation, LV_ANIM_OFF);
-            const int sensationStep = homeStepFromEncoderCount(3, encoder4.getCount());
+            const int sensationStep = screenEncoderRampStep(3, encoder4.getCount());
             if (sensationStep != 0) {
                 changed = true;
                 sensation += sensationStep;
                 encoder4.setCount(0);
             }
             if (sensation < -100)   { changed = true; sensation = -100; }
-            if (sensation > 100)     { changed = true; sensation = 100; }
+            if (sensation > 100) { changed = true; sensation = 100; }
             if (changed) { SendCommand(SENSATION, sensation, OSSM_ID); }
+            homeSensationValueChanged = changed;
         } else if (lv_slider_get_value(ui_homesensationslider) != sensation) {
             sensation = lv_slider_get_value(ui_homesensationslider);
             SendCommand(SENSATION, sensation, OSSM_ID);
-            changed = true;
+            homeSensationValueChanged = true;
         }
-        homeSensationValueChanged = changed;
 
         if (homeMotionValueChanged || homeSensationValueChanged) {
             s_last_local_motion_input_ms = millis();
@@ -2919,13 +3047,10 @@ void handleScreens() {
 
         if (click2_long_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_LONG_PRESSED, NULL);
-            break;
         } else if (click2_double_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_DOUBLE_CLICKED, NULL);
-            break;
         } else if (click2_short_waspressed) {
             lv_obj_send_event(ui_HomeButtonL, LV_EVENT_SHORT_CLICKED, NULL);
-            break;
         } else if (mxclick_short_waspressed) {
             requestHomeButtonToggleOnce();
         } else if (mxclick_long_waspressed) {
@@ -2948,7 +3073,6 @@ void handleScreens() {
                 g_addon_return_screen = lv_scr_act();
                 FistITPrepareScreen();
                 _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
-                break;
             }
             sensation = 0;
         } else if (click3_double_waspressed) {
@@ -2957,7 +3081,6 @@ void handleScreens() {
             }
         } else if (click3_short_waspressed) {
             lv_obj_send_event(ui_HomeButtonR, LV_EVENT_CLICKED, NULL);
-            break;
         }
         const bool isMotionReady = (speed > 0.0f && stroke > 0.0f && depth > 0.0f);
         flushMotionCommands(speed, depth, stroke, homeMotionValueChanged, true);
@@ -3181,6 +3304,18 @@ void handleScreens() {
             click3_short_waspressed
         };
         FistITHandleScreen(events);
+    }
+    break;
+
+    case ST_UI_COYOTE:
+    {
+        touch_disabled = true;
+        ButtonEvents events = {
+            click2_short_waspressed,
+            mxclick_short_waspressed,
+            click3_short_waspressed
+        };
+        CoyoteHandleScreen(events);
     }
     break;
 

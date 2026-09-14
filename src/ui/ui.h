@@ -116,6 +116,7 @@ extern lv_obj_t * ui_AddonsItem3;
 extern lv_obj_t * ui_LogoAddons;
 extern lv_group_t * ui_g_addons;
 extern lv_obj_t * ui_FistIT;
+extern lv_obj_t * ui_Coyote;
 extern lv_obj_t * ui_brightness_slider;
 extern lv_obj_t * ui_Pattern;
 extern lv_obj_t * ui_Logo5;
