@@ -118,6 +118,7 @@ struct ConfirmedMachineState {
   float pattern = 0.0f;
   float minPosition = 0.0f;
   float maxPosition = 100.0f;
+  bool minMaxValid = false;   // true when min/max were present in the OSSM JSON
   float railPos = -1.0f;      // Live per-stroke rail position (% of travel), from OSSM telemetry
   float strokeSpeed = -1.0f;  // Live per-stroke cruise speed (% of max), from OSSM telemetry
   float railAccel = -1.0f;    // Acceleration used to reach strokeSpeed (% of max), from OSSM telemetry
@@ -400,6 +401,9 @@ static void updateCachedMachineState(const String& stateRaw) {
   if (parsedPattern >= 0.0f) g_confirmedState.pattern = parsedPattern;
   if (parsedMin >= 0.0f) g_confirmedState.minPosition = parsedMin;
   if (parsedMax >= 0.0f) g_confirmedState.maxPosition = parsedMax;
+  // Only OSSM Lite reports min/max position in its JSON; the standard OSSM
+  // and OSSM-RS firmwares only send depth/stroke.
+  g_confirmedState.minMaxValid = (parsedMin >= 0.0f && parsedMax >= 0.0f);
   if (valuesChanged) ++g_confirmedState.revision;
 
   // Keep the last nonzero OSSM speed available for MX resume after the
@@ -903,6 +907,10 @@ void bleCommInit() {
     if (!NimBLEDevice::isInitialized()) {
       NimBLEDevice::init("M5-OSSM-Remote");
     }
+    // Request a larger MTU so larger notifications (e.g. the OSSM-RS 128-byte
+    // state JSON) fit in a single packet. OSSM-RS does not initiate the MTU
+    // exchange itself, so the central must.
+    NimBLEDevice::setMTU(512);
     NimBLEDevice::setPower(ESP_PWR_LVL_P9);
     g_bleInit = true;
   }
@@ -1110,10 +1118,16 @@ bool bleCommGetConfirmedValues(BleConfirmedValues* outValues) {
   if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
   outValues->revision = g_confirmedState.revision;
   outValues->speed = g_confirmedState.speed;
-  // Depth and stroke follow the OSSM min/max model: depth == maxPosition and
-  // stroke is the travel range between the two, never read from the wire.
-  outValues->depth = g_confirmedState.maxPosition;
-  outValues->stroke = g_confirmedState.maxPosition - g_confirmedState.minPosition;
+  // OSSM Lite exposes min/max position: derive depth/stroke from them. Other
+  // firmware variants (standard OSSM, OSSM-RS) only send depth/stroke in the
+  // legacy JSON, so fall back to those when min/max were not provided.
+  if (g_confirmedState.minMaxValid) {
+    outValues->depth = g_confirmedState.maxPosition;
+    outValues->stroke = g_confirmedState.maxPosition - g_confirmedState.minPosition;
+  } else {
+    outValues->depth = g_confirmedState.depth;
+    outValues->stroke = g_confirmedState.stroke;
+  }
   outValues->sensation = (g_confirmedState.sensation * 2.0f) - 100.0f;
   outValues->pattern = (int)(g_confirmedState.pattern + 0.5f);
   outValues->minPosition = g_confirmedState.minPosition;
