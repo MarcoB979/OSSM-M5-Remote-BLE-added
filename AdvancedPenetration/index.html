@@ -49,11 +49,11 @@
     border: 2px solid transparent; cursor: pointer;
   }
   .visualizer-area { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 16px; }
-  .meter-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .meter-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; }
   .meter-bar { width: 12px; height: 132px; background-color: var(--panel-bg); border: 2px solid var(--border-color); border-radius: 4px; position: relative; overflow: hidden; }
   .meter-fill { position: absolute; bottom: 0; width: 100%; height: 50%; transition: height .1s; }
   .meter-label { font-size: 10px; color: var(--muted); text-align: center; }
-  canvas { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 6px; width: 280px; height: 132px; }
+  canvas { display: block; background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 6px; width: 280px; max-width: 100%; height: auto; flex: 0 1 auto; min-width: 0; }
   .sliders-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
   .slider-group { margin-bottom: 12px; }
   .slider-group:last-child { margin-bottom: 0; }
@@ -81,6 +81,10 @@
   .preset-row button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; }
   .preset-row button.danger { background: #7f1d1d; }
   .cpp-logger { width: 100%; max-width: 400px; background: #000; font-family: 'Courier New', monospace; font-size: .75rem; color: #38bdf8; padding: 12px; border-radius: 8px; margin-top: 16px; border: 1px solid #1e293b; box-sizing: border-box; max-height: 250px; overflow-y: auto; }
+  @media (max-width: 420px) {
+    body { padding: 8px; }
+    .phone-container { border-width: 2px; padding: 12px; }
+  }
 </style>
 </head>
 <body>
