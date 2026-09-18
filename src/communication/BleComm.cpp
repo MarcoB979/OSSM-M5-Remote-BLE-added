@@ -560,13 +560,23 @@ static bool waitForStrokeEngineOrStreamingReady(uint32_t timeoutMs) {
     bleReadStateOnce();
     pumpUiDuringModeWait();
     if (hasFreshState() && g_machineMode == MachineMode::StrokeEngine) return true;
-    vTaskDelay(pdMS_TO_TICKS(80));
+    vTaskDelay(pdMS_TO_TICKS(30));
   }
   return false;
 }
 
 static bool ensureStrokeEngineOrStreamingReadyImpl() {
   if (!bleCommTryConnect()) return false;
+
+  // Fast path: the BLE poll task and state notifications keep g_machineMode
+  // fresh every ~20 ms. If the OSSM is already in the target mode, return
+  // without a blocking read. This runs for EVERY queued motion command, and
+  // the read is what made depth/stroke (3 commands each after the min/max
+  // split) feel laggy while speed (1 command) stayed responsive.
+  if (hasFreshState() &&
+      (g_machineMode == MachineMode::StrokeEngine || g_machineMode == MachineMode::Streaming)) {
+    return true;
+  }
 
   bleReadStateOnce();
   pumpUiDuringModeWait();
@@ -580,7 +590,7 @@ static bool ensureStrokeEngineOrStreamingReadyImpl() {
     while ((millis() - start) < 2000 && !hasFreshState()) {
       bleReadStateOnce();
       pumpUiDuringModeWait();
-      vTaskDelay(pdMS_TO_TICKS(60));
+      vTaskDelay(pdMS_TO_TICKS(30));
     }
   }
   if (!hasFreshState()) return false;
@@ -595,7 +605,7 @@ static bool ensureStrokeEngineOrStreamingReadyImpl() {
       bleReadStateOnce();
       pumpUiDuringModeWait();
       if (hasFreshState() && (g_machineMode == MachineMode::Menu || g_machineMode == MachineMode::Homing)) break;
-      vTaskDelay(pdMS_TO_TICKS(60));
+      vTaskDelay(pdMS_TO_TICKS(30));
     }
   }
 

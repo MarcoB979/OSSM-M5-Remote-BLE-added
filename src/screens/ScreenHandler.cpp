@@ -1098,12 +1098,20 @@ static void update_battery_icons_all_screens(int level, bool isCharging)
     lv_obj_t *batteryTitleLabels[] = {
         ui_Batt, ui_Batt1, ui_Batt2, ui_Batt3, ui_Batt4,
         ui_Batt5, ui_Batt6, ui_Batt7, ui_Batt8, ui_Batt9,
-        APModeGetBatteryTitleLabel()
+        APModeGetBatteryTitleLabel(),
+        EjectGetBatteryTitleLabel(),
+        FistITGetBatteryTitleLabel(),
+        CoyoteGetBatteryTitleLabel(),
+        AddonsGetBatteryTitleLabel()
     };
     lv_obj_t *batteryValueLabels[] = {
         ui_BattValue, ui_BattValue1, ui_BattValue2, ui_BattValue3, ui_BattValue4,
         ui_BattValue5, ui_BattValue6, ui_BattValue7, ui_BattValue8, ui_BattValue9,
-        APModeGetBatteryValueLabel()
+        APModeGetBatteryValueLabel(),
+        EjectGetBatteryValueLabel(),
+        FistITGetBatteryValueLabel(),
+        CoyoteGetBatteryValueLabel(),
+        AddonsGetBatteryValueLabel()
     };
     lv_obj_t *batteryBars[] = {
         ui_Battery, ui_Battery1, ui_Battery2, ui_Battery3, ui_Battery4,

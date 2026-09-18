@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OSSM Advanced Penetration v2</title>
+<style>
+  :root {
+    --bg-color: #0a0a12;
+    --panel-bg: #0f172a;
+    --border-color: #334155;
+    --text-color: #dde6f0;
+    --muted: #94a3b8;
+    --color-top: #ff0c00;
+    --color-bottom: #ff8100;
+    --color-rise: #ffff00;
+    --color-fall: #00ff00;
+    --color-curvein: #0000ff;
+    --color-curveout: #ac8dee;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0; padding: 20px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .phone-container {
+    width: 100%; max-width: 400px;
+    background-color: #05050a;
+    border: 4px solid #1e293b; border-radius: 24px;
+    padding: 16px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.7);
+  }
+  .ble-panel {
+    display: flex; justify-content: space-between; align-items: center;
+    background-color: #111827; padding: 10px; border-radius: 12px;
+    margin-bottom: 14px; border: 1px solid var(--border-color);
+  }
+  .ble-btn { background-color: #2563eb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: .85rem; }
+  .ble-btn.connected { background-color: #16a34a; }
+  .ble-status { font-size: .8rem; font-family: monospace; color: var(--muted); }
+  .screen-header { text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 12px; color: #fff; }
+  .tabs-container { display: flex; justify-content: space-between; gap: 4px; margin-bottom: 14px; }
+  .tab-box {
+    flex: 1; background-color: #3a3a3a; border-radius: 4px; text-align: center;
+    padding: 6px 2px; font-size: .78rem; font-weight: bold; color: var(--text-color);
+    border: 2px solid transparent; cursor: pointer;
+  }
+  .visualizer-area { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 16px; }
+  .meter-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .meter-bar { width: 12px; height: 132px; background-color: var(--panel-bg); border: 2px solid var(--border-color); border-radius: 4px; position: relative; overflow: hidden; }
+  .meter-fill { position: absolute; bottom: 0; width: 100%; height: 50%; transition: height .1s; }
+  .meter-label { font-size: 10px; color: var(--muted); text-align: center; }
+  canvas { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 6px; width: 280px; height: 132px; }
+  .sliders-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  .slider-group { margin-bottom: 12px; }
+  .slider-group:last-child { margin-bottom: 0; }
+  .slider-label { display: flex; justify-content: space-between; font-size: .8rem; margin-bottom: 4px; }
+  .slider-label .val-num { font-family: monospace; font-size: .9rem; font-weight: bold; }
+  input[type=range] { width: 100%; height: 6px; background: #1e293b; border-radius: 3px; outline: none; -webkit-appearance: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer; }
+  select { background: #1e293b; border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 8px; font-size: .85rem; width: 100%; }
+  .m5-buttons { display: flex; justify-content: space-between; gap: 8px; }
+  .m5-btn { flex: 1; background-color: #1e293b; border: 1px solid #334155; padding: 8px; border-radius: 6px; color: #dde6f0; font-weight: bold; font-size: .8rem; cursor: pointer; }
+  .m5-btn.active { border-color: #5b8cff; color: #5b8cff; }
+  .m5-btn.green { color: #22c55e; }
+  .presets-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .presets-panel h3 { margin: 0 0 8px; font-size: .8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  #presetList { display: flex; gap: 8px; align-items: center; }
+  #presetList select { flex: 1; width: auto; min-width: 0; }
+  #presetList button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+  #presetList button.danger { background: #7f1d1d; }
+  .preset-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-color); font-size: .85rem; }
+  .preset-item .pname { flex: 1; }
+  .preset-item button { background: transparent; border: 1px solid #5b8cff; color: #5b8cff; border-radius: 6px; padding: 4px 8px; font-size: .75rem; cursor: pointer; margin-left: 4px; }
+  .preset-item button.danger { border-color: #ff5b6a; color: #ff5b6a; }
+  .preset-row { display: flex; gap: 8px; margin-top: 10px; }
+  .preset-row input { flex: 1; background: #1e293b; border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 8px; font-size: .85rem; }
+  .preset-row button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; }
+  .preset-row button.danger { background: #7f1d1d; }
+  .cpp-logger { width: 100%; max-width: 400px; background: #000; font-family: 'Courier New', monospace; font-size: .75rem; color: #38bdf8; padding: 12px; border-radius: 8px; margin-top: 16px; border: 1px solid #1e293b; box-sizing: border-box; max-height: 250px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<div class="phone-container">
+  <div class="ble-panel">
+    <span class="ble-status" id="ble-text">OSSM: Disconnected</span>
+    <button class="ble-btn" id="ble-button">Connect</button>
+  </div>
+
+  <div class="screen-header" id="active-title">Advanced Penetration v2</div>
+
+  <div class="tabs-container" id="tabs-wrapper"></div>
+
+  <div class="visualizer-area">
+    <div class="meter-col"><div class="meter-label">Top</div><div class="meter-bar"><div class="meter-fill" id="left-meter" style="background-color: var(--color-top);"></div></div></div>
+    <canvas id="graphCanvas" width="280" height="132"></canvas>
+    <div class="meter-col"><div class="meter-label">Bot</div><div class="meter-bar"><div class="meter-fill" id="right-meter" style="background-color: var(--color-bottom);"></div></div></div>
+  </div>
+
+  <div class="sliders-panel" id="sliders-wrapper"></div>
+
+  <div class="m5-buttons">
+    <button class="m5-btn active" id="btnMain">Main</button>
+    <button class="m5-btn green" id="btnStart">Start</button>
+    <button class="m5-btn" id="btnMods">Modifiers</button>
+  </div>
+
+  <div class="presets-panel">
+    <h3>Presets</h3>
+    <div id="presetList"></div>
+    <div class="preset-row">
+      <input type="text" id="presetName" placeholder="New preset name" />
+      <button id="btnSavePreset">Save</button>
+      <button id="btnFactoryReset" class="danger">Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="cpp-logger">
+  <strong style="color:#fff;">OSSM Live Dashboard Monitor:</strong>
+  <div id="log" style="margin-top:6px;">Open this in Chrome or Edge to control the OSSM over Bluetooth.</div>
+</div>
+
+<script>
+"use strict";
+
+const SERVICE_UUID   = "4f53534d-0000-0000-0000-000000000000";
+const CONTROL_UUID   = "4f53534d-6164-7661-6e63-6564636f6e74";
+const CONFIG_UUID    = "4f53534d-6164-7661-6e63-6564636f6e66";
+const STATUS_UUID    = "4f53534d-6164-7661-6e63-656473746174";
+const PRESETS_UUID   = "4f53534d-6164-7661-6e63-656470727374";
+
+let device = null, server = null;
+let ctlChar = null, cfgChar = null, stsChar = null, prsChar = null;
+let presetNames = [];
+let connected = false;
+let running = false;
+let lastNonZeroSpeed = 50;
+
+const BASE_NAMES = ["Top", "Bottom", "Rise", "Fall", "CurveIn", "CurveOut"];
+const BASE_COLORS = ["#ff0c00", "#ff8100", "#ffff00", "#00ff00", "#0000ff", "#ac8dee"];
+const MODIFIER_NAMES = ["Amount", "StepA", "StepB", "StepC", "StepD", "Phase"];
+const MODIFIER_DISPLAY = ["Amount", "Steps to Min", "Steps at Min", "Steps to Max", "Steps at Max", "Offset"];
+const MOD_COLORS = ["#38bdf8", "#34d399", "#fbbf24", "#f87171", "#c084fc", "#94a3b8"];
+const SPEED_KEY = "SP";
+
+// Firmware names -> canonical names (used when parsing CONFIG/STATUS strings).
+const BASE_ALIAS = {
+  "Max Depth": "Max", "Min": "Bottom",
+  "In Speed": "Rise", "Out Speed": "Fall",
+  "In Accel": "CurveIn", "Out Accel": "CurveOut",
+  "Top": "Top", "Bottom": "Bottom", "Rise": "Rise",
+  "Fall": "Fall", "CurveIn": "CurveIn", "CurveOut": "CurveOut"
+};
+const MODIFIER_ALIAS = {
+  "Amplitude": "Amount",
+  "Steps to Min": "StepA", "Steps at Min": "StepB",
+  "Steps to Max": "StepC", "Steps at Max": "StepD",
+  "Offset": "Phase",
+  "Amount": "Amount", "StepA": "StepA", "StepB": "StepB",
+  "StepC": "StepC", "StepD": "StepD", "Phase": "Phase"
+};
+
+// Combined-key dictionary: settings["Top"], settings["TopAmount"], settings["RiseStepA"], settings["SP"], ...
+// Each entry: { min, max, value }.
+let settings = {};
+
+const $ = (id) => document.getElementById(id);
+const log = (msg) => { $("log").textContent = msg || ""; };
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const decode = (dv) => new TextDecoder().decode(dv);
+const encode = (s) => new TextEncoder().encode(s);
+
+const speedIndex = () => 6; // firmware: 6 base controls + speed at index 6
+function baseKey(i) { return i === speedIndex() ? SPEED_KEY : BASE_NAMES[i]; }
+function modifierKey(bi, mi) { return BASE_NAMES[bi] + MODIFIER_NAMES[mi]; }
+function getSetting(key) { return settings[key] || { min: 0, max: 100, value: 0 }; }
+function settingValue(key, fallback = 0) {
+  const s = settings[key];
+  return s ? s.value : fallback;
+}
+
+const canvas = $("graphCanvas");
+const ctx = canvas.getContext("2d");
+
+// ---------- BLE ----------
+async function readStr(ch) { return decode(await ch.readValue()); }
+async function writeControl(s) {
+  try { await ctlChar.writeValueWithoutResponse(encode(s)); }
+  catch { await ctlChar.writeValueWithResponse(encode(s)); }
+}
+async function writePreset(s) { await prsChar.writeValueWithResponse(encode(s)); }
+
+function parseConfig(raw) {
+  const parsed = {};
+  for (const entry of raw.split(",")) {
+    const m = entry.match(/^([^(]+)\((\d+)\/(\d+)\)(.*)$/);
+    if (!m) continue;
+    const rawName = m[1].trim();
+    const min = parseInt(m[2], 10);
+    const max = parseInt(m[3], 10);
+
+    let canonical;
+    if (rawName === "Speed" || rawName === "SP") canonical = SPEED_KEY;
+    else canonical = BASE_ALIAS[rawName];
+    if (!canonical) continue;
+
+    parsed[canonical] = { min, max, value: min };
+    if (canonical === SPEED_KEY) continue; // speed has no modifiers
+
+    const re = /:([^(]+)\((\d+)\/(\d+)\)/g;
+    let mm;
+    while ((mm = re.exec(m[4])) !== null) {
+      const modCanonical = MODIFIER_ALIAS[mm[1].trim()];
+      if (!modCanonical) continue;
+      const modMin = parseInt(mm[2], 10);
+      const modMax = parseInt(mm[3], 10);
+      parsed[canonical + modCanonical] = { min: modMin, max: modMax, value: modMin };
+    }
+  }
+  settings = parsed;
+  if (!settings[SPEED_KEY]) settings[SPEED_KEY] = { min: 0, max: 100, value: 0 };
+}
+
+function parseStatus(raw) {
+  const entries = raw.split(",");
+  entries.forEach((entry, i) => {
+    const parts = entry.split(":");
+    if (i === speedIndex()) {
+      const v = parseFloat(parts[0]);
+      if (!isNaN(v)) {
+        const s = getSetting(SPEED_KEY);
+        s.value = clamp(v, s.min, s.max);
+        settings[SPEED_KEY] = s;
+      }
+      return;
+    }
+    if (i >= BASE_NAMES.length) return;
+
+    const key = BASE_NAMES[i];
+    const base = parseFloat(parts[0]);
+    if (!isNaN(base)) {
+      const s = getSetting(key);
+      s.value = clamp(base, s.min, s.max);
+      settings[key] = s;
+    }
+    for (let mi = 0; mi < MODIFIER_NAMES.length; mi++) {
+      if (mi + 1 >= parts.length) break;
+      const v = parseFloat(parts[mi + 1]);
+      if (isNaN(v)) continue;
+      const mk = key + MODIFIER_NAMES[mi];
+      const s = getSetting(mk);
+      s.value = clamp(v, s.min, s.max);
+      settings[mk] = s;
+    }
+  });
+}
+
+const speed = () => Math.round(settingValue(SPEED_KEY));
+
+async function connect() {
+  if (!navigator.bluetooth) { log("Web Bluetooth not available. Use Chrome/Edge over HTTPS or localhost."); return; }
+  log("Requesting device…");
+  try {
+    device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID] });
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    log("Connecting to " + (device.name || "OSSM") + "…");
+    server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE_UUID);
+    ctlChar = await svc.getCharacteristic(CONTROL_UUID);
+    cfgChar = await svc.getCharacteristic(CONFIG_UUID);
+    stsChar = await svc.getCharacteristic(STATUS_UUID);
+    prsChar = await svc.getCharacteristic(PRESETS_UUID);
+
+    if (stsChar.properties.notify) {
+      stsChar.addEventListener("characteristicvaluechanged", onStatus);
+      await stsChar.startNotifications();
+    }
+    log("Reading configuration…");
+    const cfg = await readStr(cfgChar);
+    parseConfig(cfg);
+    await refreshStatus();
+    await refreshPresets();
+    connected = true;
+    running = speed() > 0;
+    lastNonZeroSpeed = speed() > 0 ? speed() : 50;
+    $("ble-text").textContent = "OSSM: Connected 🟢";
+    $("ble-button").textContent = "Connected";
+    $("ble-button").classList.add("connected");
+    buildInterface();
+    log("");
+  } catch (e) {
+    $("ble-text").textContent = "OSSM: Error 🔴";
+    log("Bluetooth error: " + e.message);
+  }
+}
+
+function onDisconnected() {
+  connected = false; running = false;
+  $("ble-text").textContent = "OSSM: Disconnected";
+  $("ble-button").textContent = "Connect";
+  $("ble-button").classList.remove("connected");
+  log("Disconnected from OSSM.");
+}
+
+function onStatus(ev) { parseStatus(decode(ev.target.value)); buildInterface(); }
+async function refreshStatus() { parseStatus(await readStr(stsChar)); }
+async function refreshPresets() {
+  presetNames = (await readStr(prsChar)).split(",").map(s => s.trim()).filter(Boolean);
+  renderPresets();
+}
+
+// ---------- Commands ----------
+function setBase(i, v) {
+  const key = baseKey(i);
+  const s = getSetting(key);
+  v = clamp(Math.round(v), s.min, s.max);
+  s.value = v;
+  settings[key] = s;
+  writeControl(`${i}:${v},`).catch(e => log("Write failed: " + e));
+  buildInterface();
+}
+function setSpeed(v) { setBase(speedIndex(), v); if (v > 0) lastNonZeroSpeed = v; }
+function setModifier(bi, mi, v) {
+  const key = modifierKey(bi, mi);
+  const s = getSetting(key);
+  v = clamp(Math.round(v), s.min, s.max);
+  s.value = v;
+  settings[key] = s;
+  writeControl(`${bi}:${mi}:${v},`).catch(e => log("Write failed: " + e));
+  buildInterface();
+}
+function toggleStart() {
+  if (speed() > 0) setSpeed(0);
+  else setSpeed(lastNonZeroSpeed > 0 ? lastNonZeroSpeed : 50);
+}
+
+// ---------- UI ----------
+let viewMode = "main";          // "main" | "mod"
+let activeBaseIndex = 0;        // 0..5 (main base controls)
+let activeModifierIndex = 0;    // 0..5 (modifier type)
+let presetSelection = "";       // currently selected preset in the dropdown
+
+// Opens the modifier view for a specific base control without touching the
+// main base selection — keeps the two navigation states isolated and gives us
+// a single hook to bind future per-row "MOD" buttons to.
+function openModifier(baseIndex) {
+  activeBaseIndex = clamp(baseIndex, 0, BASE_NAMES.length - 1);
+  activeModifierIndex = 0;
+  viewMode = "mod";
+  buildInterface();
+}
+function closeModifier() {
+  viewMode = "main";
+  buildInterface();
+}
+
+function buildInterface() {
+  $("active-title").textContent = viewMode === "main" ? "Advanced Penetration v2" : "Modifier for: " + BASE_NAMES[activeBaseIndex];
+  $("btnMain").classList.toggle("active", viewMode === "main");
+  $("btnMods").classList.toggle("active", viewMode === "mod");
+  buildTabs();
+  buildSliders();
+  renderPresets();
+  drawGraph();
+}
+
+function buildTabs() {
+  const wrap = $("tabs-wrapper");
+  wrap.innerHTML = "";
+  const mk = (text, active, color, title) => {
+    const d = document.createElement("div");
+    d.className = "tab-box";
+    d.textContent = text;
+    d.title = title;
+    d.style.background = active ? color : "#3a3a3a";
+    d.style.color = active ? "#000000" : "#dde6f0";
+    return d;
+  };
+  if (viewMode === "main") {
+    for (let i = 0; i < BASE_NAMES.length; i++) {
+      const d = mk(Math.round(settingValue(BASE_NAMES[i])), i === activeBaseIndex, BASE_COLORS[i], BASE_NAMES[i]);
+      d.onclick = () => { activeBaseIndex = i; buildInterface(); };
+      wrap.appendChild(d);
+    }
+  } else {
+    const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+    const activeColor = BASE_COLORS[bi];
+    MODIFIER_NAMES.forEach((name, mi) => {
+      const d = mk(Math.round(settingValue(BASE_NAMES[bi] + name)), mi === activeModifierIndex, activeColor, MODIFIER_DISPLAY[mi]);
+      d.onclick = () => { activeModifierIndex = mi; buildInterface(); };
+      wrap.appendChild(d);
+    });
+  }
+}
+
+function buildSliders() {
+  const wrap = $("sliders-wrapper");
+  wrap.innerHTML = "";
+  if (viewMode === "main") {
+    const spd = getSetting(SPEED_KEY);
+    wrap.appendChild(sliderEl("Speed", spd.min, spd.max, Math.round(spd.value), "#ffffff", (v) => setSpeed(v)));
+    for (let i = 0; i < BASE_NAMES.length; i++) {
+      const s = getSetting(BASE_NAMES[i]);
+      wrap.appendChild(sliderEl(BASE_NAMES[i], s.min, s.max, Math.round(s.value), BASE_COLORS[i], (v) => setBase(i, v)));
+    }
+  } else {
+    const selGroup = document.createElement("div");
+    selGroup.className = "slider-group";
+    selGroup.innerHTML = `<div class="slider-label"><span>Base control</span></div>`;
+    const sel = document.createElement("select");
+    for (let i = 0; i < BASE_NAMES.length; i++) {
+      const o = document.createElement("option");
+      o.value = i; o.textContent = BASE_NAMES[i];
+      if (i === activeBaseIndex) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => { activeBaseIndex = parseInt(sel.value, 10); activeModifierIndex = 0; buildInterface(); };
+    selGroup.appendChild(sel);
+    wrap.appendChild(selGroup);
+
+    const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+    MODIFIER_NAMES.forEach((name, mi) => {
+      const s = getSetting(BASE_NAMES[bi] + name);
+      wrap.appendChild(sliderEl(MODIFIER_DISPLAY[mi], s.min, s.max, Math.round(s.value), MOD_COLORS[mi % MOD_COLORS.length], (v) => setModifier(bi, mi, v)));
+    });
+  }
+}
+
+function sliderEl(name, min, max, value, color, onSet) {
+  const g = document.createElement("div");
+  g.className = "slider-group";
+  g.innerHTML = `
+    <div class="slider-label"><span>${name}</span><span class="val-num" style="color:${color}">${value}</span></div>
+    <input type="range" min="${min}" max="${max}" value="${value}" step="1">`;
+  const input = g.querySelector("input");
+  const valNum = g.querySelector(".val-num");
+  input.addEventListener("input", () => { valNum.textContent = input.value; });
+  input.addEventListener("change", () => onSet(parseInt(input.value, 10)));
+  return g;
+}
+
+function renderPresets() {
+  const list = $("presetList");
+  list.innerHTML = "";
+  const sel = document.createElement("select");
+  presetNames.forEach(name => {
+    const o = document.createElement("option");
+    o.value = name; o.textContent = name;
+    sel.appendChild(o);
+  });
+  if (presetNames.includes(presetSelection)) sel.value = presetSelection;
+  else if (presetNames.length) { sel.selectedIndex = 0; presetSelection = presetNames[0]; }
+  sel.onchange = () => { presetSelection = sel.value; };
+
+  const load = document.createElement("button");
+  load.textContent = "Load";
+  load.onclick = async () => {
+    if (!sel.value) return;
+    await writePreset(":" + sel.value);
+    setTimeout(refreshStatus, 800);
+  };
+  const del = document.createElement("button");
+  del.textContent = "Delete";
+  del.className = "danger";
+  del.onclick = async () => {
+    if (!sel.value) return;
+    await writePreset("<" + sel.value);
+    setTimeout(refreshPresets, 800);
+  };
+
+  list.appendChild(sel);
+  list.appendChild(load);
+  list.appendChild(del);
+}
+
+// ---------- Graph ----------
+// Faithful port of AP-mode.cpp drawing: same plot bounds, sample counts,
+// colors (RGB565), and Bezier/step-trace math as the M5 screen.
+const SAMPLE_MAIN = 48;   // s_curve_main_pts[48]
+const SAMPLE_MOD = 24;    // s_curve_mod_pts[24]
+const PLOT_X = 2;         // k_graph_plot_x_margin
+const PLOT_Y = 0;         // top margin: keep traces inside the chart box (M5's -12 gets clipped)
+const DOT_MAIN = "#ffffff";
+const DOT_MOD = "#94a3b8";
+
+function sv(k, fb = 0) { return settingValue(k, fb); }
+function bezierMath(v0, v1, v2, v3, t) {
+  return Math.pow(1 - t, 3) * v0 + 3 * Math.pow(1 - t, 2) * t * v1 + 3 * (1 - t) * Math.pow(t, 2) * v2 + Math.pow(t, 3) * v3;
+}
+function baseVal(i) { return clamp(settingValue(BASE_NAMES[i]), 0, 100); }
+
+// computeGraphPlotBounds() for the 280x132 panel.
+function plotBounds() {
+  return { x: PLOT_X, y: PLOT_Y, w: canvas.width - 4, h: canvas.height - 5 };
+}
+
+function dot(x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x), Math.round(y), 2, 2);
+}
+
+// Main screen: AP-mode.cpp updateCurvePreview() "live AP curve" layout.
+function drawMainGraph() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const { x: xMin, y: yMin, w: xSpan, h: ySpan } = plotBounds();
+
+  const topVal = sv("Top", 50), bottomVal = sv("Bottom", 50);
+  const riseVal = sv("Rise", 1), fallVal = sv("Fall", 1);
+  const curveIn = sv("CurveIn", 50), curveOut = sv("CurveOut", 50);
+
+  // Depth guides: top=0xF860, bottom=0xFC00, width=plot.w.
+  const yMax = yMin + (1 - topVal / 100) * ySpan;
+  const yMinDepth = yMin + (1 - bottomVal / 100) * ySpan;
+  ctx.fillStyle = BASE_COLORS[0]; ctx.fillRect(xMin, yMax, xSpan, 2);
+  ctx.fillStyle = BASE_COLORS[1]; ctx.fillRect(xMin, yMinDepth, xSpan, 2);
+
+  const yMinBound = Math.min(yMax, yMinDepth);
+  const yMaxBound = Math.max(yMax, yMinDepth);
+  const diff = yMinDepth - yMax;
+  const yMaxMod = (1 - sv("TopAmount", 100) / 100) * diff + yMax;
+  const yMinMod = yMinDepth - (1 - sv("BottomAmount", 100) / 100) * diff;
+
+  const a = Math.max(1, riseVal), b = Math.max(1, fallVal);
+  const am = Math.max(1, sv("RiseAmount", 100) / 100 * a);
+  const bm = Math.max(1, sv("FallAmount", 100) / 100 * b);
+
+  let splitXf = xMin + (1 - (a / b) / ((a / b) + 1)) * xSpan;
+  splitXf = clamp(splitXf, xMin, xMin + xSpan);
+  let splitXm = xMin + (1 - (am / bm) / ((am / bm) + 1)) * xSpan;
+  splitXm = clamp(splitXm, xMin, xMin + xSpan);
+
+  const c = Math.max(1, curveIn), d = Math.max(1, curveOut);
+  const cm = Math.max(1, sv("CurveInAmount", 100) / 100 * c);
+  const dm = Math.max(1, sv("CurveOutAmount", 100) / 100 * d);
+
+  const rIn = 0.1 + 0.4 * (1 - c / 100);
+  const rOut = 0.1 + 0.4 * (1 - d / 100);
+  const rInMod = 0.1 + 0.4 * (1 - cm / 100);
+  const rOutMod = 0.1 + 0.4 * (1 - dm / 100);
+
+  const splitSample = Math.round((splitXf - xMin) / xSpan * (SAMPLE_MAIN - 1));
+  const splitSampleMod = Math.round((splitXm - xMin) / xSpan * (SAMPLE_MAIN - 1));
+  const riseDiff = (splitXf - xMin) * rIn;
+  const fallDiff = ((xMin + xSpan) - splitXf) * rOut;
+  const riseDiffMod = (splitXm - xMin) * rInMod;
+  const fallDiffMod = ((xMin + xSpan) - splitXm) * rOutMod;
+
+  const mainDots = [], modDots = [];
+  for (let i = 0; i < SAMPLE_MAIN; i++) {
+    let x, y;
+    if (i <= splitSample) {
+      const tl = splitSample > 0 ? i / splitSample : 0;
+      x = bezierMath(xMin, xMin + riseDiff, splitXf - riseDiff, splitXf, tl);
+      y = bezierMath(yMinDepth, yMinDepth, yMax, yMax, tl);
+    } else {
+      const fallCount = (SAMPLE_MAIN - 1) - splitSample;
+      const tr = fallCount > 0 ? (i - splitSample) / fallCount : 1;
+      x = bezierMath(splitXf, splitXf + fallDiff, (xMin + xSpan) - fallDiff, xMin + xSpan, tr);
+      y = bezierMath(yMax, yMax, yMinDepth, yMinDepth, tr);
+    }
+    y = clamp(y, yMinBound, yMaxBound);
+    mainDots.push([x, y]);
+
+    if ((i % 2) === 0) {
+      let xM, yM;
+      if (i <= splitSampleMod) {
+        const tl = splitSampleMod > 0 ? i / splitSampleMod : 0;
+        xM = bezierMath(xMin, xMin + riseDiffMod, splitXm - riseDiffMod, splitXm, tl);
+        yM = bezierMath(yMinMod, yMinMod, yMaxMod, yMaxMod, tl);
+      } else {
+        const fallCountMod = (SAMPLE_MAIN - 1) - splitSampleMod;
+        const tr = fallCountMod > 0 ? (i - splitSampleMod) / fallCountMod : 1;
+        xM = bezierMath(splitXm, splitXm + fallDiffMod, (xMin + xSpan) - fallDiffMod, xMin + xSpan, tr);
+        yM = bezierMath(yMaxMod, yMaxMod, yMinMod, yMinMod, tr);
+      }
+      yM = clamp(yM, yMinBound, yMaxBound);
+      modDots.push([xM, yM]);
+    }
+  }
+
+  // Continuous curved line through the main stroke samples.
+  if (mainDots.length > 1) {
+    ctx.strokeStyle = DOT_MAIN; ctx.lineWidth = 2; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(mainDots[0][0], mainDots[0][1]);
+    for (let i = 1; i < mainDots.length; i++) ctx.lineTo(mainDots[i][0], mainDots[i][1]);
+    ctx.stroke();
+  }
+  modDots.forEach(([x, y]) => dot(x, y, DOT_MOD));
+
+  $("left-meter").style.height = topVal + "%";
+  $("right-meter").style.height = bottomVal + "%";
+}
+
+// Modifier screen: AP-mode.cpp updateModifierPreview() + drawSingleModifierTrace().
+function drawModGraph() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const { x: xMin, y: yMin, w: xSpan, h: ySpan } = plotBounds();
+  const n = BASE_NAMES.length;
+
+  let maxSteps = 4;
+  for (let c = 0; c < n; c++) {
+    let s = 0;
+    for (let m = 1; m <= 4; m++) s += sv(BASE_NAMES[c] + MODIFIER_NAMES[m], 0);
+    if (s > maxSteps) maxSteps = s;
+  }
+
+  const trace = (controlIndex, traceIndex, highlight) => {
+    if (controlIndex < 0 || traceIndex < 0 || traceIndex >= 6) return;
+    if (controlIndex >= n || maxSteps <= 0) return;
+
+    const name = BASE_NAMES[controlIndex];
+    const baseValueRatio = 1 - sv(name, 50) / 100;
+    const modValueRatio = 1 - sv(name + "Amount", 100) / 100;
+
+    let strokeRatio = 1 - baseValueRatio;
+    if (controlIndex < 2) strokeRatio = (sv("Top", 50) - sv("Bottom", 50)) / 100;
+
+    const baseY = yMin + ySpan * baseValueRatio;
+    let modY = baseY + ySpan * strokeRatio * modValueRatio;
+    if (controlIndex === 1) modY = baseY - ySpan * strokeRatio * modValueRatio;
+
+    const stepWidth = xSpan / maxSteps;
+    let startX = xMin - stepWidth * sv(name + "Phase", 0);
+
+    ctx.strokeStyle = BASE_COLORS[traceIndex % BASE_COLORS.length];
+    ctx.lineWidth = highlight ? 3 : 2;
+    ctx.beginPath();
+
+    let segmentIndex = 0, segment = 0, guard = 0, zeroStepGuard = 0;
+    while (startX < (xMin + xSpan) && guard < 96 && segmentIndex < 64) {
+      const stepIndex = Math.min(segment + 1, 5);
+      const step = Math.max(0, sv(name + MODIFIER_NAMES[stepIndex], 0)) * stepWidth;
+
+      if (step <= 0) {
+        segment = (segment + 1) % 4;
+        ++zeroStepGuard;
+        if (zeroStepGuard >= 8) break;
+        continue;
+      }
+      zeroStepGuard = 0;
+
+      const endX = startX + step;
+      let y0 = baseY, y1 = baseY;
+      if (segment === 0) { y0 = baseY; y1 = modY; }
+      else if (segment === 1) { y0 = modY; y1 = modY; }
+      else if (segment === 2) { y0 = modY; y1 = baseY; }
+
+      const cx0 = clamp(startX, xMin, xMin + xSpan);
+      const cx1 = clamp(endX, xMin, xMin + xSpan);
+      const cy0 = clamp(y0, yMin, yMin + ySpan);
+      const cy1 = clamp(y1, yMin, yMin + ySpan);
+      ctx.moveTo(cx0, cy0);
+      ctx.lineTo(cx1, cy1);
+
+      ++segmentIndex;
+      startX = endX;
+      segment = (segment + 1) % 4;
+      ++guard;
+    }
+    ctx.stroke();
+  };
+
+  for (let c = 0; c < n; c++) trace(c, c, false);
+  trace(activeBaseIndex, activeBaseIndex, true);
+
+  $("left-meter").style.height = baseVal(0) + "%";
+  $("right-meter").style.height = baseVal(1) + "%";
+}
+
+function drawGraph() {
+  if (viewMode === "mod") drawModGraph();
+  else drawMainGraph();
+}
+
+// ---------- Events ----------
+$("ble-button").onclick = connect;
+$("btnMain").onclick = () => closeModifier();
+$("btnMods").onclick = () => openModifier(activeBaseIndex);
+$("btnStart").onclick = toggleStart;
+$("btnSavePreset").onclick = () => {
+  const n = $("presetName").value.trim();
+  if (!n) return;
+  presetNames.push(n);
+  $("presetName").value = "";
+  writePreset(">" + n).catch(() => {});
+  renderPresets();
+};
+$("btnFactoryReset").onclick = () => {
+  presetNames = [];
+  writePreset("^").catch(() => {});
+  renderPresets();
+};
+
+buildInterface();
+</script>
+</body>
+</html>

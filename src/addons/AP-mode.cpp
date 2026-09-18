@@ -1079,39 +1079,47 @@ static void updateCurvePreview(const std::string &baseName) {
         const float rInMod = 0.1f + 0.4f * (1.0f - cm / 100.0f);
         const float rOutMod = 0.1f + 0.4f * (1.0f - dm / 100.0f);
 
+        // Restored from OSSMAdvanced::bezCurve(): the CurveIn/CurveOut ratios
+        // scale the X control points of the cubic Bezier so the rise/fall path
+        // morphs when those modifiers change. The previous code computed rIn/
+        // rOut/rInMod/rOutMod and then discarded them with (void)cp, leaving a
+        // fixed ease curve that ignored the modifiers.
+        const int splitSample = (int)(((splitXf - xMin) / xSpan) * (float)(sampleMain - 1) + 0.5f);
+        const int splitSampleMod = (int)(((splitXm - xMin) / xSpan) * (float)(sampleMain - 1) + 0.5f);
+        const float riseDiff = (splitXf - xMin) * rIn;
+        const float fallDiff = ((xMin + xSpan) - splitXf) * rOut;
+        const float riseDiffMod = (splitXm - xMin) * rInMod;
+        const float fallDiffMod = ((xMin + xSpan) - splitXm) * rOutMod;
+
         for (int i = 0; i < sampleMain; ++i) {
-            float t = (float)i / (float)(sampleMain - 1);
-            float x = xMin + t * xSpan;
-            float y = 0.0f;
-            if (x <= splitXf) {
-                float tl = (splitXf <= xMin) ? 0.0f : ((x - xMin) / (splitXf - xMin));
-                float cp = (splitXf - xMin) * rIn;
+            float x, y;
+            if (i <= splitSample) {
+                const float tl = splitSample > 0 ? (float)i / (float)splitSample : 0.0f;
+                x = bezierMath(xMin, xMin + riseDiff, splitXf - riseDiff, splitXf, tl);
                 y = bezierMath(yMinDepth, yMinDepth, yMax, yMax, tl);
-                (void)cp;
             } else {
-                float tr = (x - splitXf) / ((xMin + xSpan) - splitXf);
-                float cp = ((xMin + xSpan) - splitXf) * rOut;
+                const int fallCount = (sampleMain - 1) - splitSample;
+                const float tr = fallCount > 0 ? (float)(i - splitSample) / (float)fallCount : 1.0f;
+                x = bezierMath(splitXf, splitXf + fallDiff, (xMin + xSpan) - fallDiff, xMin + xSpan, tr);
                 y = bezierMath(yMax, yMax, yMinDepth, yMinDepth, tr);
-                (void)cp;
             }
             y = std::max(yMinBound, std::min(y, yMaxBound));
 
-            float yM = 0.0f;
-            if (x <= splitXm) {
-                float tl = (splitXm <= xMin) ? 0.0f : ((x - xMin) / (splitXm - xMin));
-                float cp = (splitXm - xMin) * rInMod;
+            float xM, yM;
+            if (i <= splitSampleMod) {
+                const float tl = splitSampleMod > 0 ? (float)i / (float)splitSampleMod : 0.0f;
+                xM = bezierMath(xMin, xMin + riseDiffMod, splitXm - riseDiffMod, splitXm, tl);
                 yM = bezierMath(yMinMod, yMinMod, yMaxMod, yMaxMod, tl);
-                (void)cp;
             } else {
-                float tr = (x - splitXm) / ((xMin + xSpan) - splitXm);
-                float cp = ((xMin + xSpan) - splitXm) * rOutMod;
+                const int fallCountMod = (sampleMain - 1) - splitSampleMod;
+                const float tr = fallCountMod > 0 ? (float)(i - splitSampleMod) / (float)fallCountMod : 1.0f;
+                xM = bezierMath(splitXm, splitXm + fallDiffMod, (xMin + xSpan) - fallDiffMod, xMin + xSpan, tr);
                 yM = bezierMath(yMaxMod, yMaxMod, yMinMod, yMinMod, tr);
-                (void)cp;
             }
             yM = std::max(yMinBound, std::min(yM, yMaxBound));
 
             setDot(s_curve_main_pts[i], (int)x, (int)y, true);
-            if ((i % 2) == 0) setDot(s_curve_mod_pts[i / 2], (int)x, (int)yM, true);
+            if ((i % 2) == 0) setDot(s_curve_mod_pts[i / 2], (int)xM, (int)yM, true);
         }
         for (int i = sampleMain / 2; i < sampleMod; ++i) {
             if ((i * 2) >= sampleMain) setDot(s_curve_mod_pts[i], 0, 0, false);
@@ -1139,24 +1147,33 @@ static void updateCurvePreview(const std::string &baseName) {
         float yTopMod = yTop + (yBottom - yTop) * (1.0f - amountTop);
         float yBottomMod = yBottom - (yBottom - yTop) * (1.0f - amountBottom);
 
+        // Restored from OSSMAdvanced::bezCurve(): scale the X control points by
+        // the CurveIn/CurveOut ratio so the rise/fall path morphs with those
+        // modifiers instead of ignoring rIn/rOut.
+        const int splitSample = (int)(((splitXf - xMin) / xSpan) * (float)(sampleMain - 1) + 0.5f);
+        const float riseDiff = (splitXf - xMin) * rIn;
+        const float fallDiff = ((xMin + xSpan) - splitXf) * rOut;
+
         for (int i = 0; i < sampleMain; ++i) {
-            float t = (float)i / (float)(sampleMain - 1);
-            float x = xMin + t * xSpan;
-            float y = 0.0f;
-            if (x <= splitXf) {
-                float tl = (splitXf <= xMin) ? 0.0f : ((x - xMin) / (splitXf - xMin));
+            float x, y;
+            if (i <= splitSample) {
+                const float tl = splitSample > 0 ? (float)i / (float)splitSample : 0.0f;
+                x = bezierMath(xMin, xMin + riseDiff, splitXf - riseDiff, splitXf, tl);
                 y = bezierMath(yBottom, yBottom, yTop, yTop, tl);
             } else {
-                float tr = (x - splitXf) / ((xMin + xSpan) - splitXf);
+                const int fallCount = (sampleMain - 1) - splitSample;
+                const float tr = fallCount > 0 ? (float)(i - splitSample) / (float)fallCount : 1.0f;
+                x = bezierMath(splitXf, splitXf + fallDiff, (xMin + xSpan) - fallDiff, xMin + xSpan, tr);
                 y = bezierMath(yTop, yTop, yBottom, yBottom, tr);
             }
 
             float yM = 0.0f;
-            if (x <= splitXf) {
-                float tl = (splitXf <= xMin) ? 0.0f : ((x - xMin) / (splitXf - xMin));
+            if (i <= splitSample) {
+                const float tl = splitSample > 0 ? (float)i / (float)splitSample : 0.0f;
                 yM = bezierMath(yBottomMod, yBottomMod, yTopMod, yTopMod, tl);
             } else {
-                float tr = (x - splitXf) / ((xMin + xSpan) - splitXf);
+                const int fallCount = (sampleMain - 1) - splitSample;
+                const float tr = fallCount > 0 ? (float)(i - splitSample) / (float)fallCount : 1.0f;
                 yM = bezierMath(yTopMod, yTopMod, yBottomMod, yBottomMod, tr);
             }
 

@@ -34,4 +34,7 @@ void streamingCancelInitSequence();
 bool streamingConsumeInitCompleted();
 // Handle one Streaming screen tick.
 void streamingScreenHandle(bool firstEntry);
+// Battery display (top-right) owned by the Addons menu screen.
+lv_obj_t *AddonsGetBatteryTitleLabel();
+lv_obj_t *AddonsGetBatteryValueLabel();
 #endif

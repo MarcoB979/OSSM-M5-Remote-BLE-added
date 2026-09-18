@@ -47,6 +47,8 @@ static lv_obj_t *s_addons_item0_text = nullptr;
 static lv_obj_t *s_addons_item1_text = nullptr;
 static lv_obj_t *s_addons_item2_text = nullptr;
 static lv_obj_t *s_addons_item3_text = nullptr;
+static lv_obj_t *s_addons_batt_title = nullptr;
+static lv_obj_t *s_addons_batt_value = nullptr;
 static int s_addons_selected = 0;
 static constexpr int ADDONS_VISIBLE_ROWS = 4;
 
@@ -1069,6 +1071,22 @@ void ui_Addons_screen_init(void) {
     lv_obj_set_style_text_font(ui_LogoAddons, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(ui_LogoAddons, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
 
+    // Battery display (top-right), consistent with the other M5 remote screens.
+    s_addons_batt_title = lv_label_create(ui_Addons);
+    lv_obj_set_width(s_addons_batt_title, 85);
+    lv_obj_set_height(s_addons_batt_title, 30);
+    lv_obj_set_align(s_addons_batt_title, LV_ALIGN_TOP_RIGHT);
+    lv_obj_set_x(s_addons_batt_title, -10);
+    lv_obj_set_y(s_addons_batt_title, 8);
+    lv_label_set_text(s_addons_batt_title, LV_SYMBOL_BATTERY_FULL);
+    lv_obj_add_style(s_addons_batt_title, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
+
+    s_addons_batt_value = lv_label_create(s_addons_batt_title);
+    lv_obj_set_align(s_addons_batt_value, LV_ALIGN_RIGHT_MID);
+    lv_obj_set_x(s_addons_batt_value, 0);
+    lv_obj_set_y(s_addons_batt_value, 0);
+    lv_label_set_text(s_addons_batt_value, "");
+
     ui_AddonsItem0 = lv_btn_create(ui_Addons);
     lv_obj_set_size(ui_AddonsItem0, 300, 34);
     lv_obj_set_align(ui_AddonsItem0, LV_ALIGN_TOP_MID);
@@ -1151,3 +1169,6 @@ void ui_Addons_screen_init(void) {
 
     addonsSyncSelectionVisual();
 }
+
+lv_obj_t *AddonsGetBatteryTitleLabel() { return s_addons_batt_title; }
+lv_obj_t *AddonsGetBatteryValueLabel() { return s_addons_batt_value; }
