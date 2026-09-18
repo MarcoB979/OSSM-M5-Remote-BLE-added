@@ -22,6 +22,21 @@ bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
 // State-machine polling helpers
 void bleCommSetEnabled(bool enabled);
 bool bleCommIsEnabled();
+
+// Release/restore the NimBLE host + BT controller. The ESP32 (Core2) has only
+// ~320 KB of internal SRAM, which is not enough for NimBLE and the WiFi
+// captive portal (DHCP/DNS/WebServer) at the same time: a client connecting to
+// the AP exhausts the heap (esp_timer_create -> ESP_ERR_NO_MEM). Suspend tears
+// BLE down completely before the portal opens; resume re-initialises it once
+// the portal is closed and the normal auto-reconnect path takes over.
+void bleCommSuspend();
+void bleCommResume();
+
+// Shared NimBLE-radio gate. The WiFi captive portal suspends the whole radio
+// (NimBLE host + controller); every NimBLE consumer (OSSM BleComm, ToyHub and
+// the addons) must check this and not re-init NimBLE while suspended.
+bool bleRadioIsSuspended();
+
 bool bleCommIsHoming();
 bool bleCommHasFreshState();
 void bleCommUnlock();
@@ -61,6 +76,17 @@ bool bleCommGoToStreaming();
 bool bleCommGoToStrokeEngine();
 bool bleCommEnsureStrokeEngineOrStreamingReady();
 String bleCommGetMachineStateName(bool lowerCase);
+
+// ---- Firmware identification (variant + version) ----
+enum class OssmFirmwareVariant {
+    Unknown = 0,
+    OssmLite,      // exposes the new 4f53534d-… service + Device Info (0x2A26)
+    OssmStandard,  // legacy 522b443a-… service only
+    OssmRs,        // legacy service, advertises "OSSM-rs"
+};
+OssmFirmwareVariant bleCommGetFirmwareVariant();
+const char* bleCommGetFirmwareVersion();      // e.g. "2.3"; "" when unknown
+const char* bleCommGetFirmwareDescription();  // "OSSM-Lite v2.3" / "OSSM-RS" / "OSSM"
 
 // Unified BLE streaming command bridge.
 bool bleCommSendStreamCommand(int position, int durationMs);

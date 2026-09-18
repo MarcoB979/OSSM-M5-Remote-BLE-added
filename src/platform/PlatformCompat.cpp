@@ -1,3 +1,8 @@
+// PlatformCompat.cpp — CYD (ESP32-2432S028R / TFT_eSPI) platform shim.
+//
+// Provides the platform* functions declared in PlatformCompat.h for the CYD
+// board variant; compiled only when CYD is defined.
+
 #include "PlatformCompat.h"
 
 #ifdef CYD

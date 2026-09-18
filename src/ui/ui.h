@@ -1,10 +1,12 @@
-// SquareLine LVGL GENERATED FILE
-// EDITOR VERSION: SquareLine Studio 1.0.5
-// LVGL VERSION: 8.2
-// PROJECT: OSSM-White
+// LVGL UI definitions: screen objects and shared UI entry points.
+//
+// NOTE: These files (ui.c/ui.h) were originally exported from SquareLine
+// Studio and are now maintained by hand. Treat them as regular source code,
+// not generated output — regenerating from SquareLine will overwrite local
+// edits.
 
-#ifndef _OSSM_WHITE_UI_H
-#define _OSSM_WHITE_UI_H
+#ifndef M5_REMOTE_UI_H
+#define M5_REMOTE_UI_H
 
 #ifdef __cplusplus
 extern "C" {

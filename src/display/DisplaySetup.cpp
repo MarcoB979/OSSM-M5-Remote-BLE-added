@@ -1,3 +1,9 @@
+// DisplaySetup.cpp — LVGL custom allocator and display bring-up for M5_Remote.
+//
+// Routes LVGL object allocations to PSRAM (falling back to internal SRAM) to
+// preserve DMA-capable memory for the radio stacks, and initialises the LVGL
+// display/flush/touch pipeline on top of M5Unified.
+
 #include "DisplaySetup.h"
 #include <M5Unified.h>
 #include <lvgl.h>
@@ -79,8 +85,10 @@ static uint32_t my_tick_function() {
 
 static void my_touchpad_read(lv_indev_t *drv, lv_indev_data_t *data) {
   (void)drv;
-  M5.update();
+  // Touch-only poll; the full M5.update() already runs in the main loop.
+  M5.Touch.update(millis());
   data->state = LV_INDEV_STATE_RELEASED;
+
   auto count = M5.Touch.getCount();
 
   if (touch_disabled == true) {

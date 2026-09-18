@@ -1,3 +1,7 @@
+// FistIT.cpp — Fist-IT addon: BLE link to the Fist-IT device and its settings
+// screen. Fully self-contained (screen, BLE client, state); the core only
+// talks to it via FistIT.h.
+
 #include "FistIT.h"
 
 #include <Arduino.h>
@@ -7,20 +11,22 @@
 #include "main.h"
 #include "language.h"
 #include "display/colors.h"
+#include "display/styles.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
-#include "display/colors.h"
-#include "display/styles.h"
 #include "buttonhandlers/ButtonHandlers.h"
-#include "screens/ScreenHandler.h"
 #include "communication/CommManager.h"
-#include "config/debug.h"
+#include "communication/BleComm.h"
+#include "communication/BleBackground.h"
 #include "config/config_ids.h"
+#include "config/debug.h"
+#include "screens/ScreenHandler.h"
 
 #ifdef FIST_ID
 #undef FIST_ID
 #endif
 // Single-definition of FIST_ID (C linkage so C code can reference it)
+// ---- Public id ----
 extern "C" const int FIST_ID = 3;
 
 static bool handleIncomingState(int target, int sender, int command);
@@ -29,6 +35,7 @@ lv_obj_t *ui_FistIT = nullptr;
 
 namespace {
 
+// ---- Local state ----
 struct FistMessage {
   float esp_speed;
   float esp_depth;
@@ -107,6 +114,7 @@ static int s_peer_id = FIST_ID;
 static int s_local_id = M5_ID;
 static bool s_flush_buttons_once = false;
 
+// ---- BLE connection ----
 static void fistBleResetClient()
 {
   const bool wasPaired = s_is_paired;
@@ -160,6 +168,9 @@ static void fistBleInitOnce()
 {
   if (s_ble_init) {
     return;
+  }
+  if (bleRadioIsSuspended()) {
+    return;  // WiFi portal owns the radio/RAM; do not re-init NimBLE
   }
 
   if (!NimBLEDevice::isInitialized()) {
@@ -268,6 +279,7 @@ static bool fistBleTryConnect(bool force = false)
 }
 
 // Apply shared styles to a slider using the provided slot index (0..3)
+// ---- Screen construction ----
 static void styleSlider(lv_obj_t *slider, int slot)
 {
   if (slider == nullptr) return;
@@ -332,7 +344,7 @@ static void createScreenIfNeeded()
   s_title = lv_label_create(s_screen);
   lv_obj_set_align(s_title, LV_ALIGN_TOP_MID);
   lv_obj_set_y(s_title, 12);
-  lv_label_set_text(s_title, "Fist-IT");
+  lv_label_set_text(s_title, T_FISTIT_TITLE);
   lv_obj_set_style_text_font(s_title, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_add_style(s_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
@@ -558,6 +570,7 @@ static void toggleOnOff()
 
 }  // namespace
 
+// ---- Public API ----
 void FistITPrepareScreen()
 {
   createScreenIfNeeded();
@@ -632,11 +645,10 @@ bool FistITSendCommand(int command, float value)
     return false;
   }
 
-  if (!s_is_paired || !s_ble_client || !s_ble_client->isConnected() || s_ble_rx == nullptr) {
-    (void)fistBleTryConnect(false);
-  }
-
   if (!s_ble_client || !s_ble_client->isConnected() || s_ble_rx == nullptr) {
+    // Never block the UI loop on a scan/connect here — hand reconnection to the
+    // background task and report not-ready for now.
+    bleBackgroundRequest(BleBgJob::FistITProbe);
     return false;
   }
 
@@ -693,7 +705,7 @@ void FistITHandleScreen(const ButtonEvents &events)
   createScreenIfNeeded();
 
   if (!FistITIsPaired()) {
-    (void)fistBleTryConnect(false);
+    bleBackgroundRequest(BleBgJob::FistITProbe);  // reconnect in the background
   }
 
   if (s_flush_buttons_once) {

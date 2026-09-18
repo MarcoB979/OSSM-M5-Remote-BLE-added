@@ -110,21 +110,18 @@ void buttonInit() {
 // OneButton callbacks
 // ---------------------------------------------------------------------------
 void mxpress() {
-    Serial.println("mx pressed");
     mxpress_waspressed = true;
     mxclick_short_waspressed = false;
     screensaver_check_activity();
 }
 
 void mxclick() {
-    Serial.println("mx clicked");
     mxclick_short_waspressed = true;
     vibrate(200, 200);
     screensaver_check_activity();
 }
 
 void mxlong() {
-    Serial.println("mx long pressed");
     mxclick_long_waspressed = true;
     mxclick_short_waspressed = false;
     vibrate(200, 200);
@@ -132,14 +129,12 @@ void mxlong() {
 }
 
 void click2() {
-    Serial.println("click2 short pressed");
     click2_short_waspressed = true;
     vibrate(200, 200);
     screensaver_check_activity();
 }
 
 void click2long() {
-    Serial.println("click2 long pressed");
     click2_long_waspressed = true;
     click2_short_waspressed = false;
     vibrate(200, 200);
@@ -147,7 +142,6 @@ void click2long() {
 }
 
 void c2double() {
-    Serial.println("click2 double pressed");
     click2_double_waspressed = true;
     click2_short_waspressed = false;
     vibrate(200, 200);
@@ -155,14 +149,12 @@ void c2double() {
 }
 
 void click3() {
-    Serial.println("click3 short pressed");
     click3_short_waspressed = true;
     vibrate(200, 200);
     screensaver_check_activity();
 }
 
 void c3long() {
-    Serial.println("click3 long pressed");
     click3_long_waspressed = true;
     click3_short_waspressed = false;
     vibrate(200, 200);

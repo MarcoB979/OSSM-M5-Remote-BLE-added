@@ -10,14 +10,7 @@ extern const int AP_ID;
 }
 #endif
 
-#ifndef ADDON_BUTTON_EVENTS_DEFINED
-#define ADDON_BUTTON_EVENTS_DEFINED
-struct ButtonEvents {
-    bool leftShort;
-    bool mxShort;
-    bool rightShort;
-};
-#endif
+#include "ButtonEvents.h"
 
 typedef struct _lv_obj_t lv_obj_t;
 

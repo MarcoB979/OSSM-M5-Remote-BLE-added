@@ -1,3 +1,4 @@
+// styles.h — shared LVGL style objects and the styles_init() theme builder.
 #pragma once
 
 #if __has_include("lvgl.h")

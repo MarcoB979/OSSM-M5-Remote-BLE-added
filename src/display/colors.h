@@ -1,12 +1,16 @@
+// colors.h — UI color scheme type, the COLOR_SCHEMES table and the active
+// scheme index.
 #pragma once
 
 #include <stdint.h>
+
+#include "../language.h"
 
 // ---------------------------------------------------------------------------
 // Color scheme definition
 // ---------------------------------------------------------------------------
 typedef struct {
-    const char* name;             // Display name shown on the selector screen
+    TextId nameKey;               // Display name shown on the selector screen (localised)
     uint32_t    title_bar;        // Header / title bar color
     uint32_t    button_l;         // Left button / general button accent
     uint32_t    button_m;         // Middle button accent

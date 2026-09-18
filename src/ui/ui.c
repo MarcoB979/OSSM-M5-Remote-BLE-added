@@ -348,7 +348,7 @@ static void ui_event_Menu(lv_event_t * e)
 static void ui_event_MenuButtonTL(lv_event_t * e)
 {
     if(lv_event_get_code(e) == LV_EVENT_SHORT_CLICKED)
-        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
+        _ui_screen_change(ui_Home, LV_SCR_LOAD_ANIM_NONE, 0, 0);
 }
 static void ui_event_MenuButtonTR(lv_event_t * e)
 {
@@ -554,7 +554,7 @@ void ui_Start_screen_init(void)
 
     lv_obj_set_align(ui_StartButtonLText, LV_ALIGN_CENTER);
 
-    lv_label_set_text(ui_StartButtonLText, T_CONNECT);
+    lv_label_set_text(ui_StartButtonLText,T_CON);
     applyTextPrimaryStyle(ui_StartButtonLText);
 
     // ui_StartButtonM

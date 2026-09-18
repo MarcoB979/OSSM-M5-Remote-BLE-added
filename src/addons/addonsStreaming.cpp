@@ -1,23 +1,29 @@
-#include "addons/addonsStreaming.h"
+// addonsStreaming.cpp — Streaming mode addon and the addons menu/launcher
+// registry. Owns the streaming screen and the shared addon-selection UI.
 
+#include "addonsStreaming.h"
+
+#include <M5Unified.h>
+#include <Preferences.h>
+
+#include "main.h"
+#include "language.h"
+#include "platform/PlatformCompat.h"
+#include "config/config_ids.h"
+#include "config/debug.h"
+#include "display/styles.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
-#include "language.h"
-#include "display/styles.h"
-#include "main.h"
-#include "config/config_ids.h"
 #include "buttonhandlers/ButtonHandlers.h"
-#include "addons/Eject.h"
-#include "addons/FistIT.h"
-#include "addons/Coyote.h"
-#include "addons/AP-mode.h"
 #include "communication/BleComm.h"
 #include "communication/CommManager.h"
-#include "../screens/ScreenHandler.h"
-#include "platform/PlatformCompat.h"
-#include <Preferences.h>
-#include <M5Unified.h>
-#include "../config/debug.h"
+#include "addons/AP-mode.h"
+#include "addons/AP-v2.h"
+#include "addons/Coyote.h"
+#include "addons/ToyControl.h"
+#include "addons/Eject.h"
+#include "addons/FistIT.h"
+#include "screens/ScreenHandler.h"
 
 // Extra globals exposed through ui.h
 lv_obj_t *ui_StreamingButtonM = nullptr;
@@ -63,11 +69,14 @@ extern lv_obj_t *g_addon_return_screen;
 
 
 //for new addons: add a line here with the code what screen to activate when the addon is selected in the menu, and a default enabled/disabled state. The screen activation code should be a function that prepares the screen (e.g. updates slider values from current addon state) and then calls _ui_screen_change() to switch to it.
+// ---- Addon launcher ----
 static void activateEject()     { g_addon_return_screen = lv_scr_act(); (void)EjectTryConnectNow(); EjectPrepareScreen(); _ui_screen_change(EjectGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateFistIT()    { g_addon_return_screen = lv_scr_act(); (void)FistITTryConnectNow(); FistITPrepareScreen(); _ui_screen_change(FistITGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateCoyote()    { g_addon_return_screen = lv_scr_act(); (void)CoyoteTryConnectNow(); CoyotePrepareScreen(); _ui_screen_change(CoyoteGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateStreaming() { _ui_screen_change(ui_Streaming,       LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 static void activateAPMode()    { g_addon_return_screen = lv_scr_act(); APModePrepareScreen(); _ui_screen_change(APModeGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
+static void activateAPV2()      { g_addon_return_screen = lv_scr_act(); APV2ModePrepareScreen(); _ui_screen_change(APV2ModeGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
+static void activateToyControl(){ g_addon_return_screen = lv_scr_act(); ToyControlPrepareScreen(); _ui_screen_change(ToyControlGetScreen(), LV_SCR_LOAD_ANIM_FADE_ON, 20, 0); }
 
 //new addons should be defined here with their screen activation function, and the function should be implemented above. The screen they activate should also be added to ui.h and ui.c, and implemented in a new .cpp file in the addons folder. See Eject and FistIT for examples.
 //new addons should also be added to the language file with T_ADDONS_NAME, and to the ui with a button in the addons carousel and an event handler that calls the appropriate activate function above. See ui.c for examples.
@@ -77,6 +86,8 @@ static AddonDef s_addon_defs[] = {
     { "Advanced Penetration",   true, activateAPMode    },
     { "Streaming", true, activateStreaming },
     { "Coyote",    true, activateCoyote    },
+    { "Advanced Penetration v2", true, activateAPV2   },
+    { "Toys",                   true, activateToyControl },
 };
 // Keep this in sync with s_addon_defs[] entries above.
 static constexpr int NUM_ADDONS = (int)(sizeof(s_addon_defs) / sizeof(s_addon_defs[0]));
@@ -85,6 +96,8 @@ static const int FISTIT_ADDON_INDEX = 1;
 static const int APMODE_ADDON_INDEX = 2;
 static const int STREAMING_ADDON_INDEX = 3;
 static const int COYOTE_ADDON_INDEX = 4;
+static const int APV2_ADDON_INDEX = 5;
+static const int TOYCONTROL_ADDON_INDEX = 6;
 
 static bool s_addons_manage_mode = false;  // true = visibility-management mode
 static int  s_addons_offset      = 0;      // index of first visible item in carousel
@@ -171,6 +184,7 @@ static void applyButtonStylesLocal(lv_obj_t *obj, lv_style_t *defaultStyle, lv_s
 // ── NVS persistence ───────────────────────────────────────────────────────────
 // Opens the "addons" namespace, writes defaults for any key not yet stored,
 // and reads the current enabled state into s_addon_defs[].
+// ---- Persistent settings ----
 static void loadAddonPrefs() {
     Preferences prefs;
     prefs.begin("addons", false);  // r/w so we can write first-run defaults in one pass
@@ -181,6 +195,10 @@ static void loadAddonPrefs() {
         s_addon_defs[i].enabled = prefs.getBool(key, true);
     }
     prefs.end();
+}
+
+void addonsLoadPrefs() {
+    loadAddonPrefs();
 }
 
 static void saveAddonEnabled(int addonIdx) {
@@ -201,6 +219,10 @@ static void saveAddonEnabled(int addonIdx) {
         FistITSetAddonEnabled(enabled);
     } else if (addonIdx == COYOTE_ADDON_INDEX) {
         CoyoteSetAddonEnabled(enabled);
+    } else if (addonIdx == APV2_ADDON_INDEX) {
+        APV2ModeSetAddonEnabled(enabled);
+    } else if (addonIdx == TOYCONTROL_ADDON_INDEX) {
+        ToyControlSetAddonEnabled(enabled);
     }
 }
 
@@ -254,7 +276,7 @@ static void enterManageMode() {
     s_addons_manage_mode = true;
     s_addons_selected    = 0;
     s_addons_offset      = 0;
-    if (s_addons_btn_m_text) lv_label_set_text(s_addons_btn_m_text, T_BACK "/" T_SAVE);
+    if (s_addons_btn_m_text) lv_label_set_text_fmt(s_addons_btn_m_text, "%s/%s", T_BACK, T_SAVE);
     if (s_addons_btn_r_text) lv_label_set_text(s_addons_btn_r_text, T_ENABLEDISABLE);
 }
 
@@ -348,6 +370,7 @@ void addonsSyncSelectionVisual(void) {
 static bool s_streaming_init_completed = false;
 static bool s_streaming_init_cancelled = false;
 
+// ---- Streaming service ----
 static void serviceStreamingWaitSlice() {
     platformUpdate();
     lv_task_handler();
@@ -448,6 +471,7 @@ bool streamingConsumeInitCompleted() {
     return completed;
 }
 
+// ---- Event handlers ----
 static void event_streaming_screen(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
         screenmachine(e);
@@ -880,6 +904,7 @@ static void createFistScreen() {
     }
 }
 
+// ---- Screen construction ----
 void ui_Streaming_screen_init(void) {
     ui_Streaming = lv_obj_create(NULL);
     lv_obj_clear_flag(ui_Streaming, LV_OBJ_FLAG_SCROLLABLE);

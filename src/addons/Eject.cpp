@@ -1,3 +1,7 @@
+// Eject.cpp — Eject addon: BLE link to the Eject device, its settings screen,
+// and the command bridge used by the Home "creampie" flow. Fully self-contained
+// (screen, BLE client, state); the core only talks to it via Eject.h.
+
 #include "Eject.h"
 
 #include <Arduino.h>
@@ -7,18 +11,19 @@
 #include "main.h"
 #include "language.h"
 #include "display/colors.h"
+#include "display/styles.h"
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
-#include "display/colors.h"
-#include "display/styles.h"
 #include "buttonhandlers/ButtonHandlers.h"
-#include "screens/ScreenHandler.h"
 #include "communication/CommManager.h"
-#include "config/debug.h"
-#include "language.h"
+#include "communication/BleComm.h"
+#include "communication/BleBackground.h"
 #include "config/config_ids.h"
+#include "config/debug.h"
+#include "screens/ScreenHandler.h"
 
 // Single-definition of EJECT_ID (C linkage so C code can reference it)
+// ---- Public id ----
 extern "C" const int EJECT_ID = 2;
 
 static bool handleIncomingState(int target, int sender, int command);
@@ -27,6 +32,7 @@ bool ejectUnload = false;
 
 namespace {
 
+// ---- Local state ----
 struct EjectMessage {
   float esp_speed;
   float esp_depth;
@@ -42,57 +48,57 @@ struct EjectMessage {
   int esp_sender;
 };
 
-static lv_obj_t *e_screen = nullptr;
+static lv_obj_t *s_screen = nullptr;
 lv_obj_t *ui_Eject = nullptr;
 
-static lv_obj_t *e_title = nullptr;
-static lv_obj_t *e_button_left = nullptr;
-static lv_obj_t *e_button_mid = nullptr;
-static lv_obj_t *e_button_right = nullptr;
-static lv_obj_t *e_button_left_text = nullptr;
-static lv_obj_t *e_button_mid_text = nullptr;
-static lv_obj_t *e_button_right_text = nullptr;
+static lv_obj_t *s_title = nullptr;
+static lv_obj_t *s_button_left = nullptr;
+static lv_obj_t *s_button_mid = nullptr;
+static lv_obj_t *s_button_right = nullptr;
+static lv_obj_t *s_button_left_text = nullptr;
+static lv_obj_t *s_button_mid_text = nullptr;
+static lv_obj_t *s_button_right_text = nullptr;
 
-static lv_obj_t *e_speed_label = nullptr;
-static lv_obj_t *e_speed_slider = nullptr;
-static lv_obj_t *e_speed_value = nullptr;
-static lv_obj_t *e_batt_title = nullptr;
-static lv_obj_t *e_batt_value = nullptr;
-static lv_obj_t *e_time_label = nullptr;
-static lv_obj_t *e_time_slider = nullptr;
-static lv_obj_t *e_time_value = nullptr;
-static lv_obj_t *e_size_label = nullptr;
-static lv_obj_t *e_size_slider = nullptr;
-static lv_obj_t *e_size_value = nullptr;
-static lv_obj_t *e_accel_label = nullptr;
-static lv_obj_t *e_accel_slider = nullptr;
-static lv_obj_t *e_accel_value = nullptr;
+static lv_obj_t *s_speed_label = nullptr;
+static lv_obj_t *s_speed_slider = nullptr;
+static lv_obj_t *s_speed_value = nullptr;
+static lv_obj_t *s_batt_title = nullptr;
+static lv_obj_t *s_batt_value = nullptr;
+static lv_obj_t *s_time_label = nullptr;
+static lv_obj_t *s_time_slider = nullptr;
+static lv_obj_t *s_time_value = nullptr;
+static lv_obj_t *s_size_label = nullptr;
+static lv_obj_t *s_size_slider = nullptr;
+static lv_obj_t *s_size_value = nullptr;
+static lv_obj_t *s_accel_label = nullptr;
+static lv_obj_t *s_accel_slider = nullptr;
+static lv_obj_t *s_accel_value = nullptr;
 
-static float e_speed = 0.0f;
-static float e_time = 0.0f;
-static float e_size = 0.0f;
-static float e_accel = 0.0f;
+static float s_speed = 0.0f;
+static float s_time = 0.0f;
+static float s_size = 0.0f;
+static float s_accel = 0.0f;
 
-static long e_enc1 = 0;
-static long e_enc2 = 0;
-static long e_enc3 = 0;
-static long e_enc4 = 0;
+static long s_enc1 = 0;
+static long s_enc2 = 0;
+static long s_enc3 = 0;
+static long s_enc4 = 0;
 
-static bool e_ramp_enabled = true;
-static int e_ramp_value = 1;
-static int e_ramp_time_ms = 75;
-static int e_ramp_max = 8;
-static int e_ramp_active_encoder = 0;
-static unsigned long e_ramp_ms = 0;
+static bool s_ramp_enabled = true;
+static int s_ramp_value = 1;
+static int s_ramp_time_ms = 75;
+static int s_ramp_max = 8;
+static int s_ramp_active_encoder = 0;
+static unsigned long s_ramp_ms = 0;
 
-static bool e_is_paired = false;
-static bool e_is_on = false;
-static bool e_addon_enabled = false;
-static bool e_ble_init = false;
-static NimBLEClient* e_ble_client = nullptr;
-static NimBLERemoteCharacteristic* e_ble_rx = nullptr;
-static NimBLERemoteCharacteristic* e_ble_tx = nullptr;
-static uint32_t e_last_connect_attempt_ms = 0;
+static bool s_is_paired = false;
+static bool s_is_on = false;
+static bool s_addon_enabled = false;
+static bool s_ble_init = false;
+static NimBLEClient* s_ble_client = nullptr;
+static NimBLERemoteCharacteristic* s_ble_rx = nullptr;
+static NimBLERemoteCharacteristic* s_ble_tx = nullptr;
+static uint32_t s_last_connect_attempt_ms = 0;
 static constexpr uint32_t EJECT_CONNECT_RETRY_MS = 3000;
 static constexpr uint32_t EJECT_BG_SCAN_MS = 120;
 static constexpr uint32_t EJECT_FG_SCAN_MS = 600;
@@ -102,28 +108,29 @@ static const char* EJECT_BLE_DEVICE_NAME = "Eject";
 static const char* EJECT_BLE_SERVICE_UUID = "5f8bb7f0-9f17-4aa8-9c42-3d8b8b4d9001";
 static const char* EJECT_BLE_RX_UUID = "5f8bb7f1-9f17-4aa8-9c42-3d8b8b4d9001";
 static const char* EJECT_BLE_TX_UUID = "5f8bb7f2-9f17-4aa8-9c42-3d8b8b4d9001";
-static int e_peer_id = EJECT_ID;
-static int e_local_id = M5_ID;
-static bool e_flush_buttons_once = false;
+static int s_peer_id = EJECT_ID;
+static int s_local_id = M5_ID;
+static bool s_flush_buttons_once = false;
 
+// ---- BLE connection ----
 static void ejectBleResetClient()
 {
-  const bool wasPaired = e_is_paired;
-  e_ble_rx = nullptr;
-  e_ble_tx = nullptr;
-  e_is_paired = false;
+  const bool wasPaired = s_is_paired;
+  s_ble_rx = nullptr;
+  s_ble_tx = nullptr;
+  s_is_paired = false;
   if (wasPaired) {
     screenRequestStatusStripRefresh();
   }
 
-  if (!e_ble_client) {
+  if (!s_ble_client) {
     return;
   }
-  if (e_ble_client->isConnected()) {
-    e_ble_client->disconnect();
+  if (s_ble_client->isConnected()) {
+    s_ble_client->disconnect();
   }
-  NimBLEDevice::deleteClient(e_ble_client);
-  e_ble_client = nullptr;
+  NimBLEDevice::deleteClient(s_ble_client);
+  s_ble_client = nullptr;
 }
 
 static void ejectBleNotifyCb(NimBLERemoteCharacteristic* ch, uint8_t* data, size_t len, bool isNotify)
@@ -143,17 +150,21 @@ static void ejectBleNotifyCb(NimBLERemoteCharacteristic* ch, uint8_t* data, size
 
 static void ejectBleInitOnce()
 {
-  if (e_ble_init) {
+  if (s_ble_init) {
     return;
+  }
+  if (bleRadioIsSuspended()) {
+    return;  // WiFi portal owns the radio/RAM; do not re-init NimBLE
   }
 
   if (!NimBLEDevice::isInitialized()) {
     NimBLEDevice::init("M5-Eject-Addon");
   }
   NimBLEDevice::setPower(ESP_PWR_LVL_P9);
-  e_ble_init = true;
+  s_ble_init = true;
 }
 
+// ---- Internal helpers ----
 static void clearButtonFlags()
 {
   click2_short_waspressed = false;
@@ -173,6 +184,7 @@ static void clearButtonFlags()
 //}
 
 // Apply shared styles to a slider using the provided slot index (0..3)
+// ---- Screen construction ----
 static void styleSlider(lv_obj_t *slider, int slot)
 {
   if (slider == nullptr) return;
@@ -192,7 +204,7 @@ static void createSliderRow(lv_obj_t **rowLabel,
                             int maxValue,
                             int slot)
 {
-  *rowLabel = lv_label_create(e_screen);
+  *rowLabel = lv_label_create(s_screen);
   lv_obj_set_width(*rowLabel, lv_pct(95));
   lv_obj_set_height(*rowLabel, LV_SIZE_CONTENT);
   lv_obj_set_x(*rowLabel, 0);
@@ -226,129 +238,129 @@ static void createSliderRow(lv_obj_t **rowLabel,
 //static void createScreenIfNeeded()
 static void EjectUiScreenCreateInternal()
 {
-  if (e_screen != nullptr) {
+  if (s_screen != nullptr) {
     return;
   }
 
-  e_screen = lv_obj_create(nullptr);
-  ui_EJECTSettings = e_screen;
-  ui_Eject = e_screen;
-  lv_obj_clear_flag(e_screen, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_add_event_cb(e_screen, screenmachine, LV_EVENT_SCREEN_LOADED, nullptr);
+  s_screen = lv_obj_create(nullptr);
+  ui_EJECTSettings = s_screen;
+  ui_Eject = s_screen;
+  lv_obj_clear_flag(s_screen, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_event_cb(s_screen, screenmachine, LV_EVENT_SCREEN_LOADED, nullptr);
 
-  e_title = lv_label_create(e_screen);
-  lv_obj_set_align(e_title, LV_ALIGN_TOP_MID);
-  lv_obj_set_y(e_title, 12);
-  lv_label_set_text(e_title, T_EJECT);
-  lv_obj_set_style_text_font(e_title, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_add_style(e_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+  s_title = lv_label_create(s_screen);
+  lv_obj_set_align(s_title, LV_ALIGN_TOP_MID);
+  lv_obj_set_y(s_title, 12);
+  lv_label_set_text(s_title, T_EJECT);
+  lv_obj_set_style_text_font(s_title, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-  e_batt_title = lv_label_create(e_screen);
-  lv_obj_set_width(e_batt_title, 85);
-  lv_obj_set_height(e_batt_title, 30);
-  lv_obj_set_x(e_batt_title, 115);
-  lv_obj_set_y(e_batt_title, -103);
-  lv_obj_set_align(e_batt_title, LV_ALIGN_CENTER);
-  lv_label_set_text(e_batt_title, T_BATT);
+  s_batt_title = lv_label_create(s_screen);
+  lv_obj_set_width(s_batt_title, 85);
+  lv_obj_set_height(s_batt_title, 30);
+  lv_obj_set_x(s_batt_title, 115);
+  lv_obj_set_y(s_batt_title, -103);
+  lv_obj_set_align(s_batt_title, LV_ALIGN_CENTER);
+  lv_label_set_text(s_batt_title, T_BATT);
 
-  e_batt_value = lv_label_create(e_batt_title);
-  lv_obj_set_width(e_batt_value, LV_SIZE_CONTENT);
-  lv_obj_set_height(e_batt_value, LV_SIZE_CONTENT);
-  lv_obj_set_x(e_batt_value, 0);
-  lv_obj_set_y(e_batt_value, -7);
-  lv_obj_set_align(e_batt_value, LV_ALIGN_RIGHT_MID);
-  lv_label_set_text(e_batt_value, T_BLANK);
+  s_batt_value = lv_label_create(s_batt_title);
+  lv_obj_set_width(s_batt_value, LV_SIZE_CONTENT);
+  lv_obj_set_height(s_batt_value, LV_SIZE_CONTENT);
+  lv_obj_set_x(s_batt_value, 0);
+  lv_obj_set_y(s_batt_value, -7);
+  lv_obj_set_align(s_batt_value, LV_ALIGN_RIGHT_MID);
+  lv_label_set_text(s_batt_value, T_BLANK);
 
 
-  createSliderRow(&e_speed_label, &e_speed_slider, &e_speed_value, T_CUM_SPEED, -60, 0, 100, 0);
-  createSliderRow(&e_time_label, &e_time_slider, &e_time_value, T_CUM_TIME, -25, 0, 360, 1);
-  createSliderRow(&e_size_label, &e_size_slider, &e_size_value, T_CUM_Volume, 10, 0, 100, 2);
-  createSliderRow(&e_accel_label, &e_accel_slider, &e_accel_value, T_CUM_Accel, 45, 0, 100, 3);
+  createSliderRow(&s_speed_label, &s_speed_slider, &s_speed_value, T_CUM_SPEED, -60, 0, 100, 0);
+  createSliderRow(&s_time_label, &s_time_slider, &s_time_value, T_CUM_TIME, -25, 0, 360, 1);
+  createSliderRow(&s_size_label, &s_size_slider, &s_size_value, T_CUM_Volume, 10, 0, 100, 2);
+  createSliderRow(&s_accel_label, &s_accel_slider, &s_accel_value, T_CUM_Accel, 45, 0, 100, 3);
 
-  e_button_left = lv_btn_create(e_screen);
-  lv_obj_set_width(e_button_left, 100);
-  lv_obj_set_height(e_button_left, 30);
-  lv_obj_set_y(e_button_left, 100);
-  lv_obj_set_x(e_button_left, lv_pct(-33));
-  lv_obj_set_align(e_button_left, LV_ALIGN_CENTER);
-  lv_obj_add_style(e_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_add_style(e_button_left, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
-  lv_obj_add_style(e_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
-  e_button_left_text = lv_label_create(e_button_left);
-  lv_obj_set_align(e_button_left_text, LV_ALIGN_CENTER);
-  lv_label_set_text(e_button_left_text, T_BACK); //was T_HOME
+  s_button_left = lv_btn_create(s_screen);
+  lv_obj_set_width(s_button_left, 100);
+  lv_obj_set_height(s_button_left, 30);
+  lv_obj_set_y(s_button_left, 100);
+  lv_obj_set_x(s_button_left, lv_pct(-33));
+  lv_obj_set_align(s_button_left, LV_ALIGN_CENTER);
+  lv_obj_add_style(s_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_button_left, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_add_style(s_button_left, &style_button_l, LV_PART_MAIN | LV_STATE_FOCUSED);
+  s_button_left_text = lv_label_create(s_button_left);
+  lv_obj_set_align(s_button_left_text, LV_ALIGN_CENTER);
+  lv_label_set_text(s_button_left_text, T_BACK); //was T_HOME
 
-  e_button_mid = lv_btn_create(e_screen);
-  lv_obj_set_width(e_button_mid, 100);
-  lv_obj_set_height(e_button_mid, 30);
-  lv_obj_set_y(e_button_mid, 100);
-  lv_obj_set_x(e_button_mid, lv_pct(0));
-  lv_obj_set_align(e_button_mid, LV_ALIGN_CENTER);
-  lv_obj_add_style(e_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_add_style(e_button_mid, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
-  lv_obj_add_style(e_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
-  e_button_mid_text = lv_label_create(e_button_mid);
-  lv_obj_set_align(e_button_mid_text, LV_ALIGN_CENTER);
-  lv_label_set_text(e_button_mid_text, T_START);
+  s_button_mid = lv_btn_create(s_screen);
+  lv_obj_set_width(s_button_mid, 100);
+  lv_obj_set_height(s_button_mid, 30);
+  lv_obj_set_y(s_button_mid, 100);
+  lv_obj_set_x(s_button_mid, lv_pct(0));
+  lv_obj_set_align(s_button_mid, LV_ALIGN_CENTER);
+  lv_obj_add_style(s_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_button_mid, &style_button_m_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_add_style(s_button_mid, &style_button_m, LV_PART_MAIN | LV_STATE_FOCUSED);
+  s_button_mid_text = lv_label_create(s_button_mid);
+  lv_obj_set_align(s_button_mid_text, LV_ALIGN_CENTER);
+  lv_label_set_text(s_button_mid_text, T_START);
 
-  e_button_right = lv_btn_create(e_screen);
-  lv_obj_set_width(e_button_right, 100);
-  lv_obj_set_height(e_button_right, 30);
-  lv_obj_set_y(e_button_right, 100);
-  lv_obj_set_x(e_button_right, lv_pct(33));
-  lv_obj_set_align(e_button_right, LV_ALIGN_CENTER);
-  lv_obj_add_style(e_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_add_style(e_button_right, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
-  lv_obj_add_style(e_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
-  e_button_right_text = lv_label_create(e_button_right);
-  lv_obj_set_align(e_button_right_text, LV_ALIGN_CENTER);
-  lv_label_set_text(e_button_right_text, T_CUM_LOAD);
+  s_button_right = lv_btn_create(s_screen);
+  lv_obj_set_width(s_button_right, 100);
+  lv_obj_set_height(s_button_right, 30);
+  lv_obj_set_y(s_button_right, 100);
+  lv_obj_set_x(s_button_right, lv_pct(33));
+  lv_obj_set_align(s_button_right, LV_ALIGN_CENTER);
+  lv_obj_add_style(s_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_button_right, &style_button_r_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
+  lv_obj_add_style(s_button_right, &style_button_r, LV_PART_MAIN | LV_STATE_FOCUSED);
+  s_button_right_text = lv_label_create(s_button_right);
+  lv_obj_set_align(s_button_right_text, LV_ALIGN_CENTER);
+  lv_label_set_text(s_button_right_text, T_CUM_LOAD);
 }
 
 static void refreshTheme()
 {
-  if (e_screen == nullptr) {
+  if (s_screen == nullptr) {
     return;
   }
 
   // Apply the shared background style first, then apply the semantic
   // `style_option_bg` (which is defined as a black option background).
-  lv_obj_add_style(e_screen, &style_background, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_add_style(e_screen, &style_option_bg, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_screen, &style_background, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_add_style(s_screen, &style_option_bg, LV_PART_MAIN | LV_STATE_DEFAULT);
 
-  if (e_title != nullptr) {
-    lv_obj_add_style(e_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_style(e_title, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (s_title != nullptr) {
+    lv_obj_add_style(s_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+    lv_obj_add_style(s_title, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
   }
 
   // Battery/status label in this addon screen should also follow the
   // shared primary text style so icons/text remain readable across
   // dark/light themes.
-  if (e_batt_title != nullptr) {
-    lv_obj_add_style(e_batt_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (s_batt_title != nullptr) {
+    lv_obj_add_style(s_batt_title, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
   }
-  if (e_batt_value != nullptr) {
-    lv_obj_add_style(e_batt_value, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+  if (s_batt_value != nullptr) {
+    lv_obj_add_style(s_batt_value, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
   }
 
-  lv_obj_t *valueLabels[] = {e_speed_value, e_time_value, e_size_value, e_accel_value};
+  lv_obj_t *valueLabels[] = {s_speed_value, s_time_value, s_size_value, s_accel_value};
   for (lv_obj_t *lbl : valueLabels) {
     if (!lbl) continue;
     lv_obj_add_style(lbl, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_set_style_text_font(lbl, &lv_font_montserrat_18, LV_PART_MAIN | LV_STATE_DEFAULT);
   }
-  styleSlider(e_speed_slider, 0);
-  styleSlider(e_time_slider, 1);
-  styleSlider(e_size_slider, 2);
-  styleSlider(e_accel_slider, 3);
+  styleSlider(s_speed_slider, 0);
+  styleSlider(s_time_slider, 1);
+  styleSlider(s_size_slider, 2);
+  styleSlider(s_accel_slider, 3);
 }
 
 static void refreshValueLabels()
 {
-  lv_label_set_text_fmt(e_speed_value, "%d", (int)e_speed);
-  lv_label_set_text_fmt(e_time_value, "%d", (int)e_time);
-  lv_label_set_text_fmt(e_size_value, "%d", (int)e_size);
-  lv_label_set_text_fmt(e_accel_value, "%d", (int)e_accel);
+  lv_label_set_text_fmt(s_speed_value, "%d", (int)s_speed);
+  lv_label_set_text_fmt(s_time_value, "%d", (int)s_time);
+  lv_label_set_text_fmt(s_size_value, "%d", (int)s_size);
+  lv_label_set_text_fmt(s_accel_value, "%d", (int)s_accel);
 }
 
 static int getRampedDetentDelta(int encoderId, int detents)
@@ -357,49 +369,49 @@ static int getRampedDetentDelta(int encoderId, int detents)
     return 0;
   }
 
-  if (!e_ramp_enabled) {
-    e_ramp_value = 1;
-    e_ramp_active_encoder = encoderId;
-    e_ramp_ms = millis();
+  if (!s_ramp_enabled) {
+    s_ramp_value = 1;
+    s_ramp_active_encoder = encoderId;
+    s_ramp_ms = millis();
     return detents;
   }
 
   unsigned long now = millis();
-  bool sameEncoder = (encoderId == e_ramp_active_encoder);
-  bool withinRampWindow = ((now - e_ramp_ms) <= (unsigned long)e_ramp_time_ms);
+  bool sameEncoder = (encoderId == s_ramp_active_encoder);
+  bool withinRampWindow = ((now - s_ramp_ms) <= (unsigned long)s_ramp_time_ms);
   if (!sameEncoder || !withinRampWindow) {
-    e_ramp_value = 1;
+    s_ramp_value = 1;
   }
 
   int sign = (detents > 0) ? 1 : -1;
   int steps = abs(detents);
   int delta = 0;
   for (int i = 0; i < steps; ++i) {
-    delta += sign * e_ramp_value;
-    if (e_ramp_value < e_ramp_max) {
-      ++e_ramp_value;
+    delta += sign * s_ramp_value;
+    if (s_ramp_value < s_ramp_max) {
+      ++s_ramp_value;
     }
   }
 
-  e_ramp_active_encoder = encoderId;
-  e_ramp_ms = now;
+  s_ramp_active_encoder = encoderId;
+  s_ramp_ms = now;
   return delta;
 }
 
 static bool ejectBleTryConnect(bool force = false)
 {
-  if (!e_addon_enabled) {
+  if (!s_addon_enabled) {
     return false;
   }
 
   const uint32_t nowMs = millis();
-  if (!force && e_last_connect_attempt_ms != 0 && (nowMs - e_last_connect_attempt_ms) < EJECT_CONNECT_RETRY_MS) {
+  if (!force && s_last_connect_attempt_ms != 0 && (nowMs - s_last_connect_attempt_ms) < EJECT_CONNECT_RETRY_MS) {
     return false;
   }
-  e_last_connect_attempt_ms = nowMs;
+  s_last_connect_attempt_ms = nowMs;
 
-  if (e_ble_client && e_ble_client->isConnected() && e_ble_rx != nullptr) {
-    e_is_paired = true;
+  if (s_ble_client && s_ble_client->isConnected() && s_ble_rx != nullptr) {
+    s_is_paired = true;
     return true;
   }
 
@@ -445,41 +457,41 @@ static bool ejectBleTryConnect(bool force = false)
     return false;
   }
 
-  if (!e_ble_client) {
-    e_ble_client = NimBLEDevice::createClient();
-    if (!e_ble_client) {
+  if (!s_ble_client) {
+    s_ble_client = NimBLEDevice::createClient();
+    if (!s_ble_client) {
       return false;
     }
-    e_ble_client->setConnectionParams(12, 12, 0, 150);
-  } else if (e_ble_client->isConnected()) {
-    e_ble_client->disconnect();
+    s_ble_client->setConnectionParams(12, 12, 0, 150);
+  } else if (s_ble_client->isConnected()) {
+    s_ble_client->disconnect();
   }
 
-  e_ble_client->setConnectTimeout(force ? EJECT_FG_CONNECT_TIMEOUT_MS : EJECT_BG_CONNECT_TIMEOUT_MS);
+  s_ble_client->setConnectTimeout(force ? EJECT_FG_CONNECT_TIMEOUT_MS : EJECT_BG_CONNECT_TIMEOUT_MS);
 
-  if (!e_ble_client->connect(targetAddress)) {
+  if (!s_ble_client->connect(targetAddress)) {
     ejectBleResetClient();
     return false;
   }
 
-  NimBLERemoteService* service = e_ble_client->getService(EJECT_BLE_SERVICE_UUID);
+  NimBLERemoteService* service = s_ble_client->getService(EJECT_BLE_SERVICE_UUID);
   if (!service) {
     ejectBleResetClient();
     return false;
   }
 
-  e_ble_rx = service->getCharacteristic(EJECT_BLE_RX_UUID);
-  e_ble_tx = service->getCharacteristic(EJECT_BLE_TX_UUID);
-  if (!e_ble_rx) {
+  s_ble_rx = service->getCharacteristic(EJECT_BLE_RX_UUID);
+  s_ble_tx = service->getCharacteristic(EJECT_BLE_TX_UUID);
+  if (!s_ble_rx) {
     ejectBleResetClient();
     return false;
   }
 
-  if (e_ble_tx && e_ble_tx->canNotify()) {
-    e_ble_tx->subscribe(true, ejectBleNotifyCb);
+  if (s_ble_tx && s_ble_tx->canNotify()) {
+    s_ble_tx->subscribe(true, ejectBleNotifyCb);
   }
 
-  e_is_paired = true;
+  s_is_paired = true;
   screenRequestStatusStripRefresh();
   return true;
 }
@@ -539,13 +551,13 @@ static bool applySliderFromEncoder(ESP32Encoder &encoder,
 
 static void toggleOnOff()
 {
-  if (e_is_on) {
+  if (s_is_on) {
     if (EjectSendCommand(OFF, 0.0f)) {
-      e_is_on = false;
+      s_is_on = false;
     }
   } else {
     if (EjectSendCommand(ON, 0.0f)) {
-      e_is_on = true;
+      s_is_on = true;
     }
   }
   refreshValueLabels();
@@ -553,6 +565,7 @@ static void toggleOnOff()
 
 }  // namespace
 
+// ---- Public API ----
 extern "C" void EjectUiScreenCreate(void)
 {
   EjectUiScreenCreateInternal();
@@ -565,35 +578,35 @@ void EjectPrepareScreen()
   refreshValueLabels();
   // The click used to enter this screen can still be latched for one loop.
   // Flush it once so left/mid/right actions start from a clean state.
-  e_flush_buttons_once = true;
+  s_flush_buttons_once = true;
 }
 
 lv_obj_t *EjectGetScreen()
 {
   EjectUiScreenCreate();
-  return e_screen;
+  return s_screen;
 }
 
 lv_obj_t *EjectGetBatteryTitleLabel()
 {
-  return e_batt_title;
+  return s_batt_title;
 }
 
 lv_obj_t *EjectGetBatteryValueLabel()
 {
-  return e_batt_value;
+  return s_batt_value;
 }
 
 void EjectToggle()
 {
-  if (e_addon_enabled && e_is_paired) {
+  if (s_addon_enabled && s_is_paired) {
     toggleOnOff();
   }
 }
 
 bool EjectIsPaired()
 {
-  return e_addon_enabled && e_is_paired && e_ble_client && e_ble_client->isConnected() && e_ble_rx != nullptr;
+  return s_addon_enabled && s_is_paired && s_ble_client && s_ble_client->isConnected() && s_ble_rx != nullptr;
 }
 
 const uint8_t* EjectGetTxAddress()
@@ -603,7 +616,7 @@ const uint8_t* EjectGetTxAddress()
 
 bool EjectEnsureTxPeer()
 {
-  return e_ble_client && e_ble_client->isConnected() && e_ble_rx != nullptr;
+  return s_ble_client && s_ble_client->isConnected() && s_ble_rx != nullptr;
 }
 
 bool EjectTryConnectNow()
@@ -618,25 +631,24 @@ bool EjectTryConnectBackground()
 
 void EjectSetAddonEnabled(bool enabled)
 {
-  e_addon_enabled = enabled;
+  s_addon_enabled = enabled;
 
   if (!enabled) {
     ejectBleResetClient();
-    e_is_on = false;
+    s_is_on = false;
   }
 }
 
 bool EjectSendCommand(int command, float value)
 {
-  if (!e_addon_enabled) {
+  if (!s_addon_enabled) {
     return false;
   }
 
-  if (!e_ble_client || !e_ble_client->isConnected() || e_ble_rx == nullptr) {
-    (void)ejectBleTryConnect(false);
-  }
-
-  if (!e_ble_client || !e_ble_client->isConnected() || e_ble_rx == nullptr) {
+  if (!s_ble_client || !s_ble_client->isConnected() || s_ble_rx == nullptr) {
+    // Never block the UI loop on a scan/connect here — hand reconnection to the
+    // background task and report not-ready for now.
+    bleBackgroundRequest(BleBgJob::EjectProbe);
     return false;
   }
 
@@ -648,19 +660,19 @@ bool EjectSendCommand(int command, float value)
   msg.esp_connected = true;
   msg.esp_command = command;
   msg.esp_value = value;
-  msg.esp_target = e_peer_id;
-  msg.esp_sender = e_local_id;
+  msg.esp_target = s_peer_id;
+  msg.esp_sender = s_local_id;
 
   bool writeOk = false;
-  if (e_ble_rx->canWrite()) {
-    writeOk = e_ble_rx->writeValue(reinterpret_cast<uint8_t *>(&msg), sizeof(msg), true);
-  } else if (e_ble_rx->canWriteNoResponse()) {
-    writeOk = e_ble_rx->writeValue(reinterpret_cast<uint8_t *>(&msg), sizeof(msg), false);
+  if (s_ble_rx->canWrite()) {
+    writeOk = s_ble_rx->writeValue(reinterpret_cast<uint8_t *>(&msg), sizeof(msg), true);
+  } else if (s_ble_rx->canWriteNoResponse()) {
+    writeOk = s_ble_rx->writeValue(reinterpret_cast<uint8_t *>(&msg), sizeof(msg), false);
   }
 
   if (!writeOk) {
-    const bool wasPaired = e_is_paired;
-    e_is_paired = false;
+    const bool wasPaired = s_is_paired;
+    s_is_paired = false;
     if (wasPaired) {
       screenRequestStatusStripRefresh();
     }
@@ -670,22 +682,22 @@ bool EjectSendCommand(int command, float value)
 
 static bool handleIncomingState(int target, int sender, int command)
 {
-  if (!e_addon_enabled) {
+  if (!s_addon_enabled) {
     return false;
   }
 
-  e_peer_id = sender;
+  s_peer_id = sender;
   if (sender == EJECT_ID || target == EJECT_ID) {
-    if (!e_is_paired) {
-      e_is_paired = true;
+    if (!s_is_paired) {
+      s_is_paired = true;
       screenRequestStatusStripRefresh();
     }
   }
 
   if (command == OFF) {
-    e_is_on = false;
+    s_is_on = false;
   } else if (command == ON) {
-    e_is_on = true;
+    s_is_on = true;
   }
 
 
@@ -697,18 +709,18 @@ void EjectHandleScreen(const ButtonEvents &events)
   EjectUiScreenCreate();
 
   if (!EjectIsPaired()) {
-    (void)ejectBleTryConnect(false);
+    bleBackgroundRequest(BleBgJob::EjectProbe);  // reconnect in the background
   }
 
-  if (e_flush_buttons_once) {
+  if (s_flush_buttons_once) {
     clearButtonFlags();
-    e_flush_buttons_once = false;
+    s_flush_buttons_once = false;
   }
 
-  applySliderFromEncoder(encoder1, 1, e_enc1, e_speed, e_speed_slider, CUMSPEED);
-  applySliderFromEncoder(encoder2, 2, e_enc2, e_time, e_time_slider, CUMTIME);
-  applySliderFromEncoder(encoder3, 3, e_enc3, e_size, e_size_slider, CUMSIZE);
-  applySliderFromEncoder(encoder4, 4, e_enc4, e_accel, e_accel_slider, CUMACCEL);
+  applySliderFromEncoder(encoder1, 1, s_enc1, s_speed, s_speed_slider, CUMSPEED);
+  applySliderFromEncoder(encoder2, 2, s_enc2, s_time, s_time_slider, CUMTIME);
+  applySliderFromEncoder(encoder3, 3, s_enc3, s_size, s_size_slider, CUMSIZE);
+  applySliderFromEncoder(encoder4, 4, s_enc4, s_accel, s_accel_slider, CUMACCEL);
   refreshValueLabels();
 
   if (events.leftShort) {
@@ -726,15 +738,15 @@ void EjectHandleScreen(const ButtonEvents &events)
     resetEncoderCounts();
     if (ejectUnload) {
       ejectUnload = false;
-      //lv_label_set_text(e_button_right_text, T_CUM);
-      EjectSendCommand(CUMSIZE, e_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
+      //lv_label_set_text(s_button_right_text, T_CUM);
+      EjectSendCommand(CUMSIZE, s_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
       
-      lv_obj_clear_state(e_button_right, LV_STATE_CHECKED);
+      lv_obj_clear_state(s_button_right, LV_STATE_CHECKED);
     } else {
       ejectUnload = true;
-      //lv_label_set_text(e_button_right_text, T_CUM_LOAD);
-      EjectSendCommand(CUMSIZE, e_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
-      lv_obj_add_state(e_button_right, LV_STATE_CHECKED);
+      //lv_label_set_text(s_button_right_text, T_CUM_LOAD);
+      EjectSendCommand(CUMSIZE, s_size);  //send new size (which gets - in EjectSendCommand if ejectUnload = true)
+      lv_obj_add_state(s_button_right, LV_STATE_CHECKED);
     }
     //_ui_screen_change(ui_Start, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
     clearButtonFlags();

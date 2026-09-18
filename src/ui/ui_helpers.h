@@ -1,6 +1,6 @@
 
-#ifndef _OSSM_WHITE_UI_HELPERS_H
-#define _OSSM_WHITE_UI_HELPERS_H
+#ifndef M5_REMOTE_UI_HELPERS_H
+#define M5_REMOTE_UI_HELPERS_H
 
 #if __has_include("lvgl.h")
     #include "lvgl.h"

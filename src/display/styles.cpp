@@ -1,3 +1,8 @@
+// styles.cpp — shared LVGL style objects and the styles_init() theme builder.
+//
+// Defines the title-bar, button, slider, roller and battery styles applied
+// across every screen, plus the initialisation helper that assembles them.
+
 #include "display/styles.h"
 #include "display/colors.h"
 #include <string.h>

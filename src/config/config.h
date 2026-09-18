@@ -1,3 +1,8 @@
+// config.h — board-specific device IDs, button objects and legacy pin defines.
+//
+// Included only by main.cpp: this header defines the OneButton objects, so it
+// must remain single-translation-unit. Shareable ID/pin defines live in
+// config_ids.h and config_pins.h.
 #define OSSM 1
 
 #define CUM 2

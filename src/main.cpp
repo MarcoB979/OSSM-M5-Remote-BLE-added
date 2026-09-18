@@ -1,4 +1,3 @@
-#pragma GCC optimize ("Ofast")
 #include <ESP32Encoder.h>
 #include <Arduino.h>
 #include <Wire.h>
@@ -10,16 +9,20 @@
 #include "main.h"
 #include "ui/ui.h"
 #include "buttonhandlers/ButtonHandlers.h"
-#include "addons/Eject.h"
-#include "addons/FistIT.h"
-#include "addons/Coyote.h"
-#include "addons/AP-mode.h"
-#include "addons/addonsStreaming.h"
+#include "addons/addons.h"
 #include "communication/CommManager.h"
 #include "communication/BleComm.h"
+#include "communication/BleBackground.h"
 #include "screens/ScreenHandler.h"
 #include "display/DisplaySetup.h"
 #include <M5Unified.h>
+#include "language.h"
+#include "network/WifiStation.h"
+#include "network/ButtplugClient.h"
+#include "network/ButtplugHub.h"
+#include "network/ToyHub.h"
+#include "network/OtaServer.h"
+#include "network/ToyConfigWeb.h"
 
 // Shared state (defined here, declared extern in main.h)
 bool dark_mode = false;
@@ -42,39 +45,44 @@ void setup(){
   LogDebug("\n Starting");      // Start LogDebug
 
   bleCommRegisterMainTask();
-  EjectSetAddonEnabled(addonsIsEjectEnabled());
-  FistITSetAddonEnabled(addonsIsFistITEnabled());
-  CoyoteSetAddonEnabled(addonsIsCoyoteEnabled());
-  APModeSetAddonEnabled(true);
+  bleBackgroundInit();
+  addonsInit();
   commInit();
   displayInit();  // display, LVGL, touchpad
+  languageInit(); // load persisted language before building UI
   ui_init();
   LogDebug("\n ui initialized");
 
   buttonInit();
   screenInit();  // Load NVS settings and apply to UI
+  wifiStationInit();
+  buttplugInit();
+  buttplugHubInit();
+  toyHubInit();
+  otaServerInit();
+  toyConfigWebInit();
 
   LogDebug("\n End setup");
 }
 
 void loop()
 {
-  screen_power_tick();
-  //LogDebug("Loop tick");
-  M5.update();
-  //LogDebug("M5 update done");
-  lv_task_handler();
-  //LogDebug("LVGL task handler done"); 
+  // Tick the physical buttons first, every iteration, so a heavy render or
+  // network tick later in the loop never delays click detection.
   Button1.tick();
-  //LogDebug("Button1 tick done");
   Button2.tick();
-  //LogDebug("Button2 tick done");
   Button3.tick();
-  //LogDebug("Button3 tick done");
-  CoyoteBackgroundTick();
+
+  screen_power_tick();
+  M5.update();
+  lv_task_handler();
+  addonsTick();
+  wifiStationLoop();
+  buttplugLoop();
+  toyHubLoop();
+  otaServerLoop();
   handleScreens();
-  //LogDebug("handleScreens done");
-  delay(5);
+  delay(1);
 }
 
 // Screen event callbacks and handler moved to src/screens/ScreenHandler.cpp

@@ -48,7 +48,11 @@ void _ui_slider_set_property(lv_obj_t * target, int id, int val)
 
 void _ui_screen_change(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay)
 {
-    lv_scr_load_anim(target, fademode, spd, delay, false);
+    // All screen transitions are instant (no fade) so screens appear directly.
+    (void)fademode;
+    (void)spd;
+    (void)delay;
+    lv_scr_load_anim(target, LV_SCR_LOAD_ANIM_NONE, 0, 0, false);
 }
 
 void _ui_arc_increment(lv_obj_t * target, lv_scr_load_anim_t fademode, int spd, int delay)

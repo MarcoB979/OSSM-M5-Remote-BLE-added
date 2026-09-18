@@ -21,6 +21,9 @@ bool FistITPaired(void);
 #endif
 
 #ifdef __cplusplus
+// Ensure the "addons" NVS namespace exists with first-run defaults (call once
+// at boot from addonsInit()).
+void addonsLoadPrefs();
 // Update streaming value labels (speed, depth, stroke, sensation) for the addon-owned screen loop.
 void streamingUpdateValueLabels(float spd, float dep, float str, float sen);
 // Pause state — managed by addonsStreaming.cpp and used by the addon-owned screen loop.

@@ -1,3 +1,8 @@
+// AP-mode.cpp — Advanced Penetration addon: full-screen controller for the
+// OSSM advanced-penetration module over BLE (config/status/control/presets).
+// Fully self-contained (screen, state, BLE bridge); the core only talks to it
+// via AP-mode.h.
+
 #include "AP-mode.h"
 
 #include <Arduino.h>
@@ -18,10 +23,12 @@
 #include "ui/ui.h"
 #include "ui/ui_helpers.h"
 
+// ---- Public id ----
 extern "C" const int AP_ID = 4;
 
 namespace {
 
+// ---- Local state ----
 struct Control {
     float value = 0.0f;
     uint8_t minValue = 0;
@@ -253,6 +260,7 @@ static void normalizePresetSelection() {
     if (s_preset_selection >= (int)s_preset_names.size()) s_preset_selection = (int)s_preset_names.size() - 1;
 }
 
+// ---- Parsing ----
 static void parsePresetsString(const std::string &presetsRaw) {
     // Port map: mirrors OSSMAdvanced::loadPresets() source list behavior.
     s_preset_names.clear();
@@ -543,6 +551,7 @@ static bool tryBootstrapModelFromLiveBle(bool fetchExtras = true) {
     return liveReady;
 }
 
+// ---- BLE live sync ----
 static void refreshFromLiveStatusIfDue() {
     if (!s_live_ap_available || s_modifier_view) return;
 
@@ -1236,6 +1245,7 @@ static void applyApModeButtonMState(const char *text, lv_style_t *defaultStyle, 
     lv_obj_invalidate(s_btn_m);
 }
 
+// ---- Screen drawing ----
 static void drawApScreen() {
     ensureDefaultModel();
     normalizeIndexes();
@@ -1261,11 +1271,11 @@ static void drawApScreen() {
     const std::string focusedName = s_modifier_view ? modName : baseName;
     const int focusedValue = s_modifier_view ? modInt : baseInt;
     lv_label_set_text(s_title_label, focusedName.c_str());
-    lv_label_set_text_fmt(s_state_label, T_SPEED " %d", speedInt);
+    lv_label_set_text_fmt(s_state_label, "%s %d", T_SPEED, speedInt);
 
     if (s_transport_label) {
         if (s_modifier_view && !baseName.empty()) {
-            lv_label_set_text_fmt(s_transport_label, T_MOD " %s", baseName.c_str());
+            lv_label_set_text_fmt(s_transport_label, "%s %s", T_MOD, baseName.c_str());
             lv_obj_clear_flag(s_transport_label, LV_OBJ_FLAG_HIDDEN);
         } else {
             lv_label_set_text(s_transport_label, "");
@@ -1375,7 +1385,7 @@ static void drawApScreen() {
     if (s_modifier_view) {
         lv_label_set_text(s_preset_label, "");
     } else {
-        lv_label_set_text_fmt(s_preset_label, T_PRESET " %s", selectedPreset.c_str());
+        lv_label_set_text_fmt(s_preset_label, "%s %s", T_PRESET, selectedPreset.c_str());
     }
 
     if (s_warning_label) {
@@ -1423,6 +1433,7 @@ static void onScreenLoaded(lv_event_t *e) {
     s_needs_redraw = true;
 }
 
+// ---- Screen construction ----
 static void createScreenIfNeeded() {
     if (s_screen != nullptr) return;
     s_screen = lv_obj_create(nullptr);
@@ -1438,7 +1449,7 @@ static void createScreenIfNeeded() {
     lv_obj_set_y(s_title_label, 8); //was 4
     lv_obj_set_style_text_font(s_title_label, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
     lv_obj_add_style(s_title_label, &style_title_bar, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_label_set_text(s_title_label, "AP");
+    lv_label_set_text(s_title_label, T_AP_TITLE);
 
     // Battery display (top-right), styled like other M5 remote screens.
     s_batt_label = lv_label_create(s_screen);
@@ -1618,7 +1629,7 @@ static void createScreenIfNeeded() {
     lv_obj_set_x(s_preset_label, 0);
     lv_obj_set_y(s_preset_label, 54);
     lv_obj_set_style_text_font(s_preset_label, &lv_font_montserrat_12, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_label_set_text(s_preset_label, T_PRESET " -");
+    lv_label_set_text_fmt(s_preset_label, "%s -", T_PRESET);
 
     s_warning_label = lv_label_create(s_screen);
     lv_obj_set_width(s_warning_label, 100);
@@ -1781,6 +1792,7 @@ static bool setModifierValue(int value) {
 
 }  // namespace
 
+// ---- Public API ----
 void APModeSetAddonEnabled(bool enabled) { s_enabled = enabled; }
 
 bool APModeIsAddonEnabled() { return s_enabled; }

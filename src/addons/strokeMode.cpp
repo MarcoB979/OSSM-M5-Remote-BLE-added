@@ -17,9 +17,7 @@
 #include "communication/BleComm.h"
 #include "screens/ScreenHandler.h"
 
-// ---------------------------------------------------------------------------
-// Exported slider and value-label objects (used by ScreenHandler.cpp)
-// ---------------------------------------------------------------------------
+// ---- Exported slider and value-label objects (used by ScreenHandler.cpp) ----
 lv_obj_t *ui_StrokeSpeedSlider      = nullptr;
 lv_obj_t *ui_StrokeStrokeSlider     = nullptr;
 lv_obj_t *ui_StrokeSensationSlider  = nullptr;
@@ -27,9 +25,7 @@ lv_obj_t *ui_StrokeSpeedValue       = nullptr;
 lv_obj_t *ui_StrokeStrokeValue      = nullptr;
 lv_obj_t *ui_StrokeSensationValue   = nullptr;
 
-// ---------------------------------------------------------------------------
-// Exported screen objects declared extern in ui.h
-// ---------------------------------------------------------------------------
+// ---- Exported screen objects declared extern in ui.h ----
 // ui_Stroke is declared in ui.h and defined in ui.c — only SET here
 // ui_StrokePatternLabel1 / ui_StrokePatternLabel: defined here, extern in ui.h
 // ui_Batt7 / ui_BattValue7 / ui_Battery7: defined here, extern in ui.h
@@ -39,9 +35,7 @@ lv_obj_t *ui_Batt7               = nullptr;
 lv_obj_t *ui_BattValue7          = nullptr;
 lv_obj_t *ui_Battery7            = nullptr;
 
-// ---------------------------------------------------------------------------
-// Private widget pointers (screen-internal only)
-// ---------------------------------------------------------------------------
+// ---- Private widget pointers (screen-internal only) ----
 static lv_obj_t *s_Logo           = nullptr;
 static lv_obj_t *s_SpeedL         = nullptr;
 static lv_obj_t *s_StrokeL        = nullptr;
@@ -146,9 +140,7 @@ static void flushStrokeMotionCommands(float motionSpeed, float motionDepth, floa
     s_stroke_motion_cache_valid = true;
 }
 
-// ---------------------------------------------------------------------------
-// Event helpers
-// ---------------------------------------------------------------------------
+// ---- Event helpers ----
 static void ui_event_Stroke(lv_event_t *e) {
     if (lv_event_get_code(e) == LV_EVENT_SCREEN_LOADED) {
         if (s_Logo) lv_label_set_text(s_Logo, T_STROKE_SCREEN);
@@ -223,6 +215,31 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
         }
         if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
         SendCommand(PATTERN, 0.0f, OSSM_ID);
+
+        // Entering bator mode from another screen: depth becomes the CENTER of
+        // the motion range (stroke is the full range around that center) — a
+        // different meaning than on the home screen, where depth is the maximum
+        // position. Recompute it and push the new position immediately so the
+        // OSSM repositions instead of keeping the home-screen setpoints.
+        //
+        // Speed is deliberately NOT sent here: entering bator mode must never
+        // start the OSSM or change its speed. If it is running it keeps its
+        // current speed; if it is stopped it stays stopped (a later Start uses
+        // the stored resume speed). This is also why the "speed 100 while the
+        // OSSM is not running" scenario cannot happen.
+        if (stroke <= 0.5f) {
+            depth = maxdepthinmm / 2.0f;
+        } else {
+            depth = (maxdepthinmm / 2.0f) + (stroke / 2.0f);
+            if (depth > maxdepthinmm) depth = maxdepthinmm;
+        }
+        SendCommand(DEPTH, depth, OSSM_ID);
+        SendCommand(STROKE, stroke, OSSM_ID);
+        SendCommand(SENSATION, sensation, OSSM_ID);
+        s_last_stroke_speed = speed;
+        s_last_stroke_depth = depth;
+        s_last_stroke = stroke;
+        s_stroke_motion_cache_valid = true;
     }
 
     syncStrokeSliderRangesToLimits();
@@ -341,9 +358,7 @@ void strokeScreenHandle(bool shouldRehome, bool resetToSimpleStroke) {
     s_last_stroke_ui_ossm_state = OSSM_On;
 }
 
-// ---------------------------------------------------------------------------
-// Slider helper: creates label + slider + value-label as a horizontal row
-// ---------------------------------------------------------------------------
+// ---- Slider helper: creates label + slider + value-label as a horizontal row ----
 static lv_obj_t *createSliderRow(lv_obj_t *parent, const char *label_text, int yOffset,
                                  int rangeMin, int rangeMax, lv_slider_mode_t mode,
                                  lv_style_t *trackStyle, lv_style_t *indicatorStyle,
@@ -386,9 +401,7 @@ static lv_obj_t *createSliderRow(lv_obj_t *parent, const char *label_text, int y
     return row;
 }
 
-// ---------------------------------------------------------------------------
-// Screen construction
-// ---------------------------------------------------------------------------
+// ---- Screen construction ----
 void ui_Stroke_screen_init() {
     ui_Stroke = lv_obj_create(NULL);
     lv_obj_clear_flag(ui_Stroke, LV_OBJ_FLAG_SCROLLABLE);
@@ -512,7 +525,7 @@ void ui_Stroke_screen_init() {
 
     s_ButtonMText = lv_label_create(s_ButtonM);
     lv_obj_set_align(s_ButtonMText, LV_ALIGN_CENTER);
-    lv_label_set_text(s_ButtonMText, "BLABLA " T_START);
+    lv_label_set_text(s_ButtonMText, T_START);
     lv_obj_add_style(s_ButtonMText, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 
     // Right — Pattern screen

@@ -1,3 +1,7 @@
+// PlatformCompat.h — board-abstraction layer for display, power and touch.
+//
+// The CYD implementation lives in PlatformCompat.cpp (compiled when CYD is
+// defined).
 #pragma once
 
 #include <Arduino.h>

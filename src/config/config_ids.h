@@ -1,3 +1,6 @@
+// config_ids.h — shared device IDs and hardware constants.
+//
+// Safe to include from any translation unit.
 #pragma once
 
 // Device IDs

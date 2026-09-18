@@ -28,11 +28,12 @@
 #include "buttonhandlers/ButtonHandlers.h"
 #include "screens/ScreenHandler.h"
 #include "communication/BleComm.h"
+#include "communication/BleBackground.h"
 #include "config/debug.h"
 
 namespace {
 
-// ---- Persistent calibration (Preferences namespace "coyote") ----------
+// ---- Persistent calibration ----
 struct CoyoteSettings {
     float freqMin = 10.0f;       // Hz (10-50 Hz range for tactile e-stim)
     float freqMax = 35.0f;
@@ -68,7 +69,7 @@ static void saveSettings() {
     prefs.end();
 }
 
-// ---- Slider row definitions --------------------------------------------
+// ---- Slider row definitions ----
 enum SliderRowType {
     ROW_TYPE_RANGE,   // dual handles (min..max)
     ROW_TYPE_SINGLE,  // single scalar slider (0..100)
@@ -93,7 +94,7 @@ static SliderRowDef s_sliderDefs[4] = {
 static constexpr int NUM_RANGE_SLIDERS = 4;
 static int s_activeSlider = 0;
 
-// ---- Screen widgets ------------------------------------------------------
+// ---- Screen widgets ----
 static lv_obj_t *s_screen = nullptr;
 static lv_obj_t *s_title = nullptr;
 static lv_obj_t *s_batt_title = nullptr;
@@ -114,7 +115,7 @@ static long s_enc3 = 0;
 static bool s_flush_buttons_once = false;
 static bool s_is_on = false;
 
-// ---- Connection state ----------------------------------------------------
+// ---- Connection state ----
 static bool s_addon_enabled = false;
 static bool s_ble_init = false;
 static Coyote* s_coyote = nullptr;   // never deleted: destructor derefs bleClient unconditionally
@@ -163,6 +164,7 @@ static coyote_pattern coyoteCustomModeFnB(uint32_t &waveclock, uint32_t &cycleco
 
 static void coyoteInitBleOnce() {
     if (s_ble_init) return;
+    if (bleRadioIsSuspended()) return;  // WiFi portal owns the radio/RAM
     if (!NimBLEDevice::isInitialized()) {
         NimBLEDevice::init("M5-OSSM-Remote");
     }
@@ -245,7 +247,7 @@ static bool coyoteTryConnect(bool force) {
     return true;
 }
 
-// ---- Mapping: rail telemetry -> Coyote frequency/intensity --------------
+// ---- Mapping: rail telemetry -> Coyote frequency/intensity ----
 static float mapClamped(float value, float inMin, float inMax, float outMin, float outMax) {
     if (inMax <= inMin) return outMin;
     float v = value;
@@ -335,7 +337,7 @@ static void updateMapping() {
 #endif
 }
 
-// ---- Screen construction --------------------------------------------------
+// ---- Screen construction ----
 static void applyRowHighlight(int index) {
     for (int i = 0; i < NUM_RANGE_SLIDERS; ++i) {
         if (!s_row_label[i]) continue;
@@ -609,7 +611,7 @@ void CoyoteHandleScreen(const ButtonEvents &events) {
     createScreenIfNeeded();
 
     if (!CoyoteIsPaired()) {
-        (void)coyoteTryConnect(false);
+        bleBackgroundRequest(BleBgJob::CoyoteProbe);  // reconnect in the background
     }
 
     if (s_flush_buttons_once) {

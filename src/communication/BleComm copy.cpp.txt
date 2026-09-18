@@ -1,0 +1,1719 @@
+#include "BleComm.h"
+
+#include <NimBLEDevice.h>
+//#include <esp_heap_caps.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+#include <freertos/task.h>
+#include <cstring>
+#include <queue>
+
+#include "CommManager.h"
+#include "BleBackground.h"
+#include "../config/debug.h"
+#include "../main.h"
+#include "../screens/ScreenHandler.h"
+#include "../ui/ui.h"
+
+
+namespace {
+
+static const char* OSSM_BLE_DEVICE_NAME = "OSSM";
+static const char* OSSM_BLE_SERVICE_UUID = "522b443a-4f53-534d-0001-420badbabe69";
+static const char* OSSM_BLE_COMMAND_CHAR_UUID = "522b443a-4f53-534d-1000-420badbabe69";
+static const char* OSSM_BLE_SPEED_KNOB_CHAR_UUID = "522b443a-4f53-534d-1010-420badbabe69";
+static const char* OSSM_BLE_STATE_CHAR_UUID = "522b443a-4f53-534d-2000-420badbabe69";
+static const char* OSSM_BLE_PATTERNS_CHAR_UUID = "522b443a-4f53-534d-3000-420badbabe69";
+static const char* OSSM_BLE_PATTERN_DATA_CHAR_UUID = "522b443a-4f53-534d-3010-420badbabe69";
+static const char* ADVANCED_STATUS_CHAR_UUID = "4F53534D-6164-7661-6E63-656473746174";
+static const char* ADVANCED_CONFIG_CHAR_UUID = "4F53534D-6164-7661-6E63-6564636F6E66";
+static const char* ADVANCED_CONTROL_CHAR_UUID = "4F53534D-6164-7661-6E63-6564636F6E74";
+static const char* ADVANCED_PRESETS_CHAR_UUID = "4F53534D-6164-7661-6E63-656470727374";
+
+// New OSSM service (4f53534d-0000-...): individual setpoint and live
+// per-stroke telemetry characteristics (mirrors OSSM src/services/
+// communication/nimble.h).
+static const char* OSSM_NEW_SERVICE_UUID = "4f53534d-0000-0000-0000-000000000000";
+static const char* OSSM_SPEED_CHAR_UUID = "4f53534d-436f-6d6d-6f6e-005370656564";
+static const char* OSSM_MAXDEP_CHAR_UUID = "4f53534d-436f-6d6d-6f6e-4d6178446570";
+static const char* OSSM_MINDEP_CHAR_UUID = "4f53534d-436f-6d6d-6f6e-4d696e446570";
+static const char* OSSM_SENSAT_CHAR_UUID = "4f53534d-456e-6769-6e65-536174696f6e";
+static const char* OSSM_SENPAT_CHAR_UUID = "4f53534d-456e-6769-6e65-50617465726e";
+static const char* OSSM_STATE_CHAR_UUID = "4f53534d-5374-6174-654d-616368696e65";
+static const char* OSSM_STRPOS_CHAR_UUID = "4f53534d-456e-6769-6e65-537472506f73";
+static const char* OSSM_STRSPD_CHAR_UUID = "4f53534d-456e-6769-6e65-537472537064";
+static const char* OSSM_STRACC_CHAR_UUID = "4f53534d-456e-6769-6e65-537472416363";
+
+// Bluetooth SIG Device Information Service (0x180A). OSSM-Lite populates the
+// firmware revision / model / manufacturer here; standard OSSM and OSSM-RS do
+// not expose this service at all.
+static const char* DEVICE_INFO_SERVICE_UUID = "180A";
+static const char* FIRMWARE_REVISION_UUID   = "2A26";
+static const char* MODEL_NUMBER_UUID        = "2A24";
+static const char* MANUFACTURER_NAME_UUID   = "2A29";
+
+static constexpr uint32_t BLE_STATE_POLL_MS = 20;
+static constexpr uint32_t STATE_FRESH_TIMEOUT_MS = 1200;
+
+enum class MachineMode {
+  Unknown,
+  Menu,
+  Homing,
+  StrokeEngine,
+  SimplePenetration,
+  Streaming,
+  Other,
+};
+
+static bool g_bleInit = false;
+static bool g_bleEnabled = false;
+// True while the WiFi captive portal owns the radio/RAM. While suspended, all
+// init/connect/scan attempts must be rejected, otherwise the auto-reconnect
+// loop re-initialises NimBLE (and re-connects to the OSSM) while the portal is
+// up, re-acquiring the memory the suspend just freed and crashing the heap.
+static bool g_bleSuspended = false;
+static NimBLEClient* g_client = nullptr;
+static NimBLERemoteCharacteristic* g_cmd = nullptr;
+static NimBLERemoteCharacteristic* g_speedKnob = nullptr;
+static NimBLERemoteCharacteristic* g_state = nullptr;
+static NimBLERemoteCharacteristic* g_patterns = nullptr;
+static NimBLERemoteCharacteristic* g_patternData = nullptr;
+static NimBLERemoteCharacteristic* g_adv_status = nullptr;
+static NimBLERemoteCharacteristic* g_adv_config = nullptr;
+static NimBLERemoteCharacteristic* g_adv_control = nullptr;
+static NimBLERemoteCharacteristic* g_adv_presets = nullptr;
+static NimBLERemoteCharacteristic* g_speed = nullptr;
+static NimBLERemoteCharacteristic* g_maxDep = nullptr;
+static NimBLERemoteCharacteristic* g_minDep = nullptr;
+static NimBLERemoteCharacteristic* g_sensation = nullptr;
+static NimBLERemoteCharacteristic* g_pattern = nullptr;
+static NimBLERemoteCharacteristic* g_stateName = nullptr;
+static NimBLERemoteCharacteristic* g_railPos = nullptr;
+static NimBLERemoteCharacteristic* g_strokeSpeed = nullptr;
+static NimBLERemoteCharacteristic* g_railAccel = nullptr;
+static NimBLERemoteCharacteristic* g_infoFirmware = nullptr;
+static NimBLERemoteCharacteristic* g_infoModel = nullptr;
+static NimBLERemoteCharacteristic* g_infoManufacturer = nullptr;
+static SemaphoreHandle_t g_bleMutex = nullptr;
+static SemaphoreHandle_t g_modeReadyMutex = nullptr;
+static TaskHandle_t g_mainTaskHandle = nullptr;
+static TaskHandle_t g_pollTask = nullptr;
+static TaskHandle_t g_txTask = nullptr;
+static SemaphoreHandle_t g_txSem = nullptr;
+static SemaphoreHandle_t g_connectMutex = nullptr;
+static uint32_t g_lastConnectAttemptMs = 0;
+static constexpr uint32_t BLE_CONNECT_COOLDOWN_MS = 1200;
+struct TxQueueItem {
+  String cmd;
+  bool requireConfirm;
+  bool isRealtime;
+  bool needsMotionReady;
+};
+static std::queue<TxQueueItem> g_txQueue;
+static float g_lastRunSpeed = 0.0f;
+static MachineMode g_machineMode = MachineMode::Unknown;
+static String g_machineStateName;
+static uint32_t g_lastStateUpdateMs = 0;
+static uint32_t g_lastPollInfoMs = 0;
+static uint32_t g_lastRawStateLogMs = 0;
+static uint32_t g_lastTelemetryLogMs = 0;
+static uint32_t g_pollReadOkCount = 0;
+static uint32_t g_pollReadFailCount = 0;
+static float g_unpauseSpeed = 0.0f;
+static float g_lastRequestedStroke = -1.0f;
+
+// Firmware identification: variant is classified during connect, and the
+// version string is read from the Device Information Service when present.
+static OssmFirmwareVariant g_firmwareVariant = OssmFirmwareVariant::Unknown;
+static char  g_firmwareVersion[24] = {0};
+static char  g_firmwareDescription[40] = {0};
+static std::string g_advertisedName;
+
+struct ConfirmedMachineState {
+  bool valid = false;
+  String raw;
+  String stateName;
+  MachineMode mode = MachineMode::Unknown;
+  float speed = 0.0f;
+  float depth = 0.0f;
+  float position = -1.0f;
+  float stroke = 0.0f;
+  float sensation = 0.0f;
+  float pattern = 0.0f;
+  float minPosition = 0.0f;
+  float maxPosition = 100.0f;
+  bool minMaxValid = false;   // true when min/max were present in the OSSM JSON
+  float railPos = -1.0f;      // Live per-stroke rail position (% of travel), from OSSM telemetry
+  float strokeSpeed = -1.0f;  // Live per-stroke cruise speed (% of max), from OSSM telemetry
+  float railAccel = -1.0f;    // Acceleration used to reach strokeSpeed (% of max), from OSSM telemetry
+  uint32_t revision = 0;
+};
+
+static ConfirmedMachineState g_confirmedState;
+
+enum ParamIdx { P_SPEED = 0, P_DEPTH = 1, P_STROKE = 2, P_SENSATION = 3, P_PATTERN = 4, P_COUNT = 5 };
+
+// Forward declaration (definition is below)
+static bool bleReadStateOnce();
+static bool ensureAdvancedCharacteristics(bool needConfig, bool needStatus, bool needControl, bool needPresets);
+
+// -------------------------------------------------------
+// Internal capability / parsing helpers
+// -------------------------------------------------------
+static bool canAdvancedRead(const NimBLERemoteCharacteristic* characteristic) {
+  return characteristic && characteristic->canRead();
+}
+
+static bool canAdvancedWrite(const NimBLERemoteCharacteristic* characteristic) {
+  return characteristic && (characteristic->canWrite() || characteristic->canWriteNoResponse());
+}
+
+static float extractJsonNumberValue(const String& text, const String& key) {
+  String pattern = String("\"") + key + String("\"");
+  int keyPos = text.indexOf(pattern);
+  if (keyPos < 0) return -1.0f;
+
+  int colonPos = text.indexOf(':', keyPos + pattern.length());
+  if (colonPos < 0) return -1.0f;
+
+  int pos = colonPos + 1;
+  while (pos < text.length()) {
+    char c = text.charAt(pos);
+    if ((c >= '0' && c <= '9') || c == '-' || c == '.') break;
+    ++pos;
+  }
+  if (pos >= text.length()) return -1.0f;
+
+  int end = pos;
+  while (end < text.length()) {
+    char c = text.charAt(end);
+    if (!((c >= '0' && c <= '9') || c == '.' || c == '-')) break;
+    ++end;
+  }
+  if (end <= pos) return -1.0f;
+
+  return text.substring(pos, end).toFloat();
+}
+
+static void pumpUiDuringModeWait() {
+  // ensureStrokeEngineOrStreamingReady() now also runs on bleTxTask; LVGL is
+  // not thread-safe, so only pump it when called back on the main UI task.
+  if (g_mainTaskHandle != nullptr && xTaskGetCurrentTaskHandle() != g_mainTaskHandle) {
+    return;
+  }
+  // Keep status icons and screen rendering responsive while mode gating loops.
+  screenForceStatusStripRefreshNow();
+  lv_task_handler();
+}
+
+static int extractPatternOptionsFromJson(const String& json, String* outOptions) {
+  if (!outOptions) return 0;
+  outOptions->remove(0);
+
+  int count = 0;
+  int searchPos = 0;
+  while (searchPos < json.length()) {
+    int nameKeyPos = json.indexOf("\"name\"", searchPos);
+    if (nameKeyPos < 0) break;
+
+    int colonPos = json.indexOf(':', nameKeyPos + 6);
+    if (colonPos < 0) break;
+
+    int startQuote = json.indexOf('"', colonPos + 1);
+    if (startQuote < 0) break;
+
+    int endQuote = json.indexOf('"', startQuote + 1);
+    if (endQuote < 0) break;
+
+    String name = json.substring(startQuote + 1, endQuote);
+    name.trim();
+    name.replace("\r", " ");
+    name.replace("\n", " ");
+
+    if (name.length() > 0) {
+      if (outOptions->length() > 0) outOptions->concat("\n");
+      outOptions->concat(name);
+      ++count;
+    }
+
+    searchPos = endQuote + 1;
+  }
+
+  return count;
+}
+
+// -------------------------------------------------------
+// Internal BLE client/characteristic lifecycle
+// -------------------------------------------------------
+static void bleResetClient() {
+  g_cmd = nullptr;
+  g_speedKnob = nullptr;
+  g_state = nullptr;
+  g_patterns = nullptr;
+  g_patternData = nullptr;
+  g_adv_status = nullptr;
+  g_adv_config = nullptr;
+  g_adv_control = nullptr;
+  g_adv_presets = nullptr;
+  g_speed = nullptr;
+  g_maxDep = nullptr;
+  g_minDep = nullptr;
+  g_sensation = nullptr;
+  g_pattern = nullptr;
+  g_stateName = nullptr;
+  g_railPos = nullptr;
+  g_strokeSpeed = nullptr;
+  g_railAccel = nullptr;
+  g_infoFirmware = nullptr;
+  g_infoModel = nullptr;
+  g_infoManufacturer = nullptr;
+  g_firmwareVariant = OssmFirmwareVariant::Unknown;
+  g_firmwareVersion[0] = '\0';
+  g_firmwareDescription[0] = '\0';
+
+  if (!g_client) return;
+
+  if (g_client->isConnected()) {
+    g_client->disconnect();
+  }
+  NimBLEDevice::deleteClient(g_client);
+  g_client = nullptr;
+}
+
+static bool ensureAdvancedCharacteristics(bool needConfig, bool needStatus, bool needControl, bool needPresets) {
+  if (!g_client || !g_client->isConnected()) return false;
+  const bool alreadyReady =
+      (!needConfig || canAdvancedRead(g_adv_config)) &&
+      (!needStatus || canAdvancedRead(g_adv_status)) &&
+      (!needControl || canAdvancedWrite(g_adv_control)) &&
+      (!needPresets || (canAdvancedRead(g_adv_presets) || canAdvancedWrite(g_adv_presets)));
+  if (alreadyReady) return true;
+
+  // Runtime service refresh (getServices(true)) is unsafe while poll/read tasks are active,
+  // so AP readiness is evaluated against pointers discovered during connect.
+  const bool ready =
+      (!needConfig || canAdvancedRead(g_adv_config)) &&
+      (!needStatus || canAdvancedRead(g_adv_status)) &&
+      (!needControl || canAdvancedWrite(g_adv_control)) &&
+      (!needPresets || (canAdvancedRead(g_adv_presets) || canAdvancedWrite(g_adv_presets)));
+  if (!ready) {
+    static uint32_t s_lastAdvDiagLogMs = 0;
+    const uint32_t nowMs = millis();
+    if ((nowMs - s_lastAdvDiagLogMs) > 5000U) {
+      LogDebugFormatted(
+          "[AP] Advanced characteristics missing/unsupported cfg=%d st=%d ctl=%d pst=%d\n",
+          canAdvancedRead(g_adv_config) ? 1 : 0,
+          canAdvancedRead(g_adv_status) ? 1 : 0,
+          canAdvancedWrite(g_adv_control) ? 1 : 0,
+          (canAdvancedRead(g_adv_presets) || canAdvancedWrite(g_adv_presets)) ? 1 : 0);
+      s_lastAdvDiagLogMs = nowMs;
+    }
+  }
+
+  return ready;
+}
+
+static float extractValueAfterKey(const String& text, const String& key) {
+  int keyPos = text.indexOf(key);
+  if (keyPos < 0) return -1.0f;
+  int pos = keyPos + key.length();
+  while (pos < text.length()) {
+    char c = text.charAt(pos);
+    if ((c >= '0' && c <= '9') || c == '-' || c == '.') break;
+    ++pos;
+  }
+  if (pos >= text.length()) return -1.0f;
+  int end = pos;
+  while (end < text.length()) {
+    char c = text.charAt(end);
+    if (!((c >= '0' && c <= '9') || c == '.')) break;
+    ++end;
+  }
+  return text.substring(pos, end).toFloat();
+}
+
+static bool extractJsonStringValue(const String& text, const String& key, String* outValue) {
+  if (!outValue) return false;
+  String pattern = String("\"") + key + String("\"");
+  int keyPos = text.indexOf(pattern);
+  if (keyPos < 0) return false;
+  int colonPos = text.indexOf(':', keyPos + pattern.length());
+  if (colonPos < 0) return false;
+  int startQuote = text.indexOf('"', colonPos + 1);
+  if (startQuote < 0) return false;
+  int endQuote = text.indexOf('"', startQuote + 1);
+  if (endQuote < 0) return false;
+  *outValue = text.substring(startQuote + 1, endQuote);
+  return true;
+}
+
+static int clampPercent(float value) {
+  if (value < 0.0f) return 0;
+  if (value > 100.0f) return 100;
+  return (int)(value + 0.5f);
+}
+
+static int mapSensationToBlePercent(float value) {
+  float normalized = value / 100.0f;
+  if (normalized < -1.0f) normalized = -1.0f;
+  if (normalized > 1.0f) normalized = 1.0f;
+  float percent = (normalized + 1.0f) * 50.0f;
+  return clampPercent(percent);
+}
+
+static void bleStoreUnpauseSpeed(float speedValue) {
+  g_unpauseSpeed = (float)clampPercent(speedValue);
+}
+
+static float bleGetUnpauseSpeed() {
+  return g_unpauseSpeed;
+}
+
+static MachineMode parseMachineMode(const String& stateName) {
+  String normalized = stateName;
+  normalized.toLowerCase();
+
+  if (normalized.startsWith("menu")) return MachineMode::Menu;
+  if (normalized.startsWith("homing")) return MachineMode::Homing;
+  if (normalized.startsWith("strokeengine")) return MachineMode::StrokeEngine;
+  if (normalized.startsWith("simplepenetration")) return MachineMode::SimplePenetration;
+  if (normalized.startsWith("streaming")) return MachineMode::Streaming;
+
+  // Rust OSSM BLE state names report run-ready as ready/playing/paused.
+  if (normalized.startsWith("ready") || normalized.startsWith("playing") || normalized.startsWith("paused")) {
+    return MachineMode::StrokeEngine;
+  }
+
+  if (normalized.length() == 0) return MachineMode::Unknown;
+  return MachineMode::Other;
+}
+
+static void updateCachedMachineState(const String& stateRaw) {
+  String parsedStateName;
+  const bool hasStateName = extractJsonStringValue(stateRaw, "state", &parsedStateName);
+
+  const float parsedSpeed = extractJsonNumberValue(stateRaw, "speed");
+  const float parsedStroke = extractJsonNumberValue(stateRaw, "stroke");
+  const float parsedSensation = extractJsonNumberValue(stateRaw, "sensation");
+  const float parsedDepth = extractJsonNumberValue(stateRaw, "depth");
+  const float parsedPattern = extractJsonNumberValue(stateRaw, "pattern");
+  const float parsedPosition = extractJsonNumberValue(stateRaw, "position");
+  const float parsedMin = extractJsonNumberValue(stateRaw, "minPosition");
+  const float parsedMax = extractJsonNumberValue(stateRaw, "maxPosition");
+
+  // Single mutex-guarded apply point (see also numericNotify/stateNameNotify):
+  // every confirmed-state writer serializes on g_bleMutex so readers holding
+  // the same mutex never observe a torn or partially-updated state.
+  //
+  // Bounded (not infinite): this can also run on the NimBLE host task via the
+  // notification callback. If a blocking BLE read currently holds g_bleMutex,
+  // blocking here would stall the host task and deadlock that read, so drop
+  // this update instead - the poll task re-reads state shortly after.
+  if (g_bleMutex && xSemaphoreTake(g_bleMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    return;
+  }
+
+  if (hasStateName) {
+    #ifdef SHOWBLEPOLL
+    if (parsedStateName != g_machineStateName) {  //if (showBlePollSerial && .....
+      Serial.printf("[BLE] State changed: %s -> %s\n",
+                    g_machineStateName.length() ? g_machineStateName.c_str() : "<none>",
+                    parsedStateName.c_str());
+    }
+    #endif
+    g_machineStateName = parsedStateName;
+    g_machineMode = parseMachineMode(parsedStateName);
+  }
+
+  const bool valuesChanged = !g_confirmedState.valid ||
+      (parsedSpeed >= 0.0f && parsedSpeed != g_confirmedState.speed) ||
+      (parsedDepth >= 0.0f && parsedDepth != g_confirmedState.depth) ||
+      (parsedStroke >= 0.0f && parsedStroke != g_confirmedState.stroke) ||
+      (parsedSensation >= 0.0f && parsedSensation != g_confirmedState.sensation) ||
+      (parsedMin >= 0.0f && parsedMin != g_confirmedState.minPosition) ||
+      (parsedMax >= 0.0f && parsedMax != g_confirmedState.maxPosition);
+
+  g_confirmedState.valid = true;
+  g_confirmedState.raw = stateRaw;
+  g_confirmedState.stateName = parsedStateName;
+  g_confirmedState.mode = g_machineMode;
+  if (parsedSpeed >= 0.0f) g_confirmedState.speed = parsedSpeed;
+  if (parsedDepth >= 0.0f) g_confirmedState.depth = parsedDepth;
+  if (parsedPosition >= 0.0f) g_confirmedState.position = parsedPosition;
+  if (parsedStroke >= 0.0f) g_confirmedState.stroke = parsedStroke;
+  if (parsedSensation >= 0.0f) g_confirmedState.sensation = parsedSensation;
+  if (parsedPattern >= 0.0f) g_confirmedState.pattern = parsedPattern;
+  if (parsedMin >= 0.0f) g_confirmedState.minPosition = parsedMin;
+  if (parsedMax >= 0.0f) g_confirmedState.maxPosition = parsedMax;
+  // Only OSSM Lite reports min/max position in its JSON; the standard OSSM
+  // and OSSM-RS firmwares only send depth/stroke.
+  g_confirmedState.minMaxValid = (parsedMin >= 0.0f && parsedMax >= 0.0f);
+  if (valuesChanged) ++g_confirmedState.revision;
+
+  // Keep the last nonzero OSSM speed available for MX resume after the
+  // confirmed running speed drops to zero during a pause/stop.
+  if (parsedSpeed > 0.5f) {
+    bleStoreUnpauseSpeed(parsedSpeed);
+  }
+
+  if (parsedSpeed >= 0.0f) {
+    OSSM_On = parsedSpeed > 0.5f;
+  }
+
+  // OSSM BLE control values are percentages (0..100).
+  maxdepthinmm = 100.0f;
+  speedlimit = 100.0f;
+  g_lastStateUpdateMs = millis();
+
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+}
+
+static bool hasFreshState() {
+  if (g_lastStateUpdateMs == 0) return false;
+  return (millis() - g_lastStateUpdateMs) <= STATE_FRESH_TIMEOUT_MS;
+}
+
+static void stateNotify(NimBLERemoteCharacteristic*, uint8_t* data, size_t len, bool) {
+  if (!data || len == 0) return;
+  String s((const char*)data, len);
+  updateCachedMachineState(s);
+}
+
+// Shared handler for the new OSSM service's numeric characteristics. Each
+// notification carries a single value that maps straight onto one cached
+// field. The legacy JSON state path remains the fallback for everything
+// else (state name, buffer, etc.) and for the OSSM_On side effects.
+static void numericNotify(NimBLERemoteCharacteristic* chr, uint8_t* data, size_t len, bool) {
+  if (!chr || !data || len == 0) return;
+  const float value = String((const char*)data, len).toFloat();
+  const NimBLEUUID uuid = chr->getUUID();
+  // Runs on the NimBLE host task: never block indefinitely on the BLE mutex,
+  // or a concurrent blocking readValue() (holding g_bleMutex) deadlocks.
+  if (g_bleMutex && xSemaphoreTake(g_bleMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    return;
+  }
+  if (uuid == NimBLEUUID(OSSM_SPEED_CHAR_UUID))       g_confirmedState.speed = value;
+  else if (uuid == NimBLEUUID(OSSM_MAXDEP_CHAR_UUID)) g_confirmedState.maxPosition = value;
+  else if (uuid == NimBLEUUID(OSSM_MINDEP_CHAR_UUID)) g_confirmedState.minPosition = value;
+  else if (uuid == NimBLEUUID(OSSM_SENSAT_CHAR_UUID)) g_confirmedState.sensation = value;
+  else if (uuid == NimBLEUUID(OSSM_SENPAT_CHAR_UUID)) g_confirmedState.pattern = value;
+  else if (uuid == NimBLEUUID(OSSM_STRPOS_CHAR_UUID)) g_confirmedState.railPos = value;
+  else if (uuid == NimBLEUUID(OSSM_STRSPD_CHAR_UUID)) g_confirmedState.strokeSpeed = value;
+  else if (uuid == NimBLEUUID(OSSM_STRACC_CHAR_UUID)) g_confirmedState.railAccel = value;
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+}
+
+static void stateNameNotify(NimBLERemoteCharacteristic*, uint8_t* data, size_t len, bool) {
+  if (!data || len == 0) return;
+  String s((const char*)data, len);
+  // Runs on the NimBLE host task: never block indefinitely on the BLE mutex,
+  // or a concurrent blocking readValue() (holding g_bleMutex) deadlocks.
+  if (g_bleMutex && xSemaphoreTake(g_bleMutex, pdMS_TO_TICKS(100)) != pdTRUE) {
+    return;
+  }
+  g_machineStateName = s;
+  g_machineMode = parseMachineMode(s);
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+}
+
+// -------------------------------------------------------
+// Internal BLE read/write helpers
+// -------------------------------------------------------
+static bool bleWriteCommand(const String& cmd) {
+  if (!g_cmd || !g_client || !g_client->isConnected()) return false;
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  bool ok = g_cmd->writeValue((uint8_t*)cmd.c_str(), cmd.length(), false);
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+  return ok;
+}
+
+static bool bleReadRawCharacteristic(NimBLERemoteCharacteristic* characteristic, String* outValue) {
+  if (!outValue || !characteristic || !g_client || !g_client->isConnected() || !characteristic->canRead()) {
+    return false;
+  }
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  std::string raw = characteristic->readValue();
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+
+  *outValue = String(raw.c_str());
+  return true;
+}
+
+static void logAdvancedSnapshotOnConnect() {
+  String payload;
+
+  auto logReadableChar = [&](const char* tag, NimBLERemoteCharacteristic* characteristic) {
+    if (canAdvancedRead(characteristic) && bleReadRawCharacteristic(characteristic, &payload) && payload.length() > 0) {
+      Serial.printf("%s %s\n", tag, payload.c_str());
+    } else {
+      Serial.printf("%s <unavailable>\n", tag);
+    }
+  };
+
+  logReadableChar("[BLE][CHAR_STATE]", g_state);
+  logReadableChar("[BLE][CHAR_CMD]", g_cmd);
+  logReadableChar("[BLE][CHAR_SPEED_KNOB]", g_speedKnob);
+
+  logReadableChar("[BLE][ADV_CONFIG]", g_adv_config);
+  logReadableChar("[BLE][ADV_STATUS]", g_adv_status);
+}
+
+static bool bleWriteRawCharacteristic(NimBLERemoteCharacteristic* characteristic, const String& payload) {
+  if (!characteristic || !g_client || !g_client->isConnected() || !characteristic->canWrite()) {
+    if (!characteristic || !g_client || !g_client->isConnected()) return false;
+    const bool supportsWrite = characteristic->canWrite();
+    const bool supportsWriteNoResp = characteristic->canWriteNoResponse();
+    if (!supportsWrite && !supportsWriteNoResp) return false;
+  }
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  bool ok = false;
+  if (characteristic->canWriteNoResponse()) {
+    ok = characteristic->writeValue((uint8_t*)payload.c_str(), payload.length(), false);
+  }
+  if (!ok && characteristic->canWrite()) {
+    ok = characteristic->writeValue((uint8_t*)payload.c_str(), payload.length(), true);
+  }
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+  return ok;
+}
+
+static bool bleReadCommandResponse(String* out) {
+  if (out) out->remove(0);
+  if (!g_cmd || !g_client || !g_client->isConnected() || !g_cmd->canRead()) return true;
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  std::string raw = g_cmd->readValue();
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+
+  if (raw.empty()) return true;
+
+  String response(raw.c_str());
+  if (out) *out = response;
+
+  if (response.startsWith("{")) {
+    updateCachedMachineState(response);
+    return true;
+  }
+  if (response.startsWith("fail:")) {
+    LogDebugFormatted("BLE command failed: %s\n", response.c_str());
+    return false;
+  }
+  return true;
+}
+
+static bool bleSendCommandWithResponse(const String& cmd) {
+  if (!bleWriteCommand(cmd)) return false;
+  String response;
+  return bleReadCommandResponse(&response);
+}
+
+// -------------------------------------------------------
+// Internal mode-readiness / command queueing
+// -------------------------------------------------------
+static bool waitForStrokeEngineOrStreamingReady(uint32_t timeoutMs) {
+  uint32_t start = millis();
+  while ((millis() - start) < timeoutMs) {
+    bleReadStateOnce();
+    pumpUiDuringModeWait();
+    if (hasFreshState() && g_machineMode == MachineMode::StrokeEngine) return true;
+    vTaskDelay(pdMS_TO_TICKS(30));
+  }
+  return false;
+}
+
+static bool ensureStrokeEngineOrStreamingReadyImpl() {
+  if (!bleCommTryConnect()) return false;
+
+  // Fast path: the BLE poll task and state notifications keep g_machineMode
+  // fresh every ~20 ms. If the OSSM is already in the target mode, return
+  // without a blocking read. This runs for EVERY queued motion command, and
+  // the read is what made depth/stroke (3 commands each after the min/max
+  // split) feel laggy while speed (1 command) stayed responsive.
+  if (hasFreshState() &&
+      (g_machineMode == MachineMode::StrokeEngine || g_machineMode == MachineMode::Streaming)) {
+    return true;
+  }
+
+  bleReadStateOnce();
+  pumpUiDuringModeWait();
+  if (hasFreshState() && g_machineMode == MachineMode::StrokeEngine) return true;
+  //also if in streaming mode in fresh state, return ok, since we need to be able to alter max
+  if (hasFreshState() && g_machineMode == MachineMode::Streaming) return true;
+
+  // Mandatory gating: if state is stale, force a refresh loop before deciding transitions.
+  if (!hasFreshState()) {
+    uint32_t start = millis();
+    while ((millis() - start) < 2000 && !hasFreshState()) {
+      bleReadStateOnce();
+      pumpUiDuringModeWait();
+      vTaskDelay(pdMS_TO_TICKS(30));
+    }
+  }
+  if (!hasFreshState()) return false;
+
+  // Optional safety behavior from settings: force a menu transition (homing path)
+  // before entering stroke engine.
+  if (ble_force_homeing && g_machineMode != MachineMode::Menu && g_machineMode != MachineMode::Homing) {
+    bleSendCommandWithResponse("go:menu");
+    pumpUiDuringModeWait();
+    uint32_t menuStart = millis();
+    while ((millis() - menuStart) < 2000) {
+      bleReadStateOnce();
+      pumpUiDuringModeWait();
+      if (hasFreshState() && (g_machineMode == MachineMode::Menu || g_machineMode == MachineMode::Homing)) break;
+      vTaskDelay(pdMS_TO_TICKS(30));
+    }
+  }
+
+  // If currently homing, wait a bit for completion before forcing a mode change.
+  if (g_machineMode == MachineMode::Homing) {
+    if (waitForStrokeEngineOrStreamingReady(6000)) return true;
+  }
+
+  // OSSM safety model: movement commands are ignored in menu state.
+  if (!bleSendCommandWithResponse("go:strokeEngine")) {
+    // Retry once in case we got a transient state-dependent fail.
+    pumpUiDuringModeWait();
+    vTaskDelay(pdMS_TO_TICKS(120));
+    if (!bleSendCommandWithResponse("go:strokeEngine")) return false;
+  }
+
+  pumpUiDuringModeWait();
+
+  return waitForStrokeEngineOrStreamingReady(10000);
+}
+
+// Serializes ensureStrokeEngineOrStreamingReadyImpl() since it now runs from
+// both the main thread (bleCommGoToStrokeEngine callers) and bleTxTask
+// (queued motion commands) — the underlying BLE calls/state are not safe
+// for two concurrent callers.
+static bool ensureStrokeEngineOrStreamingReady() {
+  if (!g_modeReadyMutex || xSemaphoreTake(g_modeReadyMutex, pdMS_TO_TICKS(25000)) != pdTRUE) {
+    return false;
+  }
+  const bool ok = ensureStrokeEngineOrStreamingReadyImpl();
+  xSemaphoreGive(g_modeReadyMutex);
+  return ok;
+}
+
+static bool isRealtimeSetCommand(const String& cmd, String* outType = nullptr) {
+  if (!cmd.startsWith("set:")) return false;
+  int colon = cmd.indexOf(':', 4);
+  if (colon <= 4) return false;
+  String type = cmd.substring(4, colon);
+    if (!(type == "speed" || type == "depth" || type == "stroke" ||
+      type == "min" || type == "max" || type == "sensation" || type == "pattern")) {
+    return false;
+  }
+  if (outType) *outType = type;
+  return true;
+}
+
+static bool queueCommand(const String& cmd, bool requireConfirm = true, bool needsMotionReady = false) {
+  if (cmd.length() == 0) return false;
+  if (!g_bleMutex) return false;
+
+  auto parseValidatedSetCommand = [](const String& input, String* outType) -> bool {
+    if (!outType) return false;
+    *outType = "";
+
+    String s = input;
+    s.trim();
+    if (!s.startsWith("set:")) return false;
+
+    int colon1 = s.indexOf(':');
+    int colon2 = s.indexOf(':', colon1 + 1);
+    if (colon1 < 0 || colon2 < 0) return false;
+    if (s.indexOf(':', colon2 + 1) >= 0) return false;
+
+    String type = s.substring(colon1 + 1, colon2);
+        if (!(type == "depth" || type == "sensation" || type == "pattern" ||
+          type == "speed" || type == "stroke" || type == "min" || type == "max")) {
+      return false;
+    }
+
+    String valuePart = s.substring(colon2 + 1);
+    int valueLen = valuePart.length();
+    if (valueLen < 1 || valueLen > 3) return false;
+
+    for (int i = 0; i < valueLen; ++i) {
+      char c = valuePart.charAt(i);
+      if (c < '0' || c > '9') return false;
+    }
+
+    int value = valuePart.toInt();
+    if (value < 0 || value > 100) return false;
+
+    *outType = type;
+    return true;
+  };
+
+  String normalized = cmd;
+  normalized.trim();
+
+  String type;
+  bool dedupeType = false;
+  if (normalized.startsWith("set:")) {
+    if (!parseValidatedSetCommand(normalized, &type)) {
+      LogDebugFormatted("Invalid set command format: %s\n", normalized.c_str());
+      return false;
+    }
+    dedupeType = true;
+  }
+
+  xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  if (dedupeType) {
+    std::queue<TxQueueItem> temp;
+    while (!g_txQueue.empty()) {
+      TxQueueItem existing = g_txQueue.front();
+      g_txQueue.pop();
+      String existingType;
+      if (parseValidatedSetCommand(existing.cmd, &existingType) && existingType == type) {
+        continue;
+      }
+      temp.push(existing);
+    }
+    g_txQueue = temp;
+  }
+  TxQueueItem item;
+  item.cmd = normalized;
+  item.requireConfirm = requireConfirm;
+  item.isRealtime = dedupeType;
+  item.needsMotionReady = needsMotionReady;
+  g_txQueue.push(item);
+  xSemaphoreGive(g_bleMutex);
+
+  if (g_txSem) xSemaphoreGive(g_txSem);
+  return true;
+}
+
+static bool bleReadStateOnce() {
+  if (!g_state || !g_client || !g_client->isConnected() || !g_state->canRead()) return false;
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  std::string raw = g_state->readValue();
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+  if (raw.empty()) return false;
+  updateCachedMachineState(String(raw.c_str()));
+  return true;
+}
+
+static bool waitForConfirmedStateUpdate(uint32_t timeoutMs, uint32_t previousUpdateMs) {
+  uint32_t startMs = millis();
+  while ((millis() - startMs) < timeoutMs) {
+    if (g_lastStateUpdateMs != 0 && g_lastStateUpdateMs != previousUpdateMs) return true;
+    if (bleReadStateOnce() && g_lastStateUpdateMs != 0 && g_lastStateUpdateMs != previousUpdateMs) return true;
+    vTaskDelay(pdMS_TO_TICKS(40));
+  }
+  return false;
+}
+
+// -------------------------------------------------------
+// Internal background tasks
+// -------------------------------------------------------
+static void blePollTask(void*) {
+  for (;;) {
+    // A live BLE connection remains authoritative even if the transport mode
+    // briefly transitions through NONE during startup or reconnect handling.
+    if (bleCommIsConnected()) {
+      if (bleReadStateOnce()) {
+        ++g_pollReadOkCount;
+
+              } else {
+        ++g_pollReadFailCount;
+      }
+    }
+
+    /*if (ShowBleRawState) {
+      const uint32_t now = millis();
+      if ((now - g_lastRawStateLogMs) >= 1000U) {
+        if (g_confirmedState.raw.length() > 0) {
+          Serial.printf("[BLE][RAW] %s\n", g_confirmedState.raw.c_str());
+        } else {
+          Serial.println("[BLE][RAW] <empty>");
+        }
+        g_lastRawStateLogMs = now;
+      }
+    }*/
+
+    //if (showBlePollSerial) {
+    #ifdef SHOWBLEPOLL
+      uint32_t now = millis();
+      if ((now - g_lastPollInfoMs) >= 1000) {
+        size_t qSize = 0;
+        if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+        qSize = g_txQueue.size();
+        if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+
+        uint32_t stateAgeMs = (g_lastStateUpdateMs == 0) ? 0 : (now - g_lastStateUpdateMs);
+        const float confirmedPosMm = g_confirmedState.position;
+        Serial.printf(
+          "[BLE] poll mode=%d state=%s fresh=%d age=%lums connected=%d queue=%u ok=%lu fail=%lu speed=%.1f depth=%.1f stroke=%.1f sensation=%.1f posMm=%.1f pattern=%d running=%d maxDepth=%.1f maxSpeed=%.1f\n",
+          (int)g_machineMode,
+          g_machineStateName.length() ? g_machineStateName.c_str() : "<none>",
+          hasFreshState() ? 1 : 0,
+          (unsigned long)stateAgeMs,
+          bleCommIsConnected() ? 1 : 0,
+          (unsigned)qSize,
+          (unsigned long)g_pollReadOkCount,
+          (unsigned long)g_pollReadFailCount,
+          speed,
+          depth,
+          stroke,
+          sensation,
+          confirmedPosMm,
+          pattern,
+          OSSM_On ? 1 : 0,
+          maxdepthinmm,
+          speedlimit);
+        g_lastPollInfoMs = now;
+      }
+    #endif
+
+    #ifdef SHOW_TELEMETRY
+    {
+      const uint32_t now = millis();
+      if ((now - g_lastTelemetryLogMs) >= 1000) {
+        g_lastTelemetryLogMs = now;
+        LogDebugFormatted(
+          "[TELEM] %s speed=%.1f min=%.1f max=%.1f sens=%.1f pat=%.0f rail=%.1f/%.1f/%.1f fresh=%d\n",
+          g_machineStateName.length() ? g_machineStateName.c_str() : "-",
+          g_confirmedState.speed,
+          g_confirmedState.minPosition,
+          g_confirmedState.maxPosition,
+          g_confirmedState.sensation,
+          g_confirmedState.pattern,
+          g_confirmedState.railPos,
+          g_confirmedState.strokeSpeed,
+          g_confirmedState.railAccel,
+          hasFreshState() ? 1 : 0);
+      }
+    }
+    #endif
+
+    vTaskDelay(pdMS_TO_TICKS(BLE_STATE_POLL_MS));
+  }
+}
+
+static void bleTxTask(void*) {
+  uint32_t lastRealtimeTxMs = 0;
+  for (;;) {
+    if (!g_txSem || xSemaphoreTake(g_txSem, portMAX_DELAY) != pdTRUE) continue;
+
+    for (;;) {
+      TxQueueItem item;
+      bool hasWork = false;
+
+      if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+      if (!g_txQueue.empty()) {
+        item = g_txQueue.front();
+        g_txQueue.pop();
+        hasWork = true;
+      }
+      if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+
+      if (!hasWork) break;
+
+      if (!bleCommTryConnect()) {
+        // Push command back for retry on next wake-up.
+        if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+        g_txQueue.push(item);
+        if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+        vTaskDelay(pdMS_TO_TICKS(120));
+        break;
+      }
+
+      if (item.needsMotionReady && !ensureStrokeEngineOrStreamingReady()) {
+        // Mode never became ready (OSSM stuck/unreachable) — drop this stale
+        // motion command instead of silently writing into the wrong mode.
+        vTaskDelay(pdMS_TO_TICKS(8));
+        continue;
+      }
+
+      if (item.isRealtime) {
+        uint32_t nowMs = millis();
+        uint32_t elapsedMs = nowMs - lastRealtimeTxMs;
+        if (elapsedMs < 30) {
+          vTaskDelay(pdMS_TO_TICKS(30 - elapsedMs));
+        }
+        lastRealtimeTxMs = millis();
+      }
+
+      uint32_t previousStateUpdateMs = g_lastStateUpdateMs;
+      bleWriteCommand(item.cmd);
+      if (item.requireConfirm) {
+        String response;
+        bleReadCommandResponse(&response);
+        if (response.length() == 0 || !response.startsWith("{")) {
+          waitForConfirmedStateUpdate(700, previousStateUpdateMs);
+        }
+      }
+      vTaskDelay(pdMS_TO_TICKS(8));
+    }
+  }
+}
+
+}  // namespace
+
+// -------------------------------------------------------
+// Public BLE bridge state
+// -------------------------------------------------------
+bool newPatternIsReadFromOSSM = false;
+String patternString;
+
+// -------------------------------------------------------
+// Public BLE lifecycle
+// -------------------------------------------------------
+void bleCommRegisterMainTask() {
+  g_mainTaskHandle = xTaskGetCurrentTaskHandle();
+}
+
+void bleCommInit() {
+  if (g_bleSuspended) return;  // WiFi portal owns the radio; do not re-init BLE
+  newPatternIsReadFromOSSM = false;
+  if (!g_bleInit) {
+    if (!NimBLEDevice::isInitialized()) {
+      NimBLEDevice::init("M5-OSSM-Remote");
+    }
+    // Request a larger MTU so larger notifications (e.g. the OSSM-RS 128-byte
+    // state JSON) fit in a single packet. OSSM-RS does not initiate the MTU
+    // exchange itself, so the central must.
+    //
+    // 247 is the BLE 4.2 max ATT MTU and the safe limit: it still carries a
+    // 244-byte notification (fits the 128-byte JSON) but does NOT exceed
+    // NimBLE's default 255-byte ACL buffer. A 512 MTU overflows that buffer,
+    // which crashed the controller during the full GATT discovery
+    // ("host reset rc=12" / "disc_chrs rc=7"), while the simpler Eject
+    // connection (default 23 MTU) kept working.
+    NimBLEDevice::setMTU(247);
+    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    g_bleInit = true;
+  }
+  if (!g_bleMutex) {
+    g_bleMutex = xSemaphoreCreateMutex();
+  }
+  if (!g_modeReadyMutex) {
+    g_modeReadyMutex = xSemaphoreCreateMutex();
+  }
+  if (!g_txSem) {
+    g_txSem = xSemaphoreCreateBinary();
+  }
+  if (!g_connectMutex) {
+    g_connectMutex = xSemaphoreCreateMutex();
+  }
+  if (!g_pollTask) {
+#if CONFIG_FREERTOS_UNICORE
+    xTaskCreatePinnedToCore(blePollTask, "blePollTask", 6144, nullptr, 2, &g_pollTask, 0);
+#else
+    xTaskCreatePinnedToCore(blePollTask, "blePollTask", 6144, nullptr, 2, &g_pollTask, 1);
+#endif
+  }
+  if (!g_txTask) {
+#if CONFIG_FREERTOS_UNICORE
+    xTaskCreatePinnedToCore(bleTxTask, "bleTxTask", 6144, nullptr, 3, &g_txTask, 0);
+#else
+    xTaskCreatePinnedToCore(bleTxTask, "bleTxTask", 6144, nullptr, 3, &g_txTask, 1);
+#endif
+  }
+}
+
+// Classifies the connected OSSM firmware and reads its version from the
+// Device Information Service (when present). Called once per successful
+// connection, after GATT discovery has populated the characteristic pointers.
+static void updateFirmwareIdentification() {
+  // The new 4f53534d-… service exists only on OSSM-Lite.
+  if (g_speed || g_maxDep || g_minDep || g_sensation || g_pattern ||
+      g_stateName || g_railPos || g_strokeSpeed || g_railAccel) {
+    g_firmwareVariant = OssmFirmwareVariant::OssmLite;
+  } else if (g_advertisedName == "OSSM-rs") {
+    g_firmwareVariant = OssmFirmwareVariant::OssmRs;
+  } else {
+    g_firmwareVariant = OssmFirmwareVariant::OssmStandard;
+  }
+
+  g_firmwareVersion[0] = '\0';
+  if (g_infoFirmware && g_infoFirmware->canRead()) {
+    std::string raw;
+    if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+    raw = g_infoFirmware->readValue();
+    if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+    if (!raw.empty()) {
+      snprintf(g_firmwareVersion, sizeof(g_firmwareVersion), "%s", raw.c_str());
+    }
+  }
+
+  const char* variantName = "OSSM";
+  switch (g_firmwareVariant) {
+    case OssmFirmwareVariant::OssmLite: variantName = "OSSM-Lite"; break;
+    case OssmFirmwareVariant::OssmRs:    variantName = "OSSM-RS"; break;
+    default:                             variantName = "OSSM"; break;
+  }
+  if (g_firmwareVersion[0] != '\0') {
+    snprintf(g_firmwareDescription, sizeof(g_firmwareDescription),
+             "%s v%s", variantName, g_firmwareVersion);
+  } else {
+    snprintf(g_firmwareDescription, sizeof(g_firmwareDescription), "%s", variantName);
+  }
+}
+
+bool bleCommTryConnect() {
+  if (g_bleSuspended) return false;  // do not scan/connect while the portal is up
+  if (bleCommIsConnected()) return true;
+  bleCommInit();
+
+  if (!g_connectMutex) return false;
+  if (xSemaphoreTake(g_connectMutex, pdMS_TO_TICKS(250)) != pdTRUE) return false;
+
+  if (bleCommIsConnected()) {
+    xSemaphoreGive(g_connectMutex);
+    return true;
+  }
+
+  const uint32_t nowMs = millis();
+  if ((nowMs - g_lastConnectAttemptMs) < BLE_CONNECT_COOLDOWN_MS) {
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
+  g_lastConnectAttemptMs = nowMs;
+
+  // Serialize with the background toy/addon scans over the shared scanner.
+  // RAII: released automatically on every return path below.
+  BleScanGuard scanGuard;
+  if (!scanGuard) {
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
+
+  NimBLEScan* scanner = NimBLEDevice::getScan();
+  if (!scanner) {
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
+
+  scanner->stop();
+  scanner->clearResults();
+  scanner->setActiveScan(true);
+  scanner->setInterval(160);
+  scanner->setWindow(160);
+
+  const uint32_t t0 = millis();
+  NimBLEScanResults results = scanner->getResults(2500, false);
+  std::string targetAddress;
+  NimBLEUUID serviceUuid(OSSM_BLE_SERVICE_UUID);
+
+  for (int i = 0; i < results.getCount(); ++i) {
+    const NimBLEAdvertisedDevice* d = results.getDevice(i);
+    if (!d) continue;
+    bool nameMatch = d->haveName() && (d->getName() == OSSM_BLE_DEVICE_NAME || d->getName() == "OSSM-REMOTE");
+    bool serviceMatch = d->haveServiceUUID() && d->isAdvertisingService(serviceUuid);
+    if (nameMatch || serviceMatch) {
+      targetAddress = d->getAddress().toString();
+      g_advertisedName = d->haveName() ? d->getName() : "";
+      break;
+    }
+  }
+
+  scanner->clearResults();
+  if (targetAddress.empty()) {
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
+  LogDebugFormatted("[BLE] connect: scan+match %lums\n", (unsigned long)(millis() - t0));
+
+  if (!g_client) {
+    g_client = NimBLEDevice::createClient();
+    if (!g_client) {
+      xSemaphoreGive(g_connectMutex);
+      return false;
+    }
+    // Relaxed connection interval (25-50ms) with a longer supervision timeout.
+    // The old fixed 15ms interval was fragile: under WiFi + other BLE links it
+    // made the OSSM connection fail to establish or drop shortly after. A wider
+    // interval lets the controller adapt while motion commands stay snappy.
+    g_client->setConnectionParams(20, 40, 0, 400);
+    // Keep NimBLE's built-in retry of 0x3e "connection failed to establish"
+    // (default 2 retries). 0x3e is a common transient link-layer failure on
+    // ESP32 with WiFi + BLE coexistence, and disabling it earlier made every
+    // fresh-boot 0x3e fatal. Each retry is a fresh connect inside the same
+    // connect() call, so a genuinely absent OSSM still returns within the
+    // 5s connect timeout.
+    g_client->setConnectTimeout(5000);
+  }
+
+  NimBLEAddress remoteAddress(targetAddress, 0);
+  if (!g_client->connect(remoteAddress)) {
+    bleResetClient();
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
+  LogDebugFormatted("[BLE] connect: gatt connect %lums\n", (unsigned long)(millis() - t0));
+
+  const std::vector<NimBLERemoteService*>& services = g_client->getServices(true);
+  if (services.empty()) {
+    bleResetClient();
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
+  LogDebugFormatted("[BLE] connect: service discovery %lums\n", (unsigned long)(millis() - t0));
+
+  g_cmd = nullptr;
+  g_speedKnob = nullptr;
+  g_state = nullptr;
+  g_adv_status = nullptr;
+  g_adv_config = nullptr;
+  g_adv_control = nullptr;
+  g_adv_presets = nullptr;
+  g_patterns = nullptr;
+  g_patternData = nullptr;
+
+  // Resolve characteristics via ONE full discovery per service, then match
+  // locally. Calling getCharacteristic() per UUID is the slow path: on a cache
+  // miss it fires a blocking ble_gattc_disc_chrs_by_uuid() against the
+  // peripheral for every one of these ~20 UUIDs that a service doesn't have.
+  // getServices(true) discovers SERVICES only (no characteristics), so each
+  // service's characteristic vector is empty here and must be filled with a
+  // single retrieveCharacteristics() via getCharacteristics(true).
+  const NimBLEUUID uuidCmd(OSSM_BLE_COMMAND_CHAR_UUID);
+  const NimBLEUUID uuidSpeedKnob(OSSM_BLE_SPEED_KNOB_CHAR_UUID);
+  const NimBLEUUID uuidState(OSSM_BLE_STATE_CHAR_UUID);
+  const NimBLEUUID uuidPatterns(OSSM_BLE_PATTERNS_CHAR_UUID);
+  const NimBLEUUID uuidPatternData(OSSM_BLE_PATTERN_DATA_CHAR_UUID);
+  const NimBLEUUID uuidAdvStatus(ADVANCED_STATUS_CHAR_UUID);
+  const NimBLEUUID uuidAdvConfig(ADVANCED_CONFIG_CHAR_UUID);
+  const NimBLEUUID uuidAdvControl(ADVANCED_CONTROL_CHAR_UUID);
+  const NimBLEUUID uuidAdvPresets(ADVANCED_PRESETS_CHAR_UUID);
+  const NimBLEUUID uuidSpeed(OSSM_SPEED_CHAR_UUID);
+  const NimBLEUUID uuidMaxDep(OSSM_MAXDEP_CHAR_UUID);
+  const NimBLEUUID uuidMinDep(OSSM_MINDEP_CHAR_UUID);
+  const NimBLEUUID uuidSensation(OSSM_SENSAT_CHAR_UUID);
+  const NimBLEUUID uuidPattern(OSSM_SENPAT_CHAR_UUID);
+  const NimBLEUUID uuidStateName(OSSM_STATE_CHAR_UUID);
+  const NimBLEUUID uuidRailPos(OSSM_STRPOS_CHAR_UUID);
+  const NimBLEUUID uuidStrokeSpeed(OSSM_STRSPD_CHAR_UUID);
+  const NimBLEUUID uuidRailAccel(OSSM_STRACC_CHAR_UUID);
+  const NimBLEUUID uuidInfoFirmware(FIRMWARE_REVISION_UUID);
+  const NimBLEUUID uuidInfoModel(MODEL_NUMBER_UUID);
+  const NimBLEUUID uuidInfoManufacturer(MANUFACTURER_NAME_UUID);
+
+  for (NimBLERemoteService* service : services) {
+    if (!service) continue;
+    for (NimBLERemoteCharacteristic* chr : service->getCharacteristics(true)) {
+      if (!chr) continue;
+      const NimBLEUUID u = chr->getUUID();
+      if (!g_cmd && u == uuidCmd) g_cmd = chr;
+      else if (!g_speedKnob && u == uuidSpeedKnob) g_speedKnob = chr;
+      else if (!g_state && u == uuidState) g_state = chr;
+      else if (!g_patterns && u == uuidPatterns) g_patterns = chr;
+      else if (!g_patternData && u == uuidPatternData) g_patternData = chr;
+      else if (!g_adv_status && u == uuidAdvStatus) g_adv_status = chr;
+      else if (!g_adv_config && u == uuidAdvConfig) g_adv_config = chr;
+      else if (!g_adv_control && u == uuidAdvControl) g_adv_control = chr;
+      else if (!g_adv_presets && u == uuidAdvPresets) g_adv_presets = chr;
+      else if (!g_speed && u == uuidSpeed) g_speed = chr;
+      else if (!g_maxDep && u == uuidMaxDep) g_maxDep = chr;
+      else if (!g_minDep && u == uuidMinDep) g_minDep = chr;
+      else if (!g_sensation && u == uuidSensation) g_sensation = chr;
+      else if (!g_pattern && u == uuidPattern) g_pattern = chr;
+      else if (!g_stateName && u == uuidStateName) g_stateName = chr;
+      else if (!g_railPos && u == uuidRailPos) g_railPos = chr;
+      else if (!g_strokeSpeed && u == uuidStrokeSpeed) g_strokeSpeed = chr;
+      else if (!g_railAccel && u == uuidRailAccel) g_railAccel = chr;
+      else if (!g_infoFirmware && u == uuidInfoFirmware) g_infoFirmware = chr;
+      else if (!g_infoModel && u == uuidInfoModel) g_infoModel = chr;
+      else if (!g_infoManufacturer && u == uuidInfoManufacturer) g_infoManufacturer = chr;
+    }
+  }
+  LogDebugFormatted("[BLE] connect: char lookup %lums\n", (unsigned long)(millis() - t0));
+
+  if (!g_cmd || !g_cmd->canWrite()) {
+    bleResetClient();
+    xSemaphoreGive(g_connectMutex);
+    return false;
+  }
+
+  if (g_speedKnob && g_speedKnob->canWrite()) {
+    static const char* independentMode = "false";
+    g_speedKnob->writeValue((uint8_t*)independentMode, strlen(independentMode), true);
+  }
+  LogDebugFormatted("[BLE] connect: speedknob write %lums\n", (unsigned long)(millis() - t0));
+
+  if (g_state && g_state->canNotify()) {
+    g_state->subscribe(true, stateNotify, false);
+  }
+
+  // New OSSM service: subscribe to the individual setpoint and live
+  // telemetry characteristics. Best effort — older OSSM firmware may not
+  // expose all of them.
+  auto subscribeNumeric = [](NimBLERemoteCharacteristic* chr) {
+    if (chr && chr->canNotify()) chr->subscribe(true, numericNotify, false);
+  };
+  subscribeNumeric(g_speed);
+  subscribeNumeric(g_maxDep);
+  subscribeNumeric(g_minDep);
+  subscribeNumeric(g_sensation);
+  subscribeNumeric(g_pattern);
+  subscribeNumeric(g_railPos);
+  subscribeNumeric(g_strokeSpeed);
+  subscribeNumeric(g_railAccel);
+  if (g_stateName && g_stateName->canNotify()) g_stateName->subscribe(true, stateNameNotify, false);
+  LogDebugFormatted("[BLE] connect: subscribes %lums\n", (unsigned long)(millis() - t0));
+
+  g_lastStateUpdateMs = 0;
+  const bool stateOk = bleReadStateOnce();
+  LogDebugFormatted("[BLE] connect: state read %lums\n", (unsigned long)(millis() - t0));
+  updateFirmwareIdentification();
+  LogDebugFormatted("[BLE] connect: firmware id %lums\n", (unsigned long)(millis() - t0));
+  logAdvancedSnapshotOnConnect();
+  LogDebugFormatted("[BLE] connect: snapshot reads %lums\n", (unsigned long)(millis() - t0));
+  xSemaphoreGive(g_connectMutex);
+  return stateOk || bleCommIsConnected();
+}
+
+bool bleCommIsConnected() {
+  return g_client && g_client->isConnected() && g_cmd;
+}
+
+OssmFirmwareVariant bleCommGetFirmwareVariant() {
+  return g_firmwareVariant;
+}
+
+const char* bleCommGetFirmwareVersion() {
+  return g_firmwareVersion;
+}
+
+const char* bleCommGetFirmwareDescription() {
+  return (g_firmwareDescription[0] != '\0') ? g_firmwareDescription : "OSSM";
+}
+
+// -------------------------------------------------------
+// Public state / mode helpers
+// -------------------------------------------------------
+void bleCommSetEnabled(bool enabled) {
+  g_bleEnabled = enabled;
+  if (!enabled) {
+    newPatternIsReadFromOSSM = false;
+  }
+}
+
+bool bleCommIsEnabled() {
+  return g_bleEnabled;
+}
+
+void bleCommSuspend() {
+  g_bleSuspended = true;  // reject any auto-reconnect attempt from here on
+  LogDebugFormatted("[BLE] Suspend: releasing NimBLE host + controller for the WiFi portal\n");
+  // 1) Stop the background tasks first so nothing touches NimBLE or the cached
+  //    state while it is being torn down.
+  if (g_pollTask) {
+    vTaskDelete(g_pollTask);
+    g_pollTask = nullptr;
+  }
+  if (g_txTask) {
+    vTaskDelete(g_txTask);
+    g_txTask = nullptr;
+  }
+
+  // 2) Disconnect and drop the client plus every characteristic pointer.
+  bleResetClient();
+
+  // 3) Clear any queued motion commands (no mutex needed: tasks are gone).
+  while (!g_txQueue.empty()) g_txQueue.pop();
+
+  // 4) Tear the NimBLE host + BT controller down. This is what actually returns
+  //    the ~60-80 KB of internal SRAM that the WiFi portal needs.
+  if (NimBLEDevice::isInitialized()) {
+    NimBLEDevice::deinit(true);
+  }
+
+  // 5) Recreate every FreeRTOS primitive. A task deleted in step 1 may have
+  //    been holding g_modeReadyMutex / g_connectMutex / g_bleMutex mid-call;
+  //    recreating them guarantees resume() starts from a clean, unlocked state.
+  if (g_bleMutex)       { vSemaphoreDelete(g_bleMutex);       g_bleMutex = nullptr; }
+  if (g_modeReadyMutex) { vSemaphoreDelete(g_modeReadyMutex); g_modeReadyMutex = nullptr; }
+  if (g_txSem)          { vSemaphoreDelete(g_txSem);          g_txSem = nullptr; }
+  if (g_connectMutex)   { vSemaphoreDelete(g_connectMutex);   g_connectMutex = nullptr; }
+
+  g_bleInit = false;
+  g_bleEnabled = false;
+  newPatternIsReadFromOSSM = false;
+
+  // 6) Drop the cached machine state so the UI reflects "disconnected".
+  g_confirmedState = ConfirmedMachineState{};
+  g_machineStateName = String();
+  g_machineMode = MachineMode::Unknown;
+  g_lastStateUpdateMs = 0;
+  g_firmwareVariant = OssmFirmwareVariant::Unknown;
+  g_firmwareVersion[0] = '\0';
+  g_firmwareDescription[0] = '\0';
+  g_advertisedName.clear();
+  OSSM_On = false;
+}
+
+void bleCommResume() {
+  g_bleSuspended = false;
+  bleCommInit();
+  g_bleEnabled = true;
+  LogDebugFormatted("[BLE] Resume: NimBLE re-initialised, auto-reconnect enabled\n");
+}
+
+bool bleRadioIsSuspended() {
+  return g_bleSuspended;
+}
+
+bool bleCommHasFreshState() {
+  return hasFreshState();
+}
+
+bool bleCommGetConfirmedValues(BleConfirmedValues* outValues) {
+  if (!outValues || !g_confirmedState.valid || !hasFreshState()) return false;
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  outValues->revision = g_confirmedState.revision;
+  outValues->speed = g_confirmedState.speed;
+  // OSSM Lite exposes min/max position: derive depth/stroke from them. Other
+  // firmware variants (standard OSSM, OSSM-RS) only send depth/stroke in the
+  // legacy JSON, so fall back to those when min/max were not provided.
+  if (g_confirmedState.minMaxValid) {
+    outValues->depth = g_confirmedState.maxPosition;
+    outValues->stroke = g_confirmedState.maxPosition - g_confirmedState.minPosition;
+  } else {
+    outValues->depth = g_confirmedState.depth;
+    outValues->stroke = g_confirmedState.stroke;
+  }
+  outValues->sensation = (g_confirmedState.sensation * 2.0f) - 100.0f;
+  outValues->pattern = (int)(g_confirmedState.pattern + 0.5f);
+  outValues->minPosition = g_confirmedState.minPosition;
+  outValues->maxPosition = g_confirmedState.maxPosition;
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+  return true;
+}
+
+bool bleCommIsHoming() {
+  if (!hasFreshState()) return false;
+  if (!g_bleMutex) return g_machineMode == MachineMode::Homing;
+  xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  const bool homing = (g_machineMode == MachineMode::Homing);
+  xSemaphoreGive(g_bleMutex);
+  return homing;
+}
+
+
+bool bleCommGetRailTelemetry(BleRailTelemetry* outValues) {
+  if (!outValues || !g_confirmedState.valid || !hasFreshState()) return false;
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  outValues->railPos = g_confirmedState.railPos;
+  outValues->strokeSpeed = g_confirmedState.strokeSpeed;
+  outValues->railAccel = g_confirmedState.railAccel;
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+  return true;
+}
+
+int bleCommGetHomingDirection() {
+  if (!hasFreshState() || !g_bleMutex) return 0;
+  xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  if (g_machineMode != MachineMode::Homing) {
+    xSemaphoreGive(g_bleMutex);
+    return 0;
+  }
+  String s = g_machineStateName;
+  xSemaphoreGive(g_bleMutex);
+  s.toLowerCase();
+  if (s.indexOf("forward") >= 0 || s.indexOf("up") >= 0) return 1;
+  if (s.indexOf("backward") >= 0 || s.indexOf("down") >= 0) return -1;
+  return 0;
+}
+
+float bleCommGetConfirmedPosition() {
+  if (!g_bleMutex) return -1.0f;
+  xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  const bool valid = g_confirmedState.valid;
+  const float position = g_confirmedState.position;
+  xSemaphoreGive(g_bleMutex);
+  if (!valid) return -1.0f;
+  if (!hasFreshState()) return -1.0f;
+  return position;
+}
+
+int bleCommSetUnpauseSpeed(float speedValue) {
+  bleStoreUnpauseSpeed(speedValue);
+  return (int)bleGetUnpauseSpeed();
+}
+
+int bleCommGetUnpauseSpeed() {
+  return (int)bleGetUnpauseSpeed();
+}
+
+// -------------------------------------------------------
+// Public command bridge
+// -------------------------------------------------------
+bool bleCommSendAppCommand(int appCommand, float value, float currentSpeed,
+                           float currentDepth, float currentStroke,
+                           float maxDepthMm, float maxSpeedValue) {
+  (void)currentDepth;
+  (void)currentStroke;
+  (void)maxDepthMm;
+  (void)maxSpeedValue;
+
+  if (!bleCommTryConnect()) return false;
+  bool SafeStartStop   = true; //default to true, but will be set to false if the checkbox is unchecked in the UI
+
+  const bool isMotionControl =
+      (appCommand == SPEED || appCommand == DEPTH || appCommand == STROKE ||
+       appCommand == SENSATION || appCommand == PATTERN || appCommand == ON ||
+       appCommand == OFF);
+
+  // Mode-readiness (up to ~20s of retries/waits) is deferred to bleTxTask via
+  // TxQueueItem::needsMotionReady below, so callers on the UI/main thread
+  // never block on it (see queueCommand() at the bottom of this function).
+
+  if (appCommand == SETUP_D_I) {
+    return queueCommand("go:simplePenetration", true);
+  }
+  if (appCommand == SETUP_D_I_F) {
+    return queueCommand("go:strokeEngine", true);
+  }
+  if (appCommand == CONN) {
+    return bleCommTryConnect();
+  }
+
+  if (appCommand == SPEED && !OSSM_On) {
+    bleStoreUnpauseSpeed(value);
+    return true;
+  }
+
+  float speedParam = currentSpeed;
+  if (appCommand == ON) {
+    speedParam = (value > 0.001f) ? value : bleGetUnpauseSpeed();
+  }
+
+  if (appCommand == STROKE) {
+    const float requestedStroke = value;
+    float prevStroke = 0.0f;
+    if (g_lastRequestedStroke >= 0.0f) {
+      prevStroke = g_lastRequestedStroke;
+    } else {
+      prevStroke = currentStroke;
+    }
+
+    if (requestedStroke <= 0.001f && prevStroke > 0.001f) {
+      if (currentSpeed > 0.001f) {
+        bleStoreUnpauseSpeed(currentSpeed);
+      }
+      queueCommand("set:speed:0", true);
+    }
+/*  CHECK MARCO
+//    if (requestedStroke > 0.001f && prevStroke <= 0.001f && OSSM_On) {
+    if (requestedStroke > 0.001f && prevStroke <= 0.001f) {
+      SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
+      float resume = bleGetUnpauseSpeed();
+      if (resume > 0.001f) {
+        bool ok1 = queueCommand(String("set:stroke:") + String(clampPercent(requestedStroke)), true);
+        if(!SafeStartStop) {
+          g_lastRequestedStroke = requestedStroke;
+          LogDebugFormatted("BLE: Resume speed %.1f after stroke %.1f\n", resume, requestedStroke); 
+          for (int currentSpeed = HOME_START_RAMP_THRESHOLD + 1; currentSpeed <= resume; ++currentSpeed) {
+            delay(HOME_START_RAMP_INTERVAL_MS);
+            bool ok2 = queueCommand(String("set:speed:") + String(clampPercent(currentSpeed)), true);
+            return ok1 && ok2;
+          }
+
+        }
+        else {
+          g_lastRequestedStroke = requestedStroke;
+          LogDebugFormatted("BLE: Resume speed %.1f after stroke %.1f\n", resume, requestedStroke); // TEST AFTER EAU COMMENTS
+          bool ok2 = queueCommand(String("set:speed:") + String(clampPercent(resume)), true);
+          return ok1 && ok2;
+        }
+
+
+      }
+    }
+
+
+*/
+  g_lastRequestedStroke = requestedStroke;
+  }
+
+  String cmd;
+  switch (appCommand) {
+    case SPEED:
+      cmd = String("set:speed:") + String(clampPercent(value));
+      LogDebugFormatted("BLE: Set speed command queued: %s\n", cmd.c_str());// TEST AFTER EAU COMMENTS
+
+      if (value > 0.5f) g_lastRunSpeed = value;
+      break;
+    case DEPTH:
+      cmd = String("set:depth:") + String(clampPercent(value));
+      break;
+    case STROKE:
+      cmd = String("set:stroke:") + String(clampPercent(value));
+      break;
+    case SENSATION:
+      cmd = String("set:sensation:") + String(mapSensationToBlePercent(value));
+      break;
+    case PATTERN: {
+      int idx = (int)(value + 0.5f);
+      if (idx < 0) idx = 0;
+      cmd = String("set:pattern:") + String(idx);
+      break;
+    }
+    case OFF:
+    LogDebugFormatted("BLE: OFF command queued, storing unpause speed %.1f\n", currentSpeed); // TEST AFTER EAU COMMENTS
+    bleStoreUnpauseSpeed(currentSpeed);
+      cmd = "set:speed:0";
+      break;
+    case ON: {
+      
+      int resume = clampPercent(speedParam > 0.001f ? speedParam : currentSpeed);
+      cmd = String("set:speed:") + String(resume);
+      break;
+    }
+    default:
+      return false;
+  }
+
+  const bool isRealtime = (appCommand == SPEED || appCommand == DEPTH || appCommand == STROKE ||
+                           appCommand == SENSATION || appCommand == PATTERN);
+  bool queued = queueCommand(cmd, !isRealtime, isMotionControl);
+
+  // OSSM Lite represents depth/stroke as rail boundaries. Keep the legacy
+  // depth/stroke command for older OSSM firmware, then send the explicit
+  // max/min values so both firmware generations receive the same intent.
+  if (appCommand == DEPTH || appCommand == STROKE) {
+    const float targetDepth = (appCommand == DEPTH) ? value : currentDepth;
+    const float targetStroke = (appCommand == STROKE) ? value : currentStroke;
+    const int targetMax = clampPercent(targetDepth);
+    const int targetMin = clampPercent(targetDepth - targetStroke);
+
+    if (appCommand == DEPTH) {
+      const bool maxQueued = queueCommand(String("set:max:") + String(targetMax), false, false);
+      queued = maxQueued && queued;
+    }
+    const bool minQueued = queueCommand(String("set:min:") + String(targetMin), false, false);
+    queued = minQueued && queued;
+    if (appCommand == STROKE) {
+      const bool maxQueued = queueCommand(String("set:max:") + String(targetMax), false, false);
+      queued = maxQueued && queued;
+    }
+  }
+
+  return queued;
+}
+
+bool bleCommIsMenu() {
+  return hasFreshState() && g_machineMode == MachineMode::Menu;
+}
+
+bool bleCommGoToMenu() {
+  if (!bleCommTryConnect()) return false;
+  if (bleCommIsMenu()) return true;
+  return queueCommand("go:menu", true);
+}
+
+bool bleCommGoToStreaming() {
+  if (!bleCommTryConnect()) return false;
+  return queueCommand("go:streaming", true);
+}
+
+bool bleCommGoToStrokeEngine() {
+  return bleCommEnsureStrokeEngineOrStreamingReady();
+}
+
+bool bleCommEnsureStrokeEngineOrStreamingReady() {
+  return ensureStrokeEngineOrStreamingReady();
+}
+
+String bleCommGetMachineStateName(bool lowerCase) {
+  String s = g_machineStateName;
+  if (lowerCase) s.toLowerCase();
+  return s;
+}
+
+bool bleCommSendStreamCommand(int position, int durationMs) {
+  if (!bleCommTryConnect()) return false;
+  if (durationMs < 0) durationMs = 0;
+  if (position < 0) position = 0;
+  if (position > 100) position = 100;
+  String cmd = String("stream:") + String(position) + String(":") + String(durationMs) + "\n";
+  return queueCommand(cmd, true);
+}
+
+bool bleCommReadAdvancedConfig(String* outConfig) {
+  if (!outConfig) return false;
+  outConfig->remove(0);
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(true, false, false, false)) return false;
+  return bleReadRawCharacteristic(g_adv_config, outConfig);
+}
+
+bool bleCommReadAdvancedStatus(String* outStatus) {
+  if (!outStatus) return false;
+  outStatus->remove(0);
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(false, true, false, false)) return false;
+  return bleReadRawCharacteristic(g_adv_status, outStatus);
+}
+
+bool bleCommReadAdvancedPresets(String* outPresets) {
+  if (!outPresets) return false;
+  outPresets->remove(0);
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(false, false, false, true)) return false;
+  return bleReadRawCharacteristic(g_adv_presets, outPresets);
+}
+
+bool bleCommWriteAdvancedControl(const String& payload) {
+  if (payload.length() == 0) return false;
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(false, false, true, false)) return false;
+  return bleWriteRawCharacteristic(g_adv_control, payload);
+}
+
+bool bleCommWriteAdvancedPresets(const String& payload) {
+  if (payload.length() == 0) return false;
+  if (!bleCommTryConnect()) return false;
+  if (!ensureAdvancedCharacteristics(false, false, false, true)) return false;
+  return bleWriteRawCharacteristic(g_adv_presets, payload);
+}
+
+// -------------------------------------------------------
+// Public pattern catalog bridge
+// -------------------------------------------------------
+void bleCommResetPatternReadState() {
+  newPatternIsReadFromOSSM = false;
+}
+
+bool readPatternsFromOSSM() {
+  if (!bleCommTryConnect()) {
+    newPatternIsReadFromOSSM = false;
+    return false;
+  }
+
+  if (!g_patterns || !g_patterns->canRead()) {
+    newPatternIsReadFromOSSM = false;
+    return false;
+  }
+
+  if (g_bleMutex) xSemaphoreTake(g_bleMutex, portMAX_DELAY);
+  std::string raw = g_patterns->readValue();
+  if (g_bleMutex) xSemaphoreGive(g_bleMutex);
+
+  if (raw.empty()) {
+    newPatternIsReadFromOSSM = false;
+    return false;
+  }
+
+  String rawJson(raw.c_str());
+  String options;
+  const int parsedCount = extractPatternOptionsFromJson(rawJson, &options);
+  if (parsedCount <= 0 || options.length() == 0) {
+    newPatternIsReadFromOSSM = false;
+    return false;
+  }
+
+  patternString = options;
+  newPatternIsReadFromOSSM = true;
+  return true;
+}

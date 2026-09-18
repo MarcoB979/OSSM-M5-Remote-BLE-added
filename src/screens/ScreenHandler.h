@@ -25,11 +25,12 @@ typedef enum NotificationResult {
 #define ST_UI_APMODE        19
 #define ST_UI_SETTINGS      20
 #define ST_UI_COYOTE        21
+#define ST_UI_APMODE_V2     22
+#define ST_UI_TOYCONTROL    23
 
 // ---- Shared screen state (defined in ScreenHandler.cpp) ----
 extern int   st_screens;
 extern float speed, depth, stroke, sensation;
-extern float minPos, maxPos;
 extern float minPos, maxPos;
 extern float torqe_f, torqe_r;
 extern int   pattern;
@@ -90,8 +91,5 @@ void menuRestartAction(void);
 #ifdef __cplusplus
 }
 #endif
-
-static int HOME_START_RAMP_THRESHOLD = 10;
-static uint32_t HOME_START_RAMP_INTERVAL_MS = 10;
 
 

@@ -124,14 +124,21 @@ void connectbutton(lv_event_t* e) {
   if (ui_Welcome) lv_label_set_text(ui_Welcome, T_SEARCHING_BLE);
   lv_refr_now(NULL);
   bleCommInit();
+  const uint32_t tConnect = millis();
   if (bleCommTryConnect()) {
     g_failedAttempts = 0;
+    LogDebugFormatted("[BLE] connectbutton: tryConnect %lums\n", (unsigned long)(millis() - tConnect));
     LogDebug("BLE device found, connecting...");
     setMode(COMM_MODE_BLE);
     tryPreloadBlePatternCatalogOnce();
+    LogDebugFormatted("[BLE] connectbutton: pattern preload %lums\n", (unsigned long)(millis() - tConnect));
     LogDebug("BLE connection established");
 //    if (ui_connect) lv_label_set_text(ui_connect, T_BLECONNECTED);
-    if (ui_Welcome) lv_label_set_text(ui_Welcome, T_BLECONNECTED);
+    if (ui_Welcome) {
+      static char welcomeText[48];
+      snprintf(welcomeText, sizeof(welcomeText), "%s%s", T_CONNECTED_TO, bleCommGetFirmwareDescription());
+      lv_label_set_text(ui_Welcome, welcomeText);
+    }
     lv_refr_now(NULL);
     LogDebug("Loading Menu screen...");
     lv_scr_load_anim(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0, false);

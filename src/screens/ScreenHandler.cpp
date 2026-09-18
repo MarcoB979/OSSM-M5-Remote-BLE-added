@@ -1,4 +1,5 @@
 #include "ScreenHandler.h"
+#include "ScreenHandler_internal.h"
 #include <lvgl.h>
 #include <Preferences.h>
 #include <esp_sleep.h>
@@ -11,10 +12,13 @@
 #include "../config/config_ids.h"
 #include "../PatternMath.h"
 #include "../buttonhandlers/ButtonHandlers.h"
+#include "../addons/addons.h"
 #include "../addons/Eject.h"
 #include "../addons/FistIT.h"
 #include "../addons/Coyote.h"
 #include "../addons/AP-mode.h"
+#include "../addons/AP-v2.h"
+#include "../addons/ToyControl.h"
 #include "../addons/addonsStreaming.h"
 #include "../communication/CommManager.h"
 #include "../communication/BleComm.h"
@@ -32,6 +36,11 @@
 #define HOR_RES 320
 #define VER_RES 240
 #endif
+
+// Home screen speed-ramp parameters. Moved here from ScreenHandler.h so they
+// have a single definition (previously each including TU got its own copy).
+const int      HOME_START_RAMP_THRESHOLD   = 10;
+const uint32_t HOME_START_RAMP_INTERVAL_MS = 10;
 
 // -------------------------------------------------------
 // Screen and control state
@@ -76,106 +85,48 @@ static int  s_prev_st_screens = -1;
 static bool s_ble_menu_requires_stroke_reentry = false;
 // Sent once after startup when Home is first opened while connected
 static bool s_initial_pattern_sent = false;
-static bool  s_motion_command_cache_valid = false;
-static float s_last_motion_speed = 0.0f;
-static float s_last_motion_depth = 0.0f;
-static float s_last_motion_stroke = 0.0f;
+bool  s_motion_command_cache_valid = false;
+float s_last_motion_speed = 0.0f;
+float s_last_motion_depth = 0.0f;
+float s_last_motion_stroke = 0.0f;
 // Suppresses syncHomeValuesFromOssm() briefly after local input, so the
 // user's own change isn't immediately overwritten by not-yet-updated confirmed state.
-static uint32_t s_last_local_motion_input_ms = 0;
-static constexpr uint32_t LOCAL_MOTION_SYNC_HOLDOFF_MS = 250;
-static bool  s_zero_stroke_depth_jog_active = false;
-static float s_zero_stroke_depth_target = 0.0f;
-static int   s_zero_stroke_depth_direction = 0;
-static bool  s_visual_speed_lock = false;
-static bool  s_visual_speed_ratio_valid = false;
-static float s_visual_speed_stroke_product = 0.0f;
-static float s_visual_speed_last_commanded = -1.0f;
-enum SpeedBehavior {
-    SPEED_BEHAVIOR_STANDARD = 0,
-    SPEED_BEHAVIOR_NATURAL = 1,
-    SPEED_BEHAVIOR_TAMED = 2,
-};
-static int s_speed_behavior_profile = SPEED_BEHAVIOR_STANDARD;
+uint32_t s_last_local_motion_input_ms = 0;
+bool  s_zero_stroke_depth_jog_active = false;
+float s_zero_stroke_depth_target = 0.0f;
+int   s_zero_stroke_depth_direction = 0;
+bool  s_visual_speed_lock = false;
+bool  s_visual_speed_ratio_valid = false;
+float s_visual_speed_stroke_product = 0.0f;
+float s_visual_speed_last_commanded = -1.0f;
+int s_speed_behavior_profile = SPEED_BEHAVIOR_STANDARD;
 static bool  s_stroke_influences_depth = false;
-static float s_manual_rail_length_mm = 0.0f;
-static bool s_home_speed_ramp_active = false;
-static int s_home_speed_ramp_current = 0;
-static int s_home_speed_ramp_target = 0;
-static int s_home_speed_ramp_step = 0;
-static uint32_t s_home_speed_ramp_interval_ms = 0;
-static uint32_t s_home_speed_ramp_next_ms = 0;
+float s_manual_rail_length_mm = 0.0f;
+bool s_home_speed_ramp_active = false;
+int s_home_speed_ramp_current = 0;
+int s_home_speed_ramp_target = 0;
+int s_home_speed_ramp_step = 0;
+uint32_t s_home_speed_ramp_interval_ms = 0;
+uint32_t s_home_speed_ramp_next_ms = 0;
 static bool s_force_home_restore_pending = false;
-static uint32_t s_zero_stroke_depth_jog_start_ms = 0;
-static uint32_t s_zero_stroke_debug_log_ms = 0;
-static uint32_t s_visual_speed_log_ms = 0;
+uint32_t s_zero_stroke_depth_jog_start_ms = 0;
+uint32_t s_zero_stroke_debug_log_ms = 0;
+uint32_t s_visual_speed_log_ms = 0;
 static bool s_home_toggle_fired_this_loop = false;
 static bool s_consume_next_mx_short_click = false;
 
-// Variables for natural speed curve (to make speed drop at low stroke).
-// Runtime profile selection:
-//   Standard (legacy): strongest suppression at low stroke
-//   Natural: balanced distance-based behavior
-//   Tamed: between Standard and Natural
-static constexpr float VIS_SPEED_STANDARD_MIN_FACTOR = 0.14f;
-static constexpr float VIS_SPEED_STANDARD_KNEE_STROKE = 308.0f;
-static constexpr float VIS_SPEED_STANDARD_POWER = 0.30f;
-
-static constexpr float VIS_SPEED_NATURAL_MIN_FACTOR = 0.32f;
-static constexpr float VIS_SPEED_NATURAL_KNEE_STROKE = 22.0f;
-static constexpr float VIS_SPEED_NATURAL_POWER = 1.05f;
-
-static constexpr float VIS_SPEED_TAMED_MIN_FACTOR = 0.40f;
-static constexpr float VIS_SPEED_TAMED_KNEE_STROKE = 18.0f;
-static constexpr float VIS_SPEED_TAMED_POWER = 0.90f;
-
-//Higher value = stronger suppression at low/mid stroke, and longer before speed recovers.
-//Example: 2.0 -> 2.8 or 3.2.
-static constexpr float VIS_SPEED_CURVE_MAX_STEP = 2.0f;
+const float VIS_SPEED_CURVE_MAX_STEP = 2.0f;
 
 
-static constexpr bool ENABLE_ZERO_STROKE_DEPTH_JOG = false;
-
-
-static constexpr float ZERO_STROKE_DEPTH_TOLERANCE = 1.0f;
-static constexpr uint32_t ZERO_STROKE_DEPTH_JOG_TIMEOUT_MS = 25000;
-static constexpr int SETTINGS_CAROUSEL_VISIBLE_COUNT = 4;
-enum EncRampProfile {
-    ENCODER_RAMP_NONE = 0,
-    ENCODER_RAMP_MEDIUM = 1,
-    ENCODER_RAMP_HIGH = 2,
-    ENCODER_RAMP_AGGRESSIVE = 3,
-};
-static int s_settings_focus_index = 0;
-static int s_settings_scroll_offset = 0;
-static lv_obj_t* s_manual_rail_length_setting = nullptr;
-static lv_obj_t* s_encoder_ramp_profile_setting = nullptr;
-static bool s_manual_rail_length_ui_syncing = false;
-static bool s_speed_behavior_ui_syncing = false;
-static int s_encoder_ramp_profile = ENCODER_RAMP_MEDIUM;
-static void resetVisualSpeedRatioState();
-static void updateVisualSpeedRatioFromUi(bool uiSpeedChanged, float uiSpeed, float uiStroke);
-static float resolveVisualCompensatedSpeed(float uiSpeed, float uiStroke);
-static void ensureManualRailLengthSetting();
-static void ensureEncRampProfileSetting();
-static int collectSettingsOptionObjects(lv_obj_t** outObjects, int maxObjects);
-static void refreshSettingsCarousel();
-static lv_obj_t* getSettingsFocusedObject();
-
-static void syncManualRailLengthSettingUi();
-static void syncEncRampProfileSettingUi();
-static void syncSpeedBehaviorSettingUi();
-static void persistManualRailLengthSetting();
-static void persistEncRampProfileSetting();
-static void persistSpeedBehaviorSetting();
-static void runManualRailLengthCalibrationWorkflow();
-static void manualRailLengthSetting_event_cb(lv_event_t* e);
-static void EncRampProfile_event_cb(lv_event_t* e);
-static void SpeedBehavior_event_cb(lv_event_t* e);
-static const char* getSpeedBehaviorName(int profile);
-static void applySpeedBehavior(int profile);
-static float getDefaultManualRailLengthMm();
-
+int s_settings_focus_index = 0;
+int s_settings_scroll_offset = 0;
+lv_obj_t* s_manual_rail_length_setting = nullptr;
+lv_obj_t* s_encoder_ramp_profile_setting = nullptr;
+lv_obj_t* s_language_setting = nullptr;
+lv_obj_t* s_wifi_setting = nullptr;
+bool s_manual_rail_length_ui_syncing = false;
+bool s_speed_behavior_ui_syncing = false;
+int s_encoder_ramp_profile = ENCODER_RAMP_MEDIUM;
 bool dynamicStroke  = false;
 bool eject_status   = false;
 bool vibrate_mode   = true;
@@ -197,60 +148,9 @@ int            screensaver_dim_brightness = SCREENSAVER_DIM_BRIGHTNESS_DEFAULT;
 uint32_t       deep_sleep_timeout_ms    = DEEP_SLEEP_TIMEOUT_MS_DEFAULT;
 
 // Notification touch result (set by LVGL button callbacks inside showNotification)
-static volatile int g_notification_touch_result = NOTIFICATION_RESULT_NONE;
 static volatile bool g_status_strip_refresh_requested = true;
-static uint32_t s_encoder_last_step_ms[4] = {0, 0, 0, 0};
+uint32_t s_encoder_last_step_ms[4] = {0, 0, 0, 0};
 
-static constexpr uint32_t ENCODER_RAMP_MEDIUM_MS = 120;
-static constexpr uint32_t ENCODER_RAMP_FAST_MS = 45;
-
-int screenEncoderRampStep(int encoderIndex, long count)
-{
-    if (encoderIndex < 0 || encoderIndex >= 4) return 0;
-
-    // ESP32Encoder attachHalfQuad() reports 2 raw counts per mechanical detent.
-    // Convert to whole detents first so a fast flick that accumulates several
-    // detents between loop iterations (loop() only polls every few ms) is
-    // never silently dropped — only the *ramp multiplier* below depends on
-    // timing, the base detent count is always honored in full.
-    static constexpr long COUNTS_PER_DETENT = 2;
-    const long magnitude = labs(count);
-    const long detents = magnitude / COUNTS_PER_DETENT;
-    if (detents < 1) return 0;
-
-    if (s_encoder_ramp_profile == ENCODER_RAMP_NONE) {
-        return (count > 0) ? (int)detents : -(int)detents;
-    }
-
-    const uint32_t nowMs = millis();
-    const uint32_t lastMs = s_encoder_last_step_ms[encoderIndex];
-    const uint32_t elapsedMs = (lastMs == 0U) ? UINT32_MAX : (nowMs - lastMs);
-    s_encoder_last_step_ms[encoderIndex] = nowMs;
-
-    int multiplier = 1;
-    if (elapsedMs <= ENCODER_RAMP_FAST_MS) {
-        if (s_encoder_ramp_profile == ENCODER_RAMP_MEDIUM) {
-            multiplier = 3;
-        } else if (s_encoder_ramp_profile == ENCODER_RAMP_HIGH) {
-            multiplier = 4;
-        } else if (s_encoder_ramp_profile == ENCODER_RAMP_AGGRESSIVE) {
-            multiplier = 6;
-        }
-    } else if (elapsedMs <= ENCODER_RAMP_MEDIUM_MS) {
-        if (s_encoder_ramp_profile == ENCODER_RAMP_MEDIUM) {
-            multiplier = 2;
-        } else if (s_encoder_ramp_profile == ENCODER_RAMP_HIGH) {
-            multiplier = 3;
-        } else if (s_encoder_ramp_profile == ENCODER_RAMP_AGGRESSIVE) {
-            multiplier = 4;
-        }
-    }
-
-    long step = detents * multiplier;
-    if (step > 24) step = 24;
-
-    return (count > 0) ? (int)step : -(int)step;
-}
 
 static constexpr int EJECT_ICON_W = 14;
 static constexpr int EJECT_ICON_H = 20;
@@ -481,14 +381,14 @@ static lv_obj_t* createStatusCoyoteOnIcon(lv_obj_t* parent) {
 
 
 static void updateStatusStrip() {
-    static lv_obj_t* statusLabels[13] = { nullptr };
-    static lv_obj_t* statusEjectIcons[13] = { nullptr };
-    static lv_obj_t* statusFistIcons[13] = { nullptr };
-    static lv_obj_t* statusHomeIcons[13] = { nullptr };
-    static lv_obj_t* statusESPIcons[13] = { nullptr };
-    static lv_obj_t* statusCoyoteIcons[13] = { nullptr };
-    static lv_obj_t* statusCoyoteOnIcons[13] = { nullptr };
-    lv_obj_t* statusScreens[13] = {
+    static lv_obj_t* statusLabels[14] = { nullptr };
+    static lv_obj_t* statusEjectIcons[14] = { nullptr };
+    static lv_obj_t* statusFistIcons[14] = { nullptr };
+    static lv_obj_t* statusHomeIcons[14] = { nullptr };
+    static lv_obj_t* statusESPIcons[14] = { nullptr };
+    static lv_obj_t* statusCoyoteIcons[14] = { nullptr };
+    static lv_obj_t* statusCoyoteOnIcons[14] = { nullptr };
+    lv_obj_t* statusScreens[14] = {
         ui_Start,
         ui_Home,
         ui_Pattern,
@@ -501,10 +401,11 @@ static void updateStatusStrip() {
         ui_FistIT,
         ui_Stroke,
         APModeGetScreen(),
+        APV2ModeGetScreen(),
         ui_Coyote,
     };
 
-    for (size_t i = 0; i < 13; ++i) {
+    for (size_t i = 0; i < 14; ++i) {
         if (statusLabels[i] != nullptr) continue;
         if (statusScreens[i] == nullptr) continue;
 
@@ -663,1185 +564,6 @@ void screenForceStatusStripRefreshNow() {
     g_status_strip_refresh_requested = false;
 }
 
-static int rangeFromLimit(float limitValue) {
-    int limit = (int)(limitValue + 0.5f);
-    if (limit < 1) limit = 1;
-    return limit;
-}
-
-static void syncHomeSliderRangesToLimits() {
-    if (!ui_homespeedslider || !ui_homedepthslider || !ui_homestrokeslider) return;
-
-    const int speedMax = rangeFromLimit(speedlimit);
-    const int depthMax = rangeFromLimit(maxdepthinmm);
-
-    // Keep slider ranges aligned with current transport limits (BLE vs ESP-NOW).
-    if (lv_slider_get_max_value(ui_homespeedslider) != speedMax) {
-        lv_slider_set_range(ui_homespeedslider, 0, speedMax);
-    }
-    if (lv_slider_get_max_value(ui_homedepthslider) != depthMax) {
-        lv_slider_set_range(ui_homedepthslider, 0, depthMax);
-    }
-    if (lv_slider_get_max_value(ui_homestrokeslider) != depthMax) {
-        lv_slider_set_range(ui_homestrokeslider, 0, depthMax);
-    }
-
-    if (speed > speedMax) speed = (float)speedMax;
-    if (depth > depthMax) depth = (float)depthMax;
-    if (stroke > depthMax) stroke = (float)depthMax;
-    if (stroke > depth) stroke = depth;
-}
-
-static void syncHomeSensationSliderToTransport() {
-    if (!ui_homesensationslider) return;
-
-    const bool bleMode = commIsBleMode();
-//    const int desiredMin = bleMode ? 0 : -100;
-    const int desiredMin = -100;
-    const int desiredMax = 100;
-    const lv_slider_mode_t desiredMode = bleMode ? LV_SLIDER_MODE_NORMAL : LV_SLIDER_MODE_SYMMETRICAL;
-
-    const bool rangeChanged =
-        (lv_slider_get_min_value(ui_homesensationslider) != desiredMin) ||
-        (lv_slider_get_max_value(ui_homesensationslider) != desiredMax);
-
-    if (rangeChanged) {
-        lv_slider_set_range(ui_homesensationslider, desiredMin, desiredMax);
-    }
-
-    if (lv_slider_get_mode(ui_homesensationslider) != desiredMode) {
-        lv_slider_set_mode(ui_homesensationslider, desiredMode);
-    }
-
-    if (rangeChanged) {
-        sensation = bleMode ? 50.0f : 0.0f;
-    }
-
-    if (sensation < desiredMin) sensation = (float)desiredMin;
-    if (sensation > desiredMax) sensation = (float)desiredMax;
-    lv_slider_set_value(ui_homesensationslider, (int)sensation, LV_ANIM_OFF);
-}
-
-// Pulls the OSSM-confirmed state (as last reported over BLE, regardless of
-// which physically-connected M5 remote caused the change) into the Home
-// screen's local UI state — this is what keeps multiple remotes in sync.
-// Skipped per-control while that control is being actively driven locally
-// (dragged or mid-encoder-turn), and briefly after local input settles, so
-// the user's own edit is never stomped by stale confirmed state.
-static void syncHomeValuesFromOssm(bool speedDragged, bool depthDragged,
-                                   bool strokeDragged, bool sensationDragged) {
-    BleConfirmedValues confirmed{};
-    if (!bleCommGetConfirmedValues(&confirmed)) return;
-
-    const bool localInputActive = (millis() - s_last_local_motion_input_ms) < LOCAL_MOTION_SYNC_HOLDOFF_MS;
-    if (localInputActive || speedDragged || depthDragged || strokeDragged || sensationDragged) return;
-
-    if (!speedDragged) {
-        if (confirmed.speed > 0.5f) {
-            bleCommSetUnpauseSpeed(confirmed.speed);
-            speed = confirmed.speed;
-            s_last_motion_speed = speed;
-        } else {
-            // OSSM reports zero while paused, but keep the configured speed
-            // visible so MX can resume the same speed without a UI jump.
-            const float pausedSpeed = (float)bleCommGetUnpauseSpeed();
-            speed = (pausedSpeed > 0.0f) ? pausedSpeed : confirmed.speed;
-        }
-        if (ui_homespeedslider) {
-            lv_slider_set_value(ui_homespeedslider, (int)(speed + 0.5f), LV_ANIM_OFF);
-        }
-    }
-
-    // Depth and stroke describe one rail range, so apply them together after
-    // both controls are released to avoid showing a mixed intermediate range.
-    if (!depthDragged && !strokeDragged) {
-        depth = confirmed.depth;
-        stroke = confirmed.stroke;
-        minPos = confirmed.minPosition;
-        maxPos = confirmed.maxPosition;
-        if (ui_homedepthslider) {
-            lv_slider_set_value(ui_homedepthslider, (int)(depth + 0.5f), LV_ANIM_OFF);
-        }
-    }
-
-    if (!sensationDragged) {
-        sensation = confirmed.sensation;
-        if (ui_homesensationslider) {
-            lv_slider_set_value(ui_homesensationslider, (int)sensation, LV_ANIM_OFF);
-        }
-    }
-
-    if (ui_PatternS && patternString.length() > 0) {
-        // Apply the OSSM-provided catalog before validating the confirmed
-        // pattern. OSSM Lite can add entries beyond the standard patterns.
-        if (newPatternIsReadFromOSSM) {
-            lv_roller_set_options(ui_PatternS, patternString.c_str(), LV_ROLLER_MODE_NORMAL);
-            newPatternIsReadFromOSSM = false;
-        }
-
-        const uint16_t optionCount = (uint16_t)lv_roller_get_option_count(ui_PatternS);
-        if (confirmed.pattern >= 0 && confirmed.pattern < (int)optionCount) {
-            pattern = confirmed.pattern;
-            lv_roller_set_selected(ui_PatternS, pattern, LV_ANIM_OFF);
-            lv_roller_get_selected_str(ui_PatternS, patternstr, sizeof(patternstr));
-            if (ui_HomePatternLabel) lv_label_set_text(ui_HomePatternLabel, patternstr);
-            if (ui_StrokePatternLabel) lv_label_set_text(ui_StrokePatternLabel, patternstr);
-        }
-    }
-}
-
-// -------------------------------------------------------
-// Power Management / Sleep Helpers
-// -------------------------------------------------------
-
-void screensaver_check_activity()
-{
-    last_activity_ms = millis();
-    if (screensaver_active) {
-        M5.Lcd.setBrightness(screensaver_prev_brightness);
-        screensaver_active = false;
-    }
-}
-
-bool canEnterDeepSleep()
-{
-    // Do not enter deep sleep while the OSSM is actively running.
-    return !onoff;
-}
-
-static bool areWakeButtonsReleased()
-{
-    return (digitalRead(Button1.pin()) == LOW) &&
-           (digitalRead(Button2.pin()) == LOW) &&
-           (digitalRead(Button3.pin()) == LOW);
-}
-
-static bool waitWakeButtonsReleasedStable(uint32_t stableMs, uint32_t timeoutMs)
-{
-    const uint32_t startMs = millis();
-    uint32_t releasedSinceMs = 0;
-
-    while ((millis() - startMs) < timeoutMs) {
-        const bool released = areWakeButtonsReleased();
-        if (released) {
-            if (releasedSinceMs == 0) releasedSinceMs = millis();
-            if ((millis() - releasedSinceMs) >= stableMs) return true;
-        } else {
-            releasedSinceMs = 0;
-        }
-        delay(5);
-    }
-    return false;
-}
-
-extern "C" void RestartM5()
-{
-    ESP.restart();
-}
-
-void enterDeepSleep()
-{
-    gpio_num_t mxPin    = static_cast<gpio_num_t>(Button1.pin());
-    gpio_num_t leftPin  = static_cast<gpio_num_t>(Button2.pin());
-    gpio_num_t rightPin = static_cast<gpio_num_t>(Button3.pin());
-    uint64_t wakeMask   = (1ULL << mxPin) | (1ULL << leftPin) | (1ULL << rightPin);
-
-    LogDebug("Entering deep sleep (wake on MX/left/right)");
-    M5.Display.setBrightness(0);
-    M5.Power.setVibration(0);
-
-    // Guard against instant wake when any wake button is still held.
-    if (!waitWakeButtonsReleasedStable(120, 1200)) {
-        LogDebugFormatted("Deep sleep canceled: wake button(s) still active\n");
-        screensaver_check_activity();
-        return;
-    }
-
-    esp_sleep_enable_ext1_wakeup(wakeMask, ESP_EXT1_WAKEUP_ANY_HIGH);
-    delay(50);
-    esp_deep_sleep_start();
-}
-
-// -------------------------------------------------------
-// Notification Overlay Helpers
-// -------------------------------------------------------
-static void notification_left_button_cb(lv_event_t *e)
-{
-    (void)e;
-    g_notification_touch_result = NOTIFICATION_RESULT_LEFT;
-}
-
-static void notification_right_button_cb(lv_event_t *e)
-{
-    (void)e;
-    g_notification_touch_result = NOTIFICATION_RESULT_RIGHT;
-}
-
-// ---------------------------------------------------------------------------
-// showNotification() — blocking modal overlay (ported from backup firmware)
-// ---------------------------------------------------------------------------
-int showNotification(const char *title,
-                     const char *text,
-                     uint32_t duration,
-                     bool showLeftButton,
-                     const char *leftButtonText,
-                     bool showRightButton,
-                     const char *rightButtonText,
-                     bool showFullScreen)
-{
-    const bool hasButtons = showLeftButton || showRightButton;
-    const bool prevTouchDisabled = touch_disabled;
-    const bool shouldBlockTouch  = !hasButtons;
-    const uint32_t startMs = millis();
-    int result = NOTIFICATION_RESULT_NONE;
-    g_notification_touch_result = NOTIFICATION_RESULT_NONE;
-
-    // Derive color scheme values
-    uint32_t schemePrimary       = getActivePrimaryColor();
-    uint32_t schemeSecondary     = getActiveSecondaryColor();
-    uint32_t schemeTextPrimary   = getActiveTextPrimaryColor();
-    uint32_t schemeTextSecondary = getActiveTextSecondaryColor();
-    uint8_t pr = (schemePrimary >> 16) & 0xFF;
-    uint8_t pg = (schemePrimary >>  8) & 0xFF;
-    uint8_t pb =  schemePrimary        & 0xFF;
-    uint32_t schemeDarker = (((pr >> 1) & 0xFF) << 16) |
-                            (((pg >> 1) & 0xFF) <<  8) |
-                             ((pb >> 1) & 0xFF);
-
-    if (shouldBlockTouch) touch_disabled = true;
-
-    // Drain stale button states before opening the modal.
-    mxpress_waspressed       = false;
-    mxclick_short_waspressed  = false;
-    mxclick_long_waspressed   = false;
-    click2_short_waspressed   = false;
-    click2_long_waspressed    = false;
-    click3_short_waspressed   = false;
-    click3_long_waspressed    = false;
-    click3_double_waspressed  = false;
-
-    lv_obj_t *overlay = lv_obj_create(lv_layer_top());
-    lv_obj_remove_style_all(overlay);
-    lv_obj_set_size(overlay, HOR_RES, VER_RES);
-    lv_obj_center(overlay);
-    lv_obj_set_style_bg_opa(overlay, LV_OPA_50, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(overlay, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_add_flag(overlay, LV_OBJ_FLAG_CLICKABLE);
-
-    lv_obj_t *panel = lv_obj_create(overlay);
-    if (showFullScreen) {
-        const int topOffset     = 32;
-        const int bottomPadding = 5;
-        lv_obj_set_size(panel, 310, VER_RES - topOffset - bottomPadding);
-        lv_obj_set_pos(panel, 5, topOffset);
-    } else {
-        lv_obj_set_size(panel, (HOR_RES * 90) / 100, (VER_RES * 75) / 100);
-        lv_obj_align(panel, LV_ALIGN_CENTER, 0, 5);
-    }
-    lv_obj_set_style_radius(panel, 8, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_width(panel, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_border_color(panel, lv_color_hex(schemePrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(panel, lv_color_hex(schemeSecondary), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_pad_all(panel, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    lv_obj_t *titleBar = lv_obj_create(panel);
-    lv_obj_remove_style_all(titleBar);
-    lv_obj_set_size(titleBar, lv_pct(100), 32);
-    lv_obj_align(titleBar, LV_ALIGN_TOP_MID, 0, 0);
-    lv_obj_set_style_bg_opa(titleBar, LV_OPA_COVER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_bg_color(titleBar, lv_color_hex(schemeDarker), LV_PART_MAIN | LV_STATE_DEFAULT);
-
-    lv_obj_t *titleLabel = lv_label_create(titleBar);
-    lv_label_set_text(titleLabel, (title != nullptr && title[0] != '\0') ? title : "Notification");
-    lv_obj_set_style_text_align(titleLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(titleLabel, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(titleLabel, &lv_font_montserrat_16, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_center(titleLabel);
-
-    lv_obj_t *bodyLabel = lv_label_create(panel);
-    lv_obj_set_width(bodyLabel, lv_pct(90));
-    lv_label_set_long_mode(bodyLabel, LV_LABEL_LONG_WRAP);
-    lv_label_set_text(bodyLabel, (text != nullptr) ? text : "");
-    lv_obj_set_style_text_align(bodyLabel, LV_TEXT_ALIGN_CENTER, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_color(bodyLabel, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_set_style_text_font(bodyLabel, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
-    lv_obj_align(bodyLabel, LV_ALIGN_TOP_MID,0, 38);
-
-    if (hasButtons) {
-        lv_obj_t *buttonRow = lv_obj_create(panel);
-        lv_obj_remove_style_all(buttonRow);
-        lv_obj_set_size(buttonRow, lv_pct(94), 44);
-        lv_obj_align(buttonRow, LV_ALIGN_BOTTOM_MID, 0, -5);
-        lv_obj_set_style_bg_opa(buttonRow, LV_OPA_TRANSP, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_width(buttonRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_pad_all(buttonRow, 0, LV_PART_MAIN | LV_STATE_DEFAULT);
-
-        if (showLeftButton) {
-            lv_obj_t *leftBtn = lv_btn_create(buttonRow);
-            lv_obj_set_size(leftBtn, 120, 36);
-            lv_obj_align(leftBtn, LV_ALIGN_LEFT_MID, 0, 0);
-            lv_obj_add_style(leftBtn, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_add_style(leftBtn, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
-            lv_obj_t *leftLbl = lv_label_create(leftBtn);
-            lv_label_set_text(leftLbl, (leftButtonText != nullptr && leftButtonText[0] != '\0') ? leftButtonText : "Left");
-            lv_obj_set_style_text_color(leftLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_center(leftLbl);
-            lv_obj_add_event_cb(leftBtn, notification_left_button_cb, LV_EVENT_SHORT_CLICKED, nullptr);
-        }
-
-        if (showRightButton) {
-            lv_obj_t *rightBtn = lv_btn_create(buttonRow);
-            lv_obj_set_size(rightBtn, 120, 36);
-            lv_obj_align(rightBtn, LV_ALIGN_RIGHT_MID, 0, 0);
-            lv_obj_add_style(rightBtn, &style_button_l, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_add_style(rightBtn, &style_button_l_pressed, LV_PART_MAIN | LV_STATE_PRESSED);
-            lv_obj_t *rightLbl = lv_label_create(rightBtn);
-            lv_label_set_text(rightLbl, (rightButtonText != nullptr && rightButtonText[0] != '\0') ? rightButtonText : "Right");
-            lv_obj_set_style_text_color(rightLbl, lv_color_hex(schemeTextPrimary), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_center(rightLbl);
-            lv_obj_add_event_cb(rightBtn, notification_right_button_cb, LV_EVENT_SHORT_CLICKED, nullptr);
-        }
-    }
-
-    while (true) {
-        M5.update();
-        lv_task_handler();
-        Button1.tick();
-        Button2.tick();
-        Button3.tick();
-
-        if (duration > 0 && (millis() - startMs) >= duration) {
-            result = NOTIFICATION_RESULT_NONE;
-            break;
-        }
-
-        if (hasButtons) {
-            if (g_notification_touch_result != NOTIFICATION_RESULT_NONE) {
-                result = g_notification_touch_result;
-                break;
-            }
-            if (showLeftButton && click2_short_waspressed) {
-                result = NOTIFICATION_RESULT_LEFT;
-                break;
-            }
-            if (showRightButton && click3_short_waspressed) {
-                result = NOTIFICATION_RESULT_RIGHT;
-                break;
-            }
-        }
-
-        // Consume all button events so the current screen never sees stale flags.
-        mxpress_waspressed       = false;
-        mxclick_short_waspressed  = false;
-        mxclick_long_waspressed   = false;
-        click2_short_waspressed   = false;
-        click2_long_waspressed    = false;
-        click3_short_waspressed   = false;
-        click3_long_waspressed    = false;
-        click3_double_waspressed  = false;
-        vTaskDelay(pdMS_TO_TICKS(5));
-    }
-
-    lv_obj_del(overlay);
-
-    // Clear flags after modal closes.
-    mxpress_waspressed       = false;
-    mxclick_short_waspressed  = false;
-    mxclick_long_waspressed   = false;
-    click2_short_waspressed   = false;
-    click2_long_waspressed    = false;
-    click3_short_waspressed   = false;
-    click3_long_waspressed    = false;
-    click3_double_waspressed  = false;
-
-    if (shouldBlockTouch) touch_disabled = prevTouchDisabled;
-
-    return result;
-}
-
-// -------------------------------------------------------
-// Battery UI Helpers
-// -------------------------------------------------------
-static const char* battery_symbol_for_level(int level, bool isCharging)
-{
-    if (level < 0) level = 0;
-    if (level > 100) level = 100;
-
-    // Thresholds aligned to the non-linear Li-ion curve bins:
-    // 0..7, 8..27, 28..57, 58..87, 88..100
-    const char* baseSymbol = LV_SYMBOL_BATTERY_EMPTY;
-    if (level >= 88) {
-        baseSymbol = LV_SYMBOL_BATTERY_FULL;
-    } else if (level >= 58) {
-        baseSymbol = LV_SYMBOL_BATTERY_3;
-    } else if (level >= 28) {
-        baseSymbol = LV_SYMBOL_BATTERY_2;
-    } else if (level >= 8) {
-        baseSymbol = LV_SYMBOL_BATTERY_1;
-    }
-
-    if (!isCharging) {
-        return baseSymbol;
-    }
-
-    // Show both fill level and charging state when plugged in. (now only charging symbol with percentage)
-    static char chargingSymbol[24];
-    snprintf(chargingSymbol, sizeof(chargingSymbol), "%s", LV_SYMBOL_CHARGE);
-    return chargingSymbol;
-}
-
-static void update_battery_icons_all_screens(int level, bool isCharging)
-{
-    const int valueLabelX = isCharging ? -25 : -40;
-
-    lv_obj_t *batteryTitleLabels[] = {
-        ui_Batt, ui_Batt1, ui_Batt2, ui_Batt3, ui_Batt4,
-        ui_Batt5, ui_Batt6, ui_Batt7, ui_Batt8, ui_Batt9,
-        APModeGetBatteryTitleLabel()
-    };
-    lv_obj_t *batteryValueLabels[] = {
-        ui_BattValue, ui_BattValue1, ui_BattValue2, ui_BattValue3, ui_BattValue4,
-        ui_BattValue5, ui_BattValue6, ui_BattValue7, ui_BattValue8, ui_BattValue9,
-        APModeGetBatteryValueLabel()
-    };
-    lv_obj_t *batteryBars[] = {
-        ui_Battery, ui_Battery1, ui_Battery2, ui_Battery3, ui_Battery4,
-        ui_Battery5, ui_Battery6, ui_Battery7, ui_Battery8, ui_Battery9,
-        APModeGetBatteryBar()
-    };
-
-    for (lv_obj_t *label : batteryValueLabels) {
-        if (label != nullptr) {
-            lv_obj_clear_flag(label, LV_OBJ_FLAG_HIDDEN);
-            lv_obj_set_align(label, LV_ALIGN_RIGHT_MID);
-            lv_obj_set_y(label, 0);
-            lv_obj_set_style_text_color(label, lv_color_hex(getActiveTextPrimaryColor()), LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_text_font(label, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
-        }
-    }
-    for (lv_obj_t *bar : batteryBars) {
-        if (bar != nullptr) {
-            lv_obj_add_flag(bar, LV_OBJ_FLAG_HIDDEN);
-        }
-    }
-    for (lv_obj_t *label : batteryTitleLabels) {
-        if (label != nullptr) {
-            lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_RIGHT, LV_PART_MAIN | LV_STATE_DEFAULT);
-            lv_obj_set_style_text_font(label, &lv_font_montserrat_30, LV_PART_MAIN | LV_STATE_DEFAULT);
-        }
-    }
-
-    const char *symbol = battery_symbol_for_level(level, isCharging);
-    //shows charging icon right from battery icon, but not the percentage
-    char percentText[8];
-    snprintf(percentText, sizeof(percentText), "%d%%", level);
-
-    for (lv_obj_t *label : batteryTitleLabels) {
-        if (label != nullptr) lv_label_set_text(label, symbol);
-    }
-    for (lv_obj_t *label : batteryValueLabels) {
-        if (label != nullptr) {
-            lv_obj_set_x(label, valueLabelX);
-            lv_label_set_text(label, percentText);
-        }
-    }
-}
-
-// -------------------------------------------------------
-// Battery Sampling / Smoothing Helpers
-// -------------------------------------------------------
-static bool detectChargingNow()
-{
-    auto chargingState = M5.Power.isCharging();
-    if (chargingState == m5::Power_Class::is_charging) return true;
-    if (chargingState == m5::Power_Class::is_discharging) return false;
-    // Fallback for unsupported/unknown PMIC charging state.
-    return M5.Power.getBatteryCurrent() > 15;
-}
-
-static bool getStableChargingState()
-{
-    static bool initialized  = false;
-    static bool rawState     = false;
-    static bool stableState  = false;
-    static uint32_t rawSinceMs  = 0;
-    static uint32_t lastPollMs  = 0;
-
-    const uint32_t nowMs = millis();
-
-    // Only poll I2C every 250 ms to avoid unnecessary I2C traffic on the
-    // power bus, which can couple noise into the input-only GPIO group.
-    if (!initialized || (nowMs - lastPollMs) >= 250UL) {
-        lastPollMs = nowMs;
-    } else {
-        return stableState;
-    }
-
-    const bool nowRaw = detectChargingNow();
-
-    if (!initialized) {
-        initialized  = true;
-        rawState     = nowRaw;
-        stableState  = nowRaw;
-        rawSinceMs   = nowMs;
-        return stableState;
-    }
-
-    if (nowRaw != rawState) {
-        rawState   = nowRaw;
-        rawSinceMs = nowMs;
-    }
-
-    if (stableState != rawState && (nowMs - rawSinceMs) >= 800U) {
-        stableState = rawState;
-    }
-
-    return stableState;
-}
-
-static void maybeShowChargingWarning(bool isCharging)
-{
-    return; // Disable warning for now since the PMIC behavior seems stable and the warning can be confusing if it shows up due to a single noisy reading.
-    
-    static bool shownForCurrentChargeSession = false;
-
-    if (!isCharging) {
-        shownForCurrentChargeSession = false;
-        return;
-    }
-    if (shownForCurrentChargeSession) return;
-
-    shownForCurrentChargeSession = true;
-    showNotification(
-        T_CHARGING_WARNING_TITLE,
-        T_CHARGING_WARNING_TEXT,
-        5000,
-        false, nullptr,
-        false, nullptr,
-        false);
-}
-
-static int estimateBatteryPercentFromVoltageMv(float batteryMv)
-{
-
-    // 1. Get raw voltage and charging state from Core2 AXP192
-    bool isCharging = detectChargingNow();
-    //return batteryMv;
-    // 2. Corrected Hardware Offset Calibration
-    if (!isCharging) {
-        // When running on battery, load drags voltage down. 
-        // Adding 60mV brings it back to the true chemical state.
-        batteryMv += 60.0f; 
-    } else {
-        // When charging, voltage reads high. Reduce slightly to match real capacity.
-        batteryMv -= 40.0f;
-    }
-
-    // Non-linear Li-ion OCV-inspired mapping (mV -> percent), then interpolate.
-    // This avoids the "too optimistic" mid-range values from linear mapping.
-    struct BatteryCurvePoint {
-        float mv;
-        int pct;
-    };
-    // 3. Your optimized curve for Core2 hardware
-    static const BatteryCurvePoint curve[] = {
-        {3400.0f, 0}, {3500.0f, 5}, {3600.0f, 15}, {3650.0f, 30}, {3700.0f, 50},
-        {3750.0f, 65}, {3800.0f, 80}, {3950.0f, 95}, {4100.0f, 100}
-    };
-
-    const int n = (int)(sizeof(curve) / sizeof(curve[0]));
-    if (batteryMv <= curve[0].mv) return curve[0].pct;
-    if (batteryMv >= curve[n - 1].mv) return curve[n - 1].pct;
-
-    for (int i = 0; i < n - 1; ++i) {
-        const BatteryCurvePoint &a = curve[i];
-        const BatteryCurvePoint &b = curve[i + 1];
-        if (batteryMv >= a.mv && batteryMv <= b.mv) {
-            const float t = (batteryMv - a.mv) / (b.mv - a.mv);
-            int pct = (int)(a.pct + t * (float)(b.pct - a.pct) + 0.5f);
-            return (pct < 0) ? 0 : (pct > 100) ? 100 : pct;
-        }
-    }
-    return 0;
-}
-
-static int readBatteryPercentForUi(bool isCharging)
-{
-    const float battMv = M5.Power.getBatteryVoltage();
-    return estimateBatteryPercentFromVoltageMv(battMv); //temporary change to check if percentage is handled better now
-    if (!isCharging) {
-        if (battMv > 1000.0f) {
-            return estimateBatteryPercentFromVoltageMv(battMv);
-        }
-    }
-    LogDebugFormatted("Battery voltage too low or charging, using M5.Power.getBatteryLevel() instead\n");
-    return M5.Power.getBatteryLevel();
-}
-
-static int getSmoothedBatteryLevel(bool isCharging)
-{
-    static uint32_t lastSampleMs   = 0;
-    static bool     wasCharging    = false;
-    static uint32_t disconnectedMs = 0;
-    static float    emaLevel       = -1.0f;
-    static int      displayedLevel = -1;
-
-    const uint32_t now = millis();
-
-    if (wasCharging && !isCharging) disconnectedMs = now;
-    wasCharging = isCharging;
-
-    const bool inSettlingWindow = (!isCharging && (now - disconnectedMs) < 120000UL);
-
-    if (emaLevel < 0.0f) {
-        emaLevel       = (float)readBatteryPercentForUi(isCharging);
-        displayedLevel = (int)(emaLevel + 0.5f);
-        lastSampleMs   = now;
-        if (!isCharging) disconnectedMs = now;
-    }
-
-    if (inSettlingWindow) return displayedLevel;
-
-    if (now - lastSampleMs >= 10000UL || lastSampleMs == 0) {
-        lastSampleMs = now;
-        const float raw = (float)readBatteryPercentForUi(isCharging);
-        emaLevel       = 0.1f * raw + 0.9f * emaLevel;
-        displayedLevel = (int)(emaLevel + 0.5f);
-        if (displayedLevel < 0)   displayedLevel = 0;
-        if (displayedLevel > 100) displayedLevel = 100;
-    }
-
-    return displayedLevel;
-}
-
-// -------------------------------------------------------
-// Screen Power Tick
-// -------------------------------------------------------
-void screen_power_tick()
-{
-    // Only treat encoder movement as activity when the counts change since
-    // the last tick. Some encoder implementations leave a non-zero count
-    // value until explicitly cleared which would otherwise constantly
-    // retrigger the screensaver activity check.
-    static long s_prev_encoder_counts[4] = {0, 0, 0, 0};
-    long c1 = encoder1.getCount();
-    long c2 = encoder2.getCount();
-    long c3 = encoder3.getCount();
-    long c4 = encoder4.getCount();
-    if (c1 != s_prev_encoder_counts[0] || c2 != s_prev_encoder_counts[1] ||
-        c3 != s_prev_encoder_counts[2] || c4 != s_prev_encoder_counts[3]) {
-        screensaver_check_activity();
-        s_prev_encoder_counts[0] = c1;
-        s_prev_encoder_counts[1] = c2;
-        s_prev_encoder_counts[2] = c3;
-        s_prev_encoder_counts[3] = c4;
-    }
-
-    if (!screensaver_active && (millis() - last_activity_ms > (unsigned long)screensaver_timeout_ms)) {
-        screensaver_prev_brightness = g_brightness_value;
-        M5.Lcd.setBrightness(screensaver_dim_brightness);
-        screensaver_active = true;
-    }
-
-#if AUTO_IDLE_DEEP_SLEEP_ENABLED == 1
-    if (millis() - last_activity_ms > deep_sleep_timeout_ms) {
-        if (canEnterDeepSleep()) {
-            vibrate(1000, 255);
-                const int result = showNotification(
-                T_SHUTDOWN_SLEEP_TITLE,
-                T_SHUTDOWN_SLEEP_TEXT,
-            60000,
-            true,  T_CANCEL,
-            false,  nullptr,
-            false);
-
-            if (result != NOTIFICATION_RESULT_LEFT) {
-                M5.Power.powerOff();
-            }
-        }
-    }
-#endif
-}
-
-// -------------------------------------------------------
-// Settings Menu Actions
-// -------------------------------------------------------
-extern "C" void menuSleepAction(void)
-{
-    const int result = showNotification(
-        "Enter Deep-Sleep",
-        "Are you sure you want to enter deep-sleep mode? This will stop all connections.",
-        0,
-        true,  "Yes",
-        true,  "No",
-        false);
-
-    if (result == NOTIFICATION_RESULT_LEFT) {
-        enterDeepSleep();
-    }
-}
-
-extern "C" void menuRestartAction(void)
-{
-    const int result = showNotification(
-        "Restart",
-        "Are you sure you want to perform a restart?",
-        0,
-        true,  "Yes",
-        true,  "No",
-        false);
-
-    if (result == NOTIFICATION_RESULT_LEFT) {
-        esp_restart();
-    }
-}
-
-// -------------------------------------------------------
-// Motion / Manual-Rail Helper Utilities
-// -------------------------------------------------------
-static void syncMotionCommandCache(float motionSpeed, float motionDepth, float motionStroke)
-{
-    s_last_motion_speed = motionSpeed;
-    s_last_motion_depth = motionDepth;
-    s_last_motion_stroke = motionStroke;
-    s_motion_command_cache_valid = true;
-}
-
-static void persistManualRailLengthSetting()
-{
-    Preferences prefs;
-    prefs.begin("m5-ctnr", false);
-    prefs.putFloat("RailLengthMm", s_manual_rail_length_mm);
-    prefs.end();
-}
-
-static void persistEncRampProfileSetting()
-{
-    Preferences prefs;
-    prefs.begin("m5-ctnr", false);
-    prefs.putInt("EncRampProfile", s_encoder_ramp_profile);
-    prefs.end();
-}
-
-static void persistSpeedBehaviorSetting()
-{
-    Preferences prefs;
-    prefs.begin("m5-ctnr", false);
-    prefs.putInt("SpeedBehavior", s_speed_behavior_profile);
-    prefs.putBool("VisualSpeedLock", s_speed_behavior_profile != SPEED_BEHAVIOR_STANDARD);
-    prefs.end();
-}
-
-static float getDefaultManualRailLengthMm()
-{
-#ifdef RAIL_LENGTH
-    return (float)RAIL_LENGTH;
-#else
-    return 0.0f;
-#endif
-}
-
-static void updateManualRailLengthSettingLabel()
-{
-    if (!s_manual_rail_length_setting) return;
-
-    char label[64];
-    if (s_manual_rail_length_mm > 0.0f) {
-        snprintf(label, sizeof(label), "Set Rail length : %.0f", s_manual_rail_length_mm);
-    } else {
-        snprintf(label, sizeof(label), "Set Rail length");
-    }
-    lv_checkbox_set_text(s_manual_rail_length_setting, label);
-}
-
-static void syncManualRailLengthSettingUi()
-{
-    if (!s_manual_rail_length_setting) return;
-
-    s_manual_rail_length_ui_syncing = true;
-    updateManualRailLengthSettingLabel();
-    if (s_manual_rail_length_mm > 0.0f) {
-        lv_obj_add_state(s_manual_rail_length_setting, LV_STATE_CHECKED);
-    } else {
-        lv_obj_clear_state(s_manual_rail_length_setting, LV_STATE_CHECKED);
-    }
-    s_manual_rail_length_ui_syncing = false;
-}
-
-static const char* getEncRampProfileName(int profile)
-{
-    switch (profile) {
-        case ENCODER_RAMP_NONE:
-            return "None";
-        case ENCODER_RAMP_HIGH:
-            return "High";
-        case ENCODER_RAMP_AGGRESSIVE:
-            return "Aggressive";
-        case ENCODER_RAMP_MEDIUM:
-        default:
-            return "Medium";
-    }
-}
-
-static void syncEncRampProfileSettingUi()
-{
-    if (!s_encoder_ramp_profile_setting) return;
-    char label[64];
-    snprintf(label, sizeof(label), "Encoder ramp : %s", getEncRampProfileName(s_encoder_ramp_profile));
-    lv_checkbox_set_text(s_encoder_ramp_profile_setting, label);
-    lv_obj_add_state(s_encoder_ramp_profile_setting, LV_STATE_CHECKED);
-}
-
-static const char* getSpeedBehaviorName(int profile)
-{
-    switch (profile) {
-        case SPEED_BEHAVIOR_NATURAL:
-            return "Natural";
-        case SPEED_BEHAVIOR_TAMED:
-            return "Tamed";
-        case SPEED_BEHAVIOR_STANDARD:
-        default:
-            return "Standard";
-    }
-}
-
-static void applySpeedBehavior(int profile)
-{
-    if (profile < SPEED_BEHAVIOR_STANDARD || profile > SPEED_BEHAVIOR_TAMED) {
-        profile = SPEED_BEHAVIOR_STANDARD;
-    }
-    s_speed_behavior_profile = profile;
-    s_visual_speed_lock = (s_speed_behavior_profile != SPEED_BEHAVIOR_STANDARD);
-
-    if (!s_visual_speed_lock) {
-        resetVisualSpeedRatioState();
-    } else if (stroke > 0.001f) {
-        s_visual_speed_stroke_product = speed;
-        s_visual_speed_ratio_valid = true;
-    }
-}
-
-static void syncSpeedBehaviorSettingUi()
-{
-    if (!ui_visualSpeedLock) return;
-
-    s_speed_behavior_ui_syncing = true;
-    char label[64];
-    snprintf(label, sizeof(label), "Speed behaviour : %s", getSpeedBehaviorName(s_speed_behavior_profile));
-    lv_checkbox_set_text(ui_visualSpeedLock, label);
-
-    if (s_speed_behavior_profile == SPEED_BEHAVIOR_STANDARD) {
-        lv_obj_clear_state(ui_visualSpeedLock, LV_STATE_CHECKED);
-    } else {
-        lv_obj_add_state(ui_visualSpeedLock, LV_STATE_CHECKED);
-    }
-    s_speed_behavior_ui_syncing = false;
-}
-
-static void ensureManualRailLengthSetting()
-{
-    if (!ui_Settings || s_manual_rail_length_setting) return;
-
-    s_manual_rail_length_setting = lv_checkbox_create(ui_Settings);
-    lv_checkbox_set_text(s_manual_rail_length_setting, "Set manual Rail length");
-    lv_obj_set_width(s_manual_rail_length_setting, LV_SIZE_CONTENT);
-    lv_obj_set_height(s_manual_rail_length_setting, LV_SIZE_CONTENT);
-    lv_obj_set_x(s_manual_rail_length_setting, 10);
-    lv_obj_set_y(s_manual_rail_length_setting, 120);
-    lv_obj_set_align(s_manual_rail_length_setting, LV_ALIGN_LEFT_MID);
-    lv_obj_add_flag(s_manual_rail_length_setting, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-    lv_obj_set_style_text_font(s_manual_rail_length_setting, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-    uiApplyCheckboxStyles(s_manual_rail_length_setting);
-    lv_obj_add_event_cb(s_manual_rail_length_setting, manualRailLengthSetting_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    syncManualRailLengthSettingUi();
-}
-
-static void ensureEncRampProfileSetting()
-{
-    if (!ui_Settings || s_encoder_ramp_profile_setting) return;
-
-    s_encoder_ramp_profile_setting = lv_checkbox_create(ui_Settings);
-    lv_checkbox_set_text(s_encoder_ramp_profile_setting, "Encoder ramp : Medium");
-    lv_obj_set_width(s_encoder_ramp_profile_setting, LV_SIZE_CONTENT);
-    lv_obj_set_height(s_encoder_ramp_profile_setting, LV_SIZE_CONTENT);
-    lv_obj_set_x(s_encoder_ramp_profile_setting, 10);
-    lv_obj_set_y(s_encoder_ramp_profile_setting, 150);
-    lv_obj_set_align(s_encoder_ramp_profile_setting, LV_ALIGN_LEFT_MID);
-    lv_obj_add_flag(s_encoder_ramp_profile_setting, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
-    
-    lv_obj_set_style_text_font(s_encoder_ramp_profile_setting, &lv_font_montserrat_20, LV_PART_MAIN | LV_STATE_DEFAULT);
-    uiApplyCheckboxStyles(s_encoder_ramp_profile_setting);
-    lv_obj_add_event_cb(s_encoder_ramp_profile_setting, EncRampProfile_event_cb, LV_EVENT_VALUE_CHANGED, NULL);
-    syncEncRampProfileSettingUi();
-}
-
-static void manualRailLengthSetting_event_cb(lv_event_t* e)
-{
-    if (!e || s_manual_rail_length_ui_syncing) return;
-    if (lv_event_get_code(e) != LV_EVENT_VALUE_CHANGED || !s_manual_rail_length_setting) return;
-
-    const bool checked = lv_obj_has_state(s_manual_rail_length_setting, LV_STATE_CHECKED);
-    if (!checked) {
-        s_manual_rail_length_mm = 0.0f;
-        persistManualRailLengthSetting();
-        syncManualRailLengthSettingUi();
-        refreshSettingsCarousel();
-        lv_refr_now(NULL);
-        return;
-    }
-
-    runManualRailLengthCalibrationWorkflow();
-}
-
-static void EncRampProfile_event_cb(lv_event_t* e)
-{
-    if (!e || !s_encoder_ramp_profile_setting) return;
-
-    const lv_event_code_t code = lv_event_get_code(e);
-    if (code != LV_EVENT_VALUE_CHANGED) return;
-
-    s_encoder_ramp_profile = (s_encoder_ramp_profile + 1) % 4;
-    persistEncRampProfileSetting();
-    syncEncRampProfileSettingUi();
-    refreshSettingsCarousel();
-    lv_refr_now(NULL);
-}
-
-static void SpeedBehavior_event_cb(lv_event_t* e)
-{
-    if (!e || !ui_visualSpeedLock || s_speed_behavior_ui_syncing) return;
-
-    const lv_event_code_t code = lv_event_get_code(e);
-    if (code != LV_EVENT_VALUE_CHANGED) return;
-
-    int nextProfile = s_speed_behavior_profile + 1;
-    if (nextProfile > SPEED_BEHAVIOR_TAMED) {
-        nextProfile = SPEED_BEHAVIOR_STANDARD;
-    }
-
-    applySpeedBehavior(nextProfile);
-    syncSpeedBehaviorSettingUi();
-    persistSpeedBehaviorSetting();
-    refreshSettingsCarousel();
-    lv_refr_now(NULL);
-}
-
-static void runManualRailLengthCalibrationWorkflow()
-{
-    if (!bleCommIsConnected() && !bleCommTryConnect()) {
-        showNotification("Moving to MAX", "BLE is not connected, so calibration cannot start.", 0, true, "OK", false, nullptr, false);
-        syncManualRailLengthSettingUi();
-        refreshSettingsCarousel();
-        lv_refr_now(NULL);
-        return;
-    }
-
-    while (true) {
-        const int startResult = showNotification(
-            "Moving to MAX",
-            "The OSSM will now move to max depth and store this as a setting. Move away from your OSSM and press start",
-            0,
-            true,  "Cancel",
-            true,  "Start",
-            false);
-
-        if (startResult == NOTIFICATION_RESULT_LEFT) {
-            syncManualRailLengthSettingUi();
-            refreshSettingsCarousel();
-            lv_refr_now(NULL);
-            return;
-        }
-        if (startResult != NOTIFICATION_RESULT_RIGHT) {
-            syncManualRailLengthSettingUi();
-            refreshSettingsCarousel();
-            lv_refr_now(NULL);
-            return;
-        }
-
-        SendCommand(DEPTH, 100.0f, OSSM_ID);
-        SendCommand(STROKE, 1.0f, OSSM_ID);
-        SendCommand(SPEED, 5.0f, OSSM_ID);
-        SendCommand(SENSATION, 0.0f, OSSM_ID);
-        SendCommand(ON, 5.0f, OSSM_ID);
-
-        const uint32_t moveStartMs = millis();
-        while ((millis() - moveStartMs) < 10000U) {
-            M5.update();
-            lv_task_handler();
-            vTaskDelay(pdMS_TO_TICKS(20));
-        }
-
-        SendCommand(OFF, 0.0f, OSSM_ID);
-        vTaskDelay(pdMS_TO_TICKS(250));
-
-        const int confirmResult = showNotification(
-            "Confirm max depth",
-            "Confirm if your OSSM is indeed at the maximum position",
-            0,
-            true,  "Confirm",
-            true,  "Retry",
-            false);
-
-        if (confirmResult == NOTIFICATION_RESULT_RIGHT) {
-            continue;
-        }
-
-        if (confirmResult == NOTIFICATION_RESULT_LEFT) {
-            const float confirmedPosition = bleCommGetConfirmedPosition();
-            if (confirmedPosition > 0.0f) {
-                s_manual_rail_length_mm = confirmedPosition;
-                persistManualRailLengthSetting();
-                syncManualRailLengthSettingUi();
-                refreshSettingsCarousel();
-                lv_refr_now(NULL);
-            }
-            return;
-        }
-
-        return;
-    }
-}
-
-static void resetVisualSpeedRatioState()
-{
-    s_visual_speed_ratio_valid = false;
-    s_visual_speed_stroke_product = 0.0f;
-    s_visual_speed_last_commanded = -1.0f;
-}
-
-static void updateVisualSpeedRatioFromUi(bool uiSpeedChanged, float uiSpeed, float uiStroke)
-{
-    if (!s_visual_speed_lock) {
-        resetVisualSpeedRatioState();
-        return;
-    }
-
-    if (uiStroke <= 0.001f) return;
-
-    if (uiSpeedChanged || !s_visual_speed_ratio_valid) {
-        s_visual_speed_stroke_product = uiSpeed;
-        s_visual_speed_ratio_valid = true;
-    }
-}
-
-static float resolveVisualCompensatedSpeed(float uiSpeed, float uiStroke)
-{
-    if (!s_visual_speed_lock) return uiSpeed;
-    if (!s_visual_speed_ratio_valid) return uiSpeed;
-    if (uiStroke <= 0.001f) return uiSpeed;
-
-    float minFactor = VIS_SPEED_STANDARD_MIN_FACTOR;
-    float kneeStroke = VIS_SPEED_STANDARD_KNEE_STROKE;
-    float curvePower = VIS_SPEED_STANDARD_POWER;
-    if (s_speed_behavior_profile == SPEED_BEHAVIOR_NATURAL) {
-        minFactor = VIS_SPEED_NATURAL_MIN_FACTOR;
-        kneeStroke = VIS_SPEED_NATURAL_KNEE_STROKE;
-        curvePower = VIS_SPEED_NATURAL_POWER;
-    } else if (s_speed_behavior_profile == SPEED_BEHAVIOR_TAMED) {
-        minFactor = VIS_SPEED_TAMED_MIN_FACTOR;
-        kneeStroke = VIS_SPEED_TAMED_KNEE_STROKE;
-        curvePower = VIS_SPEED_TAMED_POWER;
-    }
-
-    const float strokeNorm = fminf(1.0f, fmaxf(0.0f, uiStroke / kneeStroke));
-    const float factor = minFactor + (1.0f - minFactor) * powf(strokeNorm, curvePower);
-    float compensatedSpeed = s_visual_speed_stroke_product * factor;
-    if (compensatedSpeed < 0.0f) compensatedSpeed = 0.0f;
-    if (compensatedSpeed > speedlimit) compensatedSpeed = speedlimit;
-    return compensatedSpeed;
-}
-
-static int collectSettingsOptionObjects(lv_obj_t** outObjects, int maxObjects)
-{
-    if (!outObjects || maxObjects <= 0) return 0;
-
-    ensureEncRampProfileSetting();
-
-    int count = 0;
-    auto addObj = [&](lv_obj_t* obj) {
-        if (!obj || count >= maxObjects) return;
-        outObjects[count++] = obj;
-    };
-
-    addObj(ui_vibrate);
-    addObj(ui_safeStartStop);
-    addObj(ui_strokeinvert);
-    addObj(ui_forceHome);
-    addObj(ui_visualSpeedLock);
-    addObj(ui_strokeDepthLink);
-    addObj(s_encoder_ramp_profile_setting);
-    return count;
-}
-
-static void refreshSettingsCarousel()
-{
-    lv_obj_t* options[9] = {};
-    const int optionCount = collectSettingsOptionObjects(options, 9);
-    if (optionCount <= 0) {
-        if (ui_Logo1) {
-            lv_label_set_text(ui_Logo1, T_SCREEN_SETTINGS);
-        }
-        return;
-    }
-
-    if (s_settings_focus_index < 0) s_settings_focus_index = 0;
-    if (s_settings_focus_index >= optionCount) s_settings_focus_index = optionCount - 1;
-
-    if (s_settings_focus_index < s_settings_scroll_offset) {
-        s_settings_scroll_offset = s_settings_focus_index;
-    }
-    if (s_settings_focus_index >= (s_settings_scroll_offset + SETTINGS_CAROUSEL_VISIBLE_COUNT)) {
-        s_settings_scroll_offset = s_settings_focus_index - SETTINGS_CAROUSEL_VISIBLE_COUNT + 1;
-    }
-
-    if (s_settings_scroll_offset < 0) s_settings_scroll_offset = 0;
-    const int maxOffset = (optionCount > SETTINGS_CAROUSEL_VISIBLE_COUNT)
-                          ? (optionCount - SETTINGS_CAROUSEL_VISIBLE_COUNT)
-                          : 0;
-    if (s_settings_scroll_offset > maxOffset) s_settings_scroll_offset = maxOffset;
-
-    const int slotY[SETTINGS_CAROUSEL_VISIBLE_COUNT] = {-60, -30, 0, 30};
-    for (int i = 0; i < optionCount; ++i) {
-        lv_obj_t* obj = options[i];
-        if (!obj) continue;
-
-        const bool visible = (i >= s_settings_scroll_offset) &&
-                             (i < (s_settings_scroll_offset + SETTINGS_CAROUSEL_VISIBLE_COUNT));
-        if (visible) {
-            const int slot = i - s_settings_scroll_offset;
-            lv_obj_set_y(obj, slotY[slot]);
-            lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
-        } else {
-            lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
-        }
-
-        if (i == s_settings_focus_index) {
-            lv_obj_add_state(obj, LV_STATE_FOCUSED);
-        } else {
-            lv_obj_clear_state(obj, LV_STATE_FOCUSED);
-        }
-    }
-
-    if (ui_Logo1) {
-        char title[64];
-        snprintf(title, sizeof(title), "%s %d/%d", T_SCREEN_SETTINGS, s_settings_focus_index + 1, optionCount);
-        lv_label_set_text(ui_Logo1, title);
-    }
-}
-
-static lv_obj_t* getSettingsFocusedObject()
-{
-    lv_obj_t* options[9] = {};
-    const int optionCount = collectSettingsOptionObjects(options, 9);
-    if (optionCount <= 0) return nullptr;
-
-    if (s_settings_focus_index < 0) s_settings_focus_index = 0;
-    if (s_settings_focus_index >= optionCount) s_settings_focus_index = optionCount - 1;
-    return options[s_settings_focus_index];
-}
-
-// -------------------------------------------------------
 // Screen Lifecycle / Event Entry Points
 // -------------------------------------------------------
 void screenInit() {
@@ -2088,6 +810,10 @@ void screenmachine(lv_event_t * e) {
 //            resetEncoderCounts();
 //        }
         st_screens = ST_UI_APMODE;
+    } else if (APV2ModeOwnsActiveScreen()) {
+        st_screens = ST_UI_APMODE_V2;
+    } else if (ToyControlOwnsActiveScreen()) {
+        st_screens = ST_UI_TOYCONTROL;
     }
     (void)prevScreenForAddonGate;
 }
@@ -2244,79 +970,6 @@ static void updateHomeButtonMState() {
 }
 
 
-static void syncHomeMotionUi(bool invertStroke)
-{
-    if (ui_homedepthslider) {
-        lv_slider_set_value(ui_homedepthslider, depth, LV_ANIM_OFF);
-    }
-    if (ui_homedepthvalue) {
-        char depth_v[7];
-        dtostrf(depth, 6, 0, depth_v);
-        lv_label_set_text(ui_homedepthvalue, depth_v);
-    }
-
-    if (ui_homestrokeslider) {
-        if (invertStroke) {
-            if (lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_RANGE) {
-                lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_RANGE);
-            }
-            lv_bar_set_start_value(ui_homestrokeslider, depth - stroke, LV_ANIM_OFF);
-            lv_slider_set_value(ui_homestrokeslider, depth, LV_ANIM_OFF);
-        } else {
-            if (lv_bar_get_mode(ui_homestrokeslider) != LV_BAR_MODE_NORMAL) {
-                lv_bar_set_mode(ui_homestrokeslider, LV_BAR_MODE_NORMAL);
-            }
-            lv_bar_set_start_value(ui_homestrokeslider, 0, LV_ANIM_OFF);
-            lv_slider_set_value(ui_homestrokeslider, stroke, LV_ANIM_OFF);
-        }
-    }
-    if (ui_homestrokevalue) {
-        char stroke_v[7];
-        dtostrf(stroke, 6, 0, stroke_v);
-        lv_label_set_text(ui_homestrokevalue, stroke_v);
-    }
-}
-
-static void rampHomeStartSpeed(int targetSpeed)
-{
-    s_home_speed_ramp_active = true;
-    s_home_speed_ramp_current = HOME_START_RAMP_THRESHOLD + 1;
-    s_home_speed_ramp_target = targetSpeed;
-    s_home_speed_ramp_step = 1;
-    s_home_speed_ramp_interval_ms = HOME_START_RAMP_INTERVAL_MS;
-    s_home_speed_ramp_next_ms = millis() + HOME_START_RAMP_INTERVAL_MS;
-}
-
-static void rampHomeStopSpeed(int startSpeed)
-{
-    s_home_speed_ramp_active = true;
-    s_home_speed_ramp_current = startSpeed - 1;
-    s_home_speed_ramp_target = HOME_START_RAMP_THRESHOLD;
-    s_home_speed_ramp_step = -1;
-    s_home_speed_ramp_interval_ms = HOME_START_RAMP_INTERVAL_MS / 2;
-    s_home_speed_ramp_next_ms = millis() + s_home_speed_ramp_interval_ms;
-}
-
-static void serviceHomeSpeedRamp()
-{
-    if (!s_home_speed_ramp_active) return;
-
-    const uint32_t now = millis();
-    if (now < s_home_speed_ramp_next_ms) return;
-
-    const bool reachedTarget =
-        (s_home_speed_ramp_step > 0 && s_home_speed_ramp_current > s_home_speed_ramp_target) ||
-        (s_home_speed_ramp_step < 0 && s_home_speed_ramp_current < s_home_speed_ramp_target);
-    if (reachedTarget) {
-        s_home_speed_ramp_active = false;
-        return;
-    }
-
-    SendCommand(SPEED, (float)s_home_speed_ramp_current, OSSM_ID);
-    s_home_speed_ramp_current += s_home_speed_ramp_step;
-    s_home_speed_ramp_next_ms = now + s_home_speed_ramp_interval_ms;
-}
-
 void homebuttonmevent(lv_event_t * e) {
     LogDebug("HomeButton");
         SafeStartStop = (lv_obj_has_state(ui_safeStartStop, LV_STATE_CHECKED) == 1);
@@ -2368,7 +1021,7 @@ void homebuttonmevent(lv_event_t * e) {
     // Stroke screen watches OSSM_On itself and will refresh its Start/Stop UI.
 }
 
-static bool requestHomeButtonToggleOnce()
+bool requestHomeButtonToggleOnce()
 {
     if (s_home_toggle_fired_this_loop) return false;
     s_home_toggle_fired_this_loop = true;
@@ -2396,186 +1049,6 @@ void resetEncoderCounts() {
     encoder3_enc = 0;
     encoder4_enc = 0;}
 
-// -------------------------------------------------------
-// Zero-Stroke Depth Jog + Motion Command Flush
-// -------------------------------------------------------
-static void startZeroStrokeDepthJog(float previousDepth, float targetDepth)
-{
-    s_zero_stroke_depth_jog_active = true;
-    s_zero_stroke_depth_target = targetDepth;
-    s_zero_stroke_depth_jog_start_ms = millis();
-    s_zero_stroke_debug_log_ms = 0;
-    if (targetDepth > previousDepth) {
-        s_zero_stroke_depth_direction = 1;
-    } else if (targetDepth < previousDepth) {
-        s_zero_stroke_depth_direction = -1;
-    } else {
-        s_zero_stroke_depth_direction = 0;
-    }
-}
-
-static void stopZeroStrokeDepthJog()
-{
-    s_zero_stroke_depth_jog_active = false;
-    s_zero_stroke_depth_target = 0.0f;
-    s_zero_stroke_depth_jog_start_ms = 0;
-    s_zero_stroke_debug_log_ms = 0;
-    s_zero_stroke_depth_direction = 0;
-}
-
-static void serviceZeroStrokeDepthJog()
-{
-    if (!ENABLE_ZERO_STROKE_DEPTH_JOG) {
-        if (s_zero_stroke_depth_jog_active) {
-            stopZeroStrokeDepthJog();
-        }
-        return;
-    }
-
-    if (!s_zero_stroke_depth_jog_active) return;
-
-    if (s_manual_rail_length_mm <= 0.0f) {
-        LogDebugFormatted("Error depth jogging - no rail length set\n");
-        SendCommand(STROKE, 0.0f, OSSM_ID);
-        SendCommand(SPEED, 0.0f, OSSM_ID);
-        stopZeroStrokeDepthJog();
-        return;
-    }
-    bleCommGetConfirmedPosition(); // refresh BLE state
-    const bool stillEligible = commIsBleMode() && speed > 0.5f && stroke <= 0.001f && depth > 0.0f && s_manual_rail_length_mm > 0.0f;
-    if (!stillEligible) {
-        SendCommand(STROKE, 0.0f, OSSM_ID);
-        stopZeroStrokeDepthJog();
-        return;
-    }
-
-    const bool timedOut = s_zero_stroke_depth_jog_start_ms != 0 &&
-                          (millis() - s_zero_stroke_depth_jog_start_ms) > ZERO_STROKE_DEPTH_JOG_TIMEOUT_MS;
-    const float currentPositionMm = bleCommGetConfirmedPosition();
-    float targetMm = (s_zero_stroke_depth_target * s_manual_rail_length_mm) / 100.0f;
-    bool reachedDepth = false;
-    if (bleCommHasFreshState() && currentPositionMm >= 0.0f) {
-        if (s_zero_stroke_depth_direction > 0) {
-//            reachedDepth = currentPositionMm >= targetMm;
-            float targetMm = ((s_zero_stroke_depth_target-1) * s_manual_rail_length_mm) / 100.0f;
-            reachedDepth = currentPositionMm >= targetMm;
-        } else if (s_zero_stroke_depth_direction < 0) {
-//            reachedDepth = currentPositionMm <= targetMm;
-            float targetMm = ((s_zero_stroke_depth_target+1) * s_manual_rail_length_mm) / 100.0f;
-            reachedDepth = currentPositionMm <= targetMm;
-        } else {
-            reachedDepth = fabsf(currentPositionMm - targetMm) <= ZERO_STROKE_DEPTH_TOLERANCE;
-        }
-    }
-
-    const uint32_t nowMs = millis();
-    if ((nowMs - s_zero_stroke_debug_log_ms) >= 1000U) {
-        const char* dir = (s_zero_stroke_depth_direction > 0) ? "out" :
-                          (s_zero_stroke_depth_direction < 0) ? "in" : "none";
-        LogDebugFormatted(
-            "BLE: zero-stroke jog dir=%s targetDepth=%.1f targetMm=%.1f currentMm=%.1f reached=%d timeout=%d\n",
-            dir,
-            s_zero_stroke_depth_target,
-            targetMm,
-            currentPositionMm,
-            reachedDepth ? 1 : 0,
-            timedOut ? 1 : 0);
-        s_zero_stroke_debug_log_ms = nowMs;
-    }
-
-    if (reachedDepth || timedOut) {
-        const float targetDepth = s_zero_stroke_depth_target;
-        SendCommand(STROKE, 0.0f, OSSM_ID);
-        stopZeroStrokeDepthJog();
-        if (timedOut) {
-            LogDebugFormatted("BLE: zero-stroke depth jog timeout at target %.1f\n", targetDepth);
-        }
-    }
-}
-
-static void flushMotionCommands(float motionSpeed,
-                                float motionDepth,
-                                float motionStroke,
-                                bool  motionValueChanged,
-                                bool  allowSend)
-{
-    if (!motionValueChanged) return;
-
-    if (allowSend && motionValueChanged) {
-        const float commandedSpeed = resolveVisualCompensatedSpeed(motionSpeed, motionStroke);
-        const bool speedChanged = !s_motion_command_cache_valid || motionSpeed != s_last_motion_speed;
-        const bool depthChanged = !s_motion_command_cache_valid || motionDepth != s_last_motion_depth;
-        const bool strokeChanged = !s_motion_command_cache_valid || motionStroke != s_last_motion_stroke;
-        bool sendSpeedForVsl = !speedChanged &&
-                               s_visual_speed_lock && s_visual_speed_ratio_valid &&
-                               strokeChanged && motionStroke > 0.001f &&
-                               OSSM_On && !s_home_speed_ramp_active;
-        const bool wantsZeroStrokeJog = ENABLE_ZERO_STROKE_DEPTH_JOG && commIsBleMode() && motionSpeed > 0.5f && motionStroke <= 0.001f && motionDepth > 0.0f && depthChanged;
-
-        if (wantsZeroStrokeJog && s_manual_rail_length_mm <= 0.0f) {
-            LogDebugFormatted("Error depth jogging - no rail length set\n");
-            SendCommand(STROKE, 0.0f, OSSM_ID);
-            SendCommand(SPEED, 0.0f, OSSM_ID);
-            stopZeroStrokeDepthJog();
-            syncMotionCommandCache(0.0f, motionDepth, 0.0f);
-            return;
-        }
-
-        const bool zeroStrokeDepthJog = ENABLE_ZERO_STROKE_DEPTH_JOG && commIsBleMode() && motionSpeed > 0.5f && motionStroke <= 0.001f &&
-                        motionDepth > 0.0f && s_manual_rail_length_mm > 0.0f && depthChanged;
-        const bool forceRunForZeroStrokeJog = zeroStrokeDepthJog && !OSSM_On;
-        const float previousDepth = s_motion_command_cache_valid ? s_last_motion_depth : 0.0f;
-        float speedToSend = commandedSpeed;
-
-        if (sendSpeedForVsl && s_visual_speed_last_commanded >= 0.0f) {
-            const float delta = speedToSend - s_visual_speed_last_commanded;
-            if (fabsf(delta) < 0.1f) {
-                sendSpeedForVsl = false;
-            } else if (delta > VIS_SPEED_CURVE_MAX_STEP) {
-                speedToSend = s_visual_speed_last_commanded + VIS_SPEED_CURVE_MAX_STEP;
-            } else if (delta < -VIS_SPEED_CURVE_MAX_STEP) {
-                speedToSend = s_visual_speed_last_commanded - VIS_SPEED_CURVE_MAX_STEP;
-            }
-        }
-
-        if (forceRunForZeroStrokeJog) {
-            SendCommand(ON, commandedSpeed, OSSM_ID);
-            LogDebugFormatted("BLE: zero-stroke depth jog forcing ON at speed %.1f\n", commandedSpeed);
-        } else if ((speedChanged || sendSpeedForVsl) && !s_home_speed_ramp_active) {
-            SendCommand(SPEED, speedToSend, OSSM_ID);
-            s_visual_speed_last_commanded = speedToSend;
-        }
-        if (depthChanged) { SendCommand(DEPTH, motionDepth, OSSM_ID); }
-        if (zeroStrokeDepthJog) {
-            SendCommand(STROKE, 1.0f, OSSM_ID);
-            startZeroStrokeDepthJog(previousDepth, motionDepth);
-        } else if (strokeChanged) {
-            SendCommand(STROKE, motionStroke, OSSM_ID);
-            stopZeroStrokeDepthJog();
-        }
-        if(speedChanged ) {
-            LogDebugFormatted("BLE: flushMotionCommands speed %.1f depth %.1f stroke %.1f\n Previous speed: %.1f. Speed changed: %s", motionSpeed, motionDepth, motionStroke, s_last_motion_speed, speedChanged ? "true" : "false");
-            if (s_visual_speed_lock && s_visual_speed_ratio_valid && motionStroke > 0.001f) {
-                const uint32_t nowMs = millis();
-                if ((nowMs - s_visual_speed_log_ms) >= 250U) {
-                    LogDebugFormatted("VSL: uiSpeed=%.2f stroke=%.2f cmdSpeed=%.2f\n",
-                                      motionSpeed, motionStroke, commandedSpeed);
-                    s_visual_speed_log_ms = nowMs;
-                }
-            }
-            if (s_last_motion_speed == 0.0f && commandedSpeed > 0.0f) {
-                LogDebugFormatted("BLE: Unpause speed %.1f\n", bleCommGetUnpauseSpeed());
-                requestHomeButtonToggleOnce(); // simulate a press of the HomeButtonM to resume motion
-//            SendCommand(ON, bleCommGetUnpauseSpeed(), OSSM_ID);
-            }
-        }
-
-        syncMotionCommandCache(motionSpeed, motionDepth, motionStroke);
-
-    }
-}
-
-// -------------------------------------------------------
 // BLE Connection Guard
 // -------------------------------------------------------
 static void checkBleDisconnectError()
@@ -2644,41 +1117,6 @@ static void checkBleDisconnectError()
     // s_notification_shown stays true so we don't spam the notification.
 }
 
-static void serviceAddonBackgroundConnect()
-{
-    static uint32_t s_next_probe_ms = 0;
-    static uint8_t s_probe_slot = 0;
-    static constexpr uint32_t INPUT_QUIET_WINDOW_MS = 350U;
-
-    const uint32_t nowMs = millis();
-    // Only probe when recent input traffic has settled to reduce user-visible lag.
-    if ((nowMs - last_activity_ms) < INPUT_QUIET_WINDOW_MS) {
-        return;
-    }
-
-    if (s_next_probe_ms != 0 && (int32_t)(nowMs - s_next_probe_ms) < 0) {
-        return;
-    }
-    s_next_probe_ms = nowMs + 1000U;
-
-    // Stagger probes: at most one addon connect attempt per scheduler tick.
-    if (s_probe_slot == 0) {
-        if (addonsIsEjectEnabled() && !EjectIsPaired()) {
-            (void)EjectTryConnectBackground();
-        }
-    } else if (s_probe_slot == 1) {
-        if (addonsIsFistITEnabled() && !FistITIsPaired()) {
-            (void)FistITTryConnectBackground();
-        }
-    } else {
-        if (addonsIsCoyoteEnabled() && !CoyoteIsPaired()) {
-            (void)CoyoteTryConnectBackground();
-        }
-    }
-
-    s_probe_slot = (uint8_t)((s_probe_slot + 1U) % 3U);
-}
-
 // -------------------------------------------------------
 // Main Screen State Machine Loop
 // -------------------------------------------------------
@@ -2708,7 +1146,7 @@ void SetInitialValues() {
 
 void handleScreens() {
     checkBleDisconnectError();
-    serviceAddonBackgroundConnect();
+    addonsBackgroundConnect();
     serviceHomeSpeedRamp();
 
     s_home_toggle_fired_this_loop = false;
@@ -2799,7 +1237,11 @@ void handleScreens() {
 //        }
         touch_disabled = false;
         if (lv_scr_act() == ui_Start && bleCommIsConnected()) {
-            if (ui_Welcome) lv_label_set_text(ui_Welcome, T_BLECONNECTED);
+            if (ui_Welcome) {
+                static char welcomeText[48];
+                snprintf(welcomeText, sizeof(welcomeText), "%s%s", T_CONNECTED_TO, bleCommGetFirmwareDescription());
+                lv_label_set_text(ui_Welcome, welcomeText);
+            }
             _ui_screen_change(ui_Menu, LV_SCR_LOAD_ANIM_FADE_ON, 20, 0);
             screenmachine(nullptr);
             break;
@@ -3098,7 +1540,7 @@ void handleScreens() {
 
         if (ui_HomeButtonRText) {
             if (FistITPaired()) {
-                lv_label_set_text(ui_HomeButtonRText, T_PATTERN_Button "   F");
+                lv_label_set_text_fmt(ui_HomeButtonRText, "%s   F", T_PATTERN_Button);
             } else {
                 lv_label_set_text(ui_HomeButtonRText, T_PATTERN_Button);
             }
@@ -3106,7 +1548,7 @@ void handleScreens() {
 
         if (ui_HomeButtonLText) {
             if (EjectIsPaired()) {
-                lv_label_set_text(ui_HomeButtonLText, T_HOMEL "       E");
+                lv_label_set_text_fmt(ui_HomeButtonLText, "%s       E", T_HOMEL);
             } else {
                 lv_label_set_text(ui_HomeButtonLText, T_HOMEL);
             }
@@ -3331,10 +1773,42 @@ void handleScreens() {
     }
     break;
 
+    case ST_UI_APMODE_V2:
+    {
+        touch_disabled = true;
+        ButtonEvents events = {
+            click2_short_waspressed,
+            mxclick_short_waspressed,
+            click3_short_waspressed
+        };
+        APV2ModeHandleScreen(events);
+    }
+    break;
+
+    case ST_UI_TOYCONTROL:
+    {
+        touch_disabled = true;
+        ButtonEvents events = {
+            click2_short_waspressed,
+            mxclick_short_waspressed,
+            click3_short_waspressed
+        };
+        ToyControlHandleScreen(events);
+    }
+    break;
+
     case ST_UI_SETTINGS:
     {
         touch_disabled = false;
         refreshSettingsCarousel();
+        {
+            static uint32_t s_last_wifi_status_sync = 0;
+            const uint32_t now = millis();
+            if ((now - s_last_wifi_status_sync) > 1500) {
+                s_last_wifi_status_sync = now;
+                syncWifiSettingUi();
+            }
+        }
         if (encoder3.getCount() > encoder3_enc + 2) {
             if (ui_brightness_slider) {
                 int val = lv_slider_get_value(ui_brightness_slider);
@@ -3398,7 +1872,9 @@ void handleScreens() {
                         }
                         lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
                     } else {
-                        if (focused == s_encoder_ramp_profile_setting) {
+                        if (focused == s_encoder_ramp_profile_setting ||
+                            focused == s_language_setting ||
+                            focused == s_wifi_setting) {
                             lv_obj_send_event(focused, LV_EVENT_VALUE_CHANGED, NULL);
                         } else {
                             lv_obj_send_event(focused, LV_EVENT_SHORT_CLICKED, NULL);

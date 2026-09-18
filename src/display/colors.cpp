@@ -78,9 +78,9 @@ static void updateVisibleSchemeButtons() {
 
         char buf[48];
         if (scheme == g_active_color_scheme) {
-            snprintf(buf, sizeof(buf), "%s  " LV_SYMBOL_OK, COLOR_SCHEMES[scheme].name);
+            snprintf(buf, sizeof(buf), "%s  " LV_SYMBOL_OK, languageGet(COLOR_SCHEMES[scheme].nameKey));
         } else {
-            snprintf(buf, sizeof(buf), "%s", COLOR_SCHEMES[scheme].name);
+            snprintf(buf, sizeof(buf), "%s", languageGet(COLOR_SCHEMES[scheme].nameKey));
         }
 
         const int centerSlot = VISIBLE_SCHEME_COUNT / 2;
@@ -479,7 +479,7 @@ extern "C" void colors_ui_screen_init() {
         lv_obj_t *lbl = lv_label_create(btn);
         lv_obj_set_align(lbl, LV_ALIGN_LEFT_MID);
         lv_obj_set_x(lbl, 8);
-        lv_label_set_text(lbl, (scheme >= 0) ? COLOR_SCHEMES[scheme].name : "");
+        lv_label_set_text(lbl, (scheme >= 0) ? languageGet(COLOR_SCHEMES[scheme].nameKey) : "");
         lv_obj_add_style(lbl, &style_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_text_font(lbl, &lv_font_montserrat_14, LV_PART_MAIN | LV_STATE_DEFAULT);
 

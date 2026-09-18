@@ -374,6 +374,22 @@
 				"m5stack-cores3"
 			],
 			"group": "build"
+		},
+		{
+			"label": "Build apv2 both targets",
+			"type": "shell",
+			"command": "C:\\Users\\User\\.platformio\\penv\\Scripts\\platformio.exe",
+			"args": [
+				"run",
+				"-e",
+				"m5stack-core2",
+				"-e",
+				"m5stack-cores3"
+			],
+			"problemMatcher": [
+				"$gcc"
+			],
+			"group": "build"
 		}
 	]
 }

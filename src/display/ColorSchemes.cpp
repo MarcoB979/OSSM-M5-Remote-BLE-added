@@ -8,7 +8,7 @@ const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
     //   slider1, slider2, slider3, slider4,
     //   battery_main, battery_indicator, roller, focussed_element,
     //   background, text_primary, text_secondary }
-    { "Deep Purple",
+    { Tk_COLOR_DEEP_PURPLE,
         0x83277B, // title_bar
         0x83277B, // button_l
         0x83277B, // button_m
@@ -25,7 +25,7 @@ const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
         0xFFFFFF, // text_primary (White)
         0x000000  // text_secondary (Black)
     },
-    { "Midnight Navy",
+    { Tk_COLOR_MIDNIGHT_NAVY,
         0x1E3A6E,
         0x1E3A6E, 0x1E3A6E, 0x1E3A6E,
         0x7A9FCC, 0x7A9FCC, 0x7A9FCC, 0x7A9FCC,
@@ -34,7 +34,7 @@ const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
         0xFF4081, // focussed_element (Fuchsia)
         0x000000, 0xFFFFFF, 0x000000
     },
-    { "Army Green",
+    { Tk_COLOR_ARMY_GREEN,
         0x3D5C3D,
         0x3D5C3D, 0x3D5C3D, 0x3D5C3D,
         0x8BA88B, 0x8BA88B, 0x8BA88B, 0x8BA88B,
@@ -43,7 +43,7 @@ const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
         0xFFC107, // focussed_element (Amber)
         0x000000, 0xFFFFFF, 0x000000
     },
-    { "Steel Blue",
+    { Tk_COLOR_STEEL_BLUE,
         0x2C5F7A,
         0x2C5F7A, 0x2C5F7A, 0x2C5F7A,
         0x6AABCC, 0x6AABCC, 0x6AABCC, 0x6AABCC,
@@ -52,7 +52,7 @@ const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
         0x64B5F6, // focussed_element (Light Blue)
         0x000000, 0xFFFFFF, 0x000000
     },
-    { "Amber Sunset",
+    { Tk_COLOR_AMBER_SUNSET,
         0xB8860B,
         0xB8860B, 0xB8860B, 0xB8860B,
         0xFFD700, 0xFFD700, 0xFFD700, 0xFFD700,
@@ -61,7 +61,7 @@ const UiColorScheme COLOR_SCHEMES[COLOR_SCHEME_COUNT] = {
         0xFF7043, // focussed_element (Coral)
         0x000000, 0xFFFFFF, 0x000000
     },
-    { "Rainbow",
+    { Tk_COLOR_RAINBOW,
         0xE53935, // title_bar (Red)
         0x8E24AA, // button_l (Purple)
         0x43A047, // button_m (Green)
