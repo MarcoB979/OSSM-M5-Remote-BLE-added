@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OSSM Advanced Penetration v2</title>
+<style>
+  :root {
+    --bg-color: #0a0a12;
+    --panel-bg: #0f172a;
+    --border-color: #334155;
+    --text-color: #dde6f0;
+    --muted: #94a3b8;
+    --color-top: #f86060;
+    --color-bottom: #fcaf00;
+    --color-rise: #ffe000;
+    --color-fall: #00e007;
+    --color-curvein: #001fff;
+    --color-curveout: #a87dff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0; padding: 20px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .phone-container {
+    width: 100%; max-width: 400px;
+    background-color: #05050a;
+    border: 4px solid #1e293b; border-radius: 24px;
+    padding: 16px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.7);
+  }
+  .ble-panel {
+    display: flex; justify-content: space-between; align-items: center;
+    background-color: #111827; padding: 10px; border-radius: 12px;
+    margin-bottom: 14px; border: 1px solid var(--border-color);
+  }
+  .ble-btn { background-color: #2563eb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: .85rem; }
+  .ble-btn.connected { background-color: #16a34a; }
+  .ble-status { font-size: .8rem; font-family: monospace; color: var(--muted); }
+  .screen-header { text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 12px; color: #fff; }
+  .tabs-container { display: flex; justify-content: space-between; gap: 4px; margin-bottom: 14px; }
+  .tab-box {
+    flex: 1; background-color: #111827; border-radius: 4px; text-align: center;
+    padding: 6px 2px; font-size: .78rem; font-weight: bold; color: var(--text-color);
+    border: 2px solid transparent; cursor: pointer; transition: border-color .15s;
+  }
+  .visualizer-area { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 16px; }
+  .meter-bar { width: 12px; height: 140px; background-color: var(--panel-bg); border: 2px solid var(--border-color); border-radius: 4px; position: relative; overflow: hidden; }
+  .meter-fill { position: absolute; bottom: 0; width: 100%; height: 50%; transition: height .1s; }
+  .meter-label { position: absolute; top: -16px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--muted); }
+  canvas { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 6px; flex-grow: 1; }
+  .sliders-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  .slider-group { margin-bottom: 12px; }
+  .slider-group:last-child { margin-bottom: 0; }
+  .slider-label { display: flex; justify-content: space-between; font-size: .8rem; margin-bottom: 4px; }
+  .slider-label .val-num { font-family: monospace; font-size: .9rem; font-weight: bold; }
+  input[type=range] { width: 100%; height: 6px; background: #1e293b; border-radius: 3px; outline: none; -webkit-appearance: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer; }
+  select { background: #1e293b; border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 8px; font-size: .85rem; width: 100%; }
+  .m5-buttons { display: flex; justify-content: space-between; gap: 8px; }
+  .m5-btn { flex: 1; background-color: #1e293b; border: 1px solid #334155; padding: 8px; border-radius: 6px; color: #dde6f0; font-weight: bold; font-size: .8rem; cursor: pointer; }
+  .m5-btn.active { border-color: #5b8cff; color: #5b8cff; }
+  .m5-btn.green { color: #22c55e; }
+  .presets-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .presets-panel h3 { margin: 0 0 8px; font-size: .8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .preset-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-color); font-size: .85rem; }
+  .preset-item .pname { flex: 1; }
+  .preset-item button { background: transparent; border: 1px solid #5b8cff; color: #5b8cff; border-radius: 6px; padding: 4px 8px; font-size: .75rem; cursor: pointer; margin-left: 4px; }
+  .preset-item button.danger { border-color: #ff5b6a; color: #ff5b6a; }
+  .preset-row { display: flex; gap: 8px; margin-top: 10px; }
+  .preset-row input { flex: 1; background: #1e293b; border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 8px; font-size: .85rem; }
+  .preset-row button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; }
+  .preset-row button.danger { background: #7f1d1d; }
+  .cpp-logger { width: 100%; max-width: 400px; background: #000; font-family: 'Courier New', monospace; font-size: .75rem; color: #38bdf8; padding: 12px; border-radius: 8px; margin-top: 16px; border: 1px solid #1e293b; box-sizing: border-box; max-height: 250px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<div class="phone-container">
+  <div class="ble-panel">
+    <span class="ble-status" id="ble-text">OSSM: Disconnected</span>
+    <button class="ble-btn" id="ble-button">Connect</button>
+  </div>
+
+  <div class="screen-header" id="active-title">Advanced Penetration v2</div>
+
+  <div class="tabs-container" id="tabs-wrapper"></div>
+
+  <div class="visualizer-area">
+    <div class="meter-bar"><div class="meter-fill" id="left-meter" style="background-color: var(--color-top);"><span class="meter-label">Top</span></div></div>
+    <canvas id="graphCanvas" width="280" height="140"></canvas>
+    <div class="meter-bar"><div class="meter-fill" id="right-meter" style="background-color: var(--color-bottom);"><span class="meter-label">Bot</span></div></div>
+  </div>
+
+  <div class="sliders-panel" id="sliders-wrapper"></div>
+
+  <div class="m5-buttons">
+    <button class="m5-btn active" id="btnMain">Main</button>
+    <button class="m5-btn green" id="btnStart">Start</button>
+    <button class="m5-btn" id="btnMods">Modifiers</button>
+  </div>
+
+  <div class="presets-panel">
+    <h3>Presets</h3>
+    <div id="presetList"></div>
+    <div class="preset-row">
+      <input type="text" id="presetName" placeholder="New preset name" />
+      <button id="btnSavePreset">Save</button>
+      <button id="btnFactoryReset" class="danger">Reset</button>
+    </div>
+  </div>
+</div>
+
+<div class="cpp-logger">
+  <strong style="color:#fff;">OSSM Live Dashboard Monitor:</strong>
+  <div id="log" style="margin-top:6px;">Open this in Chrome or Edge to control the OSSM over Bluetooth.</div>
+</div>
+
+<script>
+"use strict";
+
+const SERVICE_UUID   = "4f53534d-0000-0000-0000-000000000000";
+const CONTROL_UUID   = "4f53534d-6164-7661-6e63-6564636f6e74";
+const CONFIG_UUID    = "4f53534d-6164-7661-6e63-6564636f6e66";
+const STATUS_UUID    = "4f53534d-6164-7661-6e63-656473746174";
+const PRESETS_UUID   = "4f53534d-6164-7661-6e63-656470727374";
+
+let device = null, server = null;
+let ctlChar = null, cfgChar = null, stsChar = null, prsChar = null;
+let presetNames = [];
+let connected = false;
+let running = false;
+let lastNonZeroSpeed = 50;
+
+const BASE_NAMES = ["Top", "Bottom", "Rise", "Fall", "CurveIn", "CurveOut"];
+const BASE_COLORS = ["#f86060", "#fcaf00", "#ffe000", "#00e007", "#001fff", "#a87dff"];
+const MODIFIER_NAMES = ["Amount", "StepA", "StepB", "StepC", "StepD", "Phase"];
+const MOD_COLORS = ["#38bdf8", "#34d399", "#fbbf24", "#f87171", "#c084fc", "#94a3b8"];
+const SPEED_KEY = "SP";
+
+// Firmware names -> canonical names (used when parsing CONFIG/STATUS strings).
+const BASE_ALIAS = {
+  "Max Depth": "Max", "Min": "Bottom",
+  "In Speed": "Rise", "Out Speed": "Fall",
+  "In Accel": "CurveIn", "Out Accel": "CurveOut",
+  "Top": "Top", "Bottom": "Bottom", "Rise": "Rise",
+  "Fall": "Fall", "CurveIn": "CurveIn", "CurveOut": "CurveOut"
+};
+const MODIFIER_ALIAS = {
+  "Amplitude": "Amount",
+  "Steps to Min": "StepA", "Steps at Min": "StepB",
+  "Steps to Max": "StepC", "Steps at Max": "StepD",
+  "Offset": "Phase",
+  "Amount": "Amount", "StepA": "StepA", "StepB": "StepB",
+  "StepC": "StepC", "StepD": "StepD", "Phase": "Phase"
+};
+
+// Combined-key dictionary: settings["Top"], settings["TopAmount"], settings["RiseStepA"], settings["SP"], ...
+// Each entry: { min, max, value }.
+let settings = {};
+
+const $ = (id) => document.getElementById(id);
+const log = (msg) => { $("log").textContent = msg || ""; };
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const decode = (dv) => new TextDecoder().decode(dv);
+const encode = (s) => new TextEncoder().encode(s);
+
+const speedIndex = () => 6; // firmware: 6 base controls + speed at index 6
+function baseKey(i) { return i === speedIndex() ? SPEED_KEY : BASE_NAMES[i]; }
+function modifierKey(bi, mi) { return BASE_NAMES[bi] + MODIFIER_NAMES[mi]; }
+function getSetting(key) { return settings[key] || { min: 0, max: 100, value: 0 }; }
+function settingValue(key, fallback = 0) {
+  const s = settings[key];
+  return s ? s.value : fallback;
+}
+
+const canvas = $("graphCanvas");
+const ctx = canvas.getContext("2d");
+let curvePoints = [];
+let phase = 0;
+
+// ---------- BLE ----------
+async function readStr(ch) { return decode(await ch.readValue()); }
+async function writeControl(s) {
+  try { await ctlChar.writeValueWithoutResponse(encode(s)); }
+  catch { await ctlChar.writeValueWithResponse(encode(s)); }
+}
+async function writePreset(s) { await prsChar.writeValueWithResponse(encode(s)); }
+
+function parseConfig(raw) {
+  const parsed = {};
+  for (const entry of raw.split(",")) {
+    const m = entry.match(/^([^(]+)\((\d+)\/(\d+)\)(.*)$/);
+    if (!m) continue;
+    const rawName = m[1].trim();
+    const min = parseInt(m[2], 10);
+    const max = parseInt(m[3], 10);
+
+    let canonical;
+    if (rawName === "Speed" || rawName === "SP") canonical = SPEED_KEY;
+    else canonical = BASE_ALIAS[rawName];
+    if (!canonical) continue;
+
+    parsed[canonical] = { min, max, value: min };
+    if (canonical === SPEED_KEY) continue; // speed has no modifiers
+
+    const re = /:([^(]+)\((\d+)\/(\d+)\)/g;
+    let mm;
+    while ((mm = re.exec(m[4])) !== null) {
+      const modCanonical = MODIFIER_ALIAS[mm[1].trim()];
+      if (!modCanonical) continue;
+      const modMin = parseInt(mm[2], 10);
+      const modMax = parseInt(mm[3], 10);
+      parsed[canonical + modCanonical] = { min: modMin, max: modMax, value: modMin };
+    }
+  }
+  settings = parsed;
+  if (!settings[SPEED_KEY]) settings[SPEED_KEY] = { min: 0, max: 100, value: 0 };
+}
+
+function parseStatus(raw) {
+  const entries = raw.split(",");
+  entries.forEach((entry, i) => {
+    const parts = entry.split(":");
+    if (i === speedIndex()) {
+      const v = parseFloat(parts[0]);
+      if (!isNaN(v)) {
+        const s = getSetting(SPEED_KEY);
+        s.value = clamp(v, s.min, s.max);
+        settings[SPEED_KEY] = s;
+      }
+      return;
+    }
+    if (i >= BASE_NAMES.length) return;
+
+    const key = BASE_NAMES[i];
+    const base = parseFloat(parts[0]);
+    if (!isNaN(base)) {
+      const s = getSetting(key);
+      s.value = clamp(base, s.min, s.max);
+      settings[key] = s;
+    }
+    for (let mi = 0; mi < MODIFIER_NAMES.length; mi++) {
+      if (mi + 1 >= parts.length) break;
+      const v = parseFloat(parts[mi + 1]);
+      if (isNaN(v)) continue;
+      const mk = key + MODIFIER_NAMES[mi];
+      const s = getSetting(mk);
+      s.value = clamp(v, s.min, s.max);
+      settings[mk] = s;
+    }
+  });
+}
+
+const speed = () => Math.round(settingValue(SPEED_KEY));
+
+async function connect() {
+  if (!navigator.bluetooth) { log("Web Bluetooth not available. Use Chrome/Edge over HTTPS or localhost."); return; }
+  log("Requesting device…");
+  try {
+    device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID] });
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    log("Connecting to " + (device.name || "OSSM") + "…");
+    server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE_UUID);
+    ctlChar = await svc.getCharacteristic(CONTROL_UUID);
+    cfgChar = await svc.getCharacteristic(CONFIG_UUID);
+    stsChar = await svc.getCharacteristic(STATUS_UUID);
+    prsChar = await svc.getCharacteristic(PRESETS_UUID);
+
+    if (stsChar.properties.notify) {
+      stsChar.addEventListener("characteristicvaluechanged", onStatus);
+      await stsChar.startNotifications();
+    }
+    log("Reading configuration…");
+    const cfg = await readStr(cfgChar);
+    parseConfig(cfg);
+    await refreshStatus();
+    await refreshPresets();
+    connected = true;
+    running = speed() > 0;
+    lastNonZeroSpeed = speed() > 0 ? speed() : 50;
+    $("ble-text").textContent = "OSSM: Connected 🟢";
+    $("ble-button").textContent = "Connected";
+    $("ble-button").classList.add("connected");
+    buildInterface();
+    log("");
+  } catch (e) {
+    $("ble-text").textContent = "OSSM: Error 🔴";
+    log("Bluetooth error: " + e.message);
+  }
+}
+
+function onDisconnected() {
+  connected = false; running = false;
+  $("ble-text").textContent = "OSSM: Disconnected";
+  $("ble-button").textContent = "Connect";
+  $("ble-button").classList.remove("connected");
+  log("Disconnected from OSSM.");
+}
+
+function onStatus(ev) { parseStatus(decode(ev.target.value)); buildInterface(); }
+async function refreshStatus() { parseStatus(await readStr(stsChar)); }
+async function refreshPresets() {
+  presetNames = (await readStr(prsChar)).split(",").map(s => s.trim()).filter(Boolean);
+  renderPresets();
+}
+
+// ---------- Commands ----------
+function setBase(i, v) {
+  const key = baseKey(i);
+  const s = getSetting(key);
+  v = clamp(Math.round(v), s.min, s.max);
+  s.value = v;
+  settings[key] = s;
+  writeControl(`${i}:${v},`).catch(e => log("Write failed: " + e));
+  buildInterface();
+}
+function setSpeed(v) { setBase(speedIndex(), v); if (v > 0) lastNonZeroSpeed = v; }
+function setModifier(bi, mi, v) {
+  const key = modifierKey(bi, mi);
+  const s = getSetting(key);
+  v = clamp(Math.round(v), s.min, s.max);
+  s.value = v;
+  settings[key] = s;
+  writeControl(`${bi}:${mi}:${v},`).catch(e => log("Write failed: " + e));
+  buildInterface();
+}
+function toggleStart() {
+  if (speed() > 0) setSpeed(0);
+  else setSpeed(lastNonZeroSpeed > 0 ? lastNonZeroSpeed : 50);
+}
+
+// ---------- UI ----------
+let viewMode = "main";          // "main" | "mod"
+let activeBaseIndex = 0;        // 0..5 (main base controls)
+let activeModifierIndex = 0;    // 0..5 (modifier type)
+let showAllModifiers = false;   // "Show all": draw every modifier line vs. the active one only
+
+// Opens the modifier view for a specific base control without touching the
+// main base selection — keeps the two navigation states isolated and gives us
+// a single hook to bind future per-row "MOD" buttons to.
+function openModifier(baseIndex) {
+  activeBaseIndex = clamp(baseIndex, 0, BASE_NAMES.length - 1);
+  activeModifierIndex = 0;
+  viewMode = "mod";
+  buildInterface();
+}
+function closeModifier() {
+  viewMode = "main";
+  buildInterface();
+}
+
+function buildInterface() {
+  $("active-title").textContent = viewMode === "main" ? "Advanced Penetration v2" : "Modifiers";
+  $("btnMain").classList.toggle("active", viewMode === "main");
+  $("btnMods").classList.toggle("active", viewMode === "mod");
+  buildTabs();
+  buildSliders();
+  renderPresets();
+  drawGraph();
+}
+
+function buildTabs() {
+  const wrap = $("tabs-wrapper");
+  wrap.innerHTML = "";
+  if (viewMode === "main") {
+    for (let i = 0; i < BASE_NAMES.length; i++) {
+      const d = document.createElement("div");
+      d.className = "tab-box";
+      d.style.borderColor = i === activeBaseIndex ? BASE_COLORS[i] : "transparent";
+      d.textContent = Math.round(settingValue(BASE_NAMES[i]));
+      d.title = BASE_NAMES[i];
+      d.onclick = () => { activeBaseIndex = i; buildInterface(); };
+      wrap.appendChild(d);
+    }
+  } else {
+    const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+    MODIFIER_NAMES.forEach((name, mi) => {
+      const d = document.createElement("div");
+      d.className = "tab-box";
+      d.style.borderColor = mi === activeModifierIndex ? MOD_COLORS[mi % MOD_COLORS.length] : "transparent";
+      d.textContent = Math.round(settingValue(BASE_NAMES[bi] + name));
+      d.title = name;
+      d.onclick = () => { activeModifierIndex = mi; buildInterface(); };
+      wrap.appendChild(d);
+    });
+  }
+}
+
+function buildSliders() {
+  const wrap = $("sliders-wrapper");
+  wrap.innerHTML = "";
+  if (viewMode === "main") {
+    const spd = getSetting(SPEED_KEY);
+    wrap.appendChild(sliderEl("Speed", spd.min, spd.max, Math.round(spd.value), "#ffffff", (v) => setSpeed(v)));
+    for (let i = 0; i < BASE_NAMES.length; i++) {
+      const s = getSetting(BASE_NAMES[i]);
+      wrap.appendChild(sliderEl(BASE_NAMES[i], s.min, s.max, Math.round(s.value), BASE_COLORS[i], (v) => setBase(i, v)));
+    }
+  } else {
+    const showAllWrap = document.createElement("div");
+    showAllWrap.className = "slider-group";
+    showAllWrap.innerHTML = `<label class="slider-label" style="cursor:pointer;">
+      <span>Show all modifier lines</span>
+      <input type="checkbox" id="showAllMods" ${showAllModifiers ? "checked" : ""}>
+    </label>`;
+    wrap.appendChild(showAllWrap);
+    showAllWrap.querySelector("#showAllMods").onchange = (e) => {
+      showAllModifiers = e.target.checked;
+      drawGraph();
+    };
+
+    const selGroup = document.createElement("div");
+    selGroup.className = "slider-group";
+    selGroup.innerHTML = `<div class="slider-label"><span>Base control</span></div>`;
+    const sel = document.createElement("select");
+    for (let i = 0; i < BASE_NAMES.length; i++) {
+      const o = document.createElement("option");
+      o.value = i; o.textContent = BASE_NAMES[i];
+      if (i === activeBaseIndex) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.onchange = () => { activeBaseIndex = parseInt(sel.value, 10); activeModifierIndex = 0; buildInterface(); };
+    selGroup.appendChild(sel);
+    wrap.appendChild(selGroup);
+
+    const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+    MODIFIER_NAMES.forEach((name, mi) => {
+      const s = getSetting(BASE_NAMES[bi] + name);
+      wrap.appendChild(sliderEl(name, s.min, s.max, Math.round(s.value), MOD_COLORS[mi % MOD_COLORS.length], (v) => setModifier(bi, mi, v)));
+    });
+  }
+}
+
+function sliderEl(name, min, max, value, color, onSet) {
+  const g = document.createElement("div");
+  g.className = "slider-group";
+  g.innerHTML = `
+    <div class="slider-label"><span>${name}</span><span class="val-num" style="color:${color}">${value}</span></div>
+    <input type="range" min="${min}" max="${max}" value="${value}" step="1">`;
+  const input = g.querySelector("input");
+  const valNum = g.querySelector(".val-num");
+  input.addEventListener("input", () => { valNum.textContent = input.value; });
+  input.addEventListener("change", () => onSet(parseInt(input.value, 10)));
+  return g;
+}
+
+function renderPresets() {
+  const list = $("presetList");
+  list.innerHTML = "";
+  presetNames.forEach(name => {
+    const item = document.createElement("div");
+    item.className = "preset-item";
+    item.innerHTML = `<div class="pname">${name}</div>`;
+    const load = document.createElement("button");
+    load.textContent = "Load";
+    load.onclick = async () => {
+      await writePreset(":" + name);
+      setTimeout(refreshStatus, 800);
+    };
+    const del = document.createElement("button");
+    del.textContent = "Delete";
+    del.className = "danger";
+    del.onclick = async () => {
+      await writePreset("<" + name);
+      setTimeout(refreshPresets, 800);
+    };
+    item.appendChild(load);
+    item.appendChild(del);
+    list.appendChild(item);
+  });
+}
+
+// ---------- Graph ----------
+function bezierMath(v0, v1, v2, v3, t) {
+  return Math.pow(1 - t, 3) * v0 + 3 * Math.pow(1 - t, 2) * t * v1 + 3 * (1 - t) * Math.pow(t, 2) * v2 + Math.pow(t, 3) * v3;
+}
+
+function baseVal(i) { return clamp(settingValue(BASE_NAMES[i]), 0, 100); }
+
+// Main screen: stroke range (top/bottom lines) + sweeping motion curve.
+function drawMainGraph() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const topM = 12, botM = 17, pH = h - topM - botM;
+  const top = baseVal(0), bottom = baseVal(1), rise = baseVal(2), fall = baseVal(3);
+  const yTop = topM + (1 - top / 100) * pH;
+  const yBot = topM + (1 - bottom / 100) * pH;
+
+  ctx.strokeStyle = "#f86060"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(2, yTop); ctx.lineTo(w - 2, yTop); ctx.stroke();
+  ctx.strokeStyle = "#fcaf00";
+  ctx.beginPath(); ctx.moveTo(2, yBot); ctx.lineTo(w - 2, yBot); ctx.stroke();
+
+  const rr = Math.max(1, rise), ff = Math.max(1, fall);
+  const splitX = (1 - (rr / ff) / ((rr / ff) + 1)) * w;
+
+  curvePoints = [];
+  ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for (let x = 0; x <= w; x++) {
+    let y;
+    if (x <= splitX) {
+      const t = splitX <= 0 ? 0 : x / splitX;
+      y = bezierMath(yBot, yBot, yTop, yTop, t);
+    } else {
+      const t = (w - splitX) <= 0 ? 0 : (x - splitX) / (w - splitX);
+      y = bezierMath(yTop, yTop, yBot, yBot, t);
+    }
+    if (x === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    curvePoints.push({ x, y });
+  }
+  ctx.stroke();
+
+  if (curvePoints.length) {
+    const p = curvePoints[Math.floor(phase * (curvePoints.length - 1))];
+    ctx.fillStyle = "#ffc857";
+    ctx.beginPath(); ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2); ctx.fill();
+  }
+
+  $("left-meter").style.height = top + "%";
+  $("right-meter").style.height = bottom + "%";
+}
+
+// Modifier screen: one horizontal line per modifier type (value mapped to
+// height). "Show all" draws every modifier line; otherwise only the active one.
+function drawModGraph() {
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+  const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+  const n = MODIFIER_NAMES.length;
+  const pad = 14;
+
+  for (let mi = 0; mi < n; mi++) {
+    const isActive = mi === activeModifierIndex;
+    if (!showAllModifiers && !isActive) continue;
+
+    const s = getSetting(BASE_NAMES[bi] + MODIFIER_NAMES[mi]);
+    const pct = (s.value - s.min) / Math.max(1, s.max - s.min);
+    const y = h - pad - pct * (h - 2 * pad);
+    const color = MOD_COLORS[mi % MOD_COLORS.length];
+
+    ctx.globalAlpha = isActive ? 1 : 0.55;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = isActive ? 3 : 1.5;
+    ctx.beginPath();
+    ctx.moveTo(pad, y);
+    ctx.lineTo(w - pad, y);
+    ctx.stroke();
+
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(pad, y, isActive ? 5 : 3.5, 0, Math.PI * 2);
+    ctx.fill();
+    if (isActive) {
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(pad, y, 7, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    ctx.font = "10px monospace";
+    ctx.textAlign = "right";
+    ctx.fillStyle = "#dde6f0";
+    ctx.fillText(String(Math.round(s.value)), w - pad - 6, y - 5);
+    if (showAllModifiers) {
+      ctx.textAlign = "left";
+      ctx.fillStyle = color;
+      ctx.fillText(MODIFIER_NAMES[mi], pad + 10, y - 5);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // meters show top/bottom (base stroke still relevant)
+  $("left-meter").style.height = baseVal(0) + "%";
+  $("right-meter").style.height = baseVal(1) + "%";
+}
+
+function drawGraph() {
+  if (viewMode === "mod") drawModGraph();
+  else drawMainGraph();
+}
+
+function animate() {
+  const sp = speed();
+  if (connected && running && sp > 0 && viewMode === "main") {
+    phase += sp * 0.00035;
+    if (phase > 1) phase -= 1;
+    drawGraph();
+  }
+  requestAnimationFrame(animate);
+}
+
+// ---------- Events ----------
+$("ble-button").onclick = connect;
+$("btnMain").onclick = () => closeModifier();
+$("btnMods").onclick = () => openModifier(activeBaseIndex);
+$("btnStart").onclick = toggleStart;
+$("btnSavePreset").onclick = () => {
+  const n = $("presetName").value.trim();
+  if (!n) return;
+  presetNames.push(n);
+  $("presetName").value = "";
+  writePreset(">" + n).catch(() => {});
+  renderPresets();
+};
+$("btnFactoryReset").onclick = () => {
+  presetNames = [];
+  writePreset("^").catch(() => {});
+  renderPresets();
+};
+
+buildInterface();
+requestAnimationFrame(animate);
+</script>
+</body>
+</html>
