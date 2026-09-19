@@ -1,0 +1,2228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0a12" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>OSSM Remote</title>
+<style>
+  :root {
+    --bg-color: #0a0a12;
+    --panel-bg: #0f172a;
+    --border-color: #334155;
+    --text-color: #dde6f0;
+    --muted: #94a3b8;
+    --color-top: #ff0c00;
+    --color-bottom: #ff8100;
+    --color-rise: #ffff00;
+    --color-fall: #00ff00;
+    --color-curvein: #0000ff;
+    --color-curveout: #ac8dee;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0; padding: 20px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .phone-container {
+    width: 100%; max-width: 400px;
+    background-color: #05050a;
+    border: 4px solid #1e293b; border-radius: 24px;
+    padding: 16px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.7);
+    display: flex; flex-direction: column;
+  }
+  .col { display: contents; }
+  .col-toggle { display: none; }
+  /* Portrait: restore the original single-column order */
+  #ble-panel { order: 1; }
+  .header-row { order: 2; }
+  #pad-status { order: 3; }
+  #tabs-wrapper { order: 4; }
+  .visualizer-area { order: 5; }
+  #speed-control { order: 6; }
+  #sliders-wrapper { order: 7; }
+  #reset-row { order: 8; }
+  #mode-row { order: 9; }
+  #bind-panel { order: 10; }
+  #presets-panel { order: 11; }
+  .start-stop-row { order: 12; }
+  #pad-debug { order: 13; }
+  .ble-panel {
+    display: flex; justify-content: space-between; align-items: center;
+    background-color: #111827; padding: 10px; border-radius: 12px;
+    margin-bottom: 14px; border: 1px solid var(--border-color);
+  }
+  .ble-panel.small { padding: 6px 10px; margin-bottom: 10px; }
+  .ble-btn { background-color: #2563eb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: .85rem; }
+  .ble-btn.small { padding: 4px 10px; font-size: .75rem; }
+  .ble-btn.danger { background-color: #dc2626; }
+  .ble-status { font-size: .8rem; font-family: monospace; color: var(--muted); }
+  .ble-status.small { font-size: .7rem; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .screen-header { flex: 1; min-width: 0; text-align: left; font-size: 1.05rem; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conn-dot { width: 10px; height: 10px; border-radius: 50%; background-color: #22c55e; flex: 0 0 auto; box-shadow: 0 0 6px rgba(34, 197, 94, 0.8); }
+  .pad-status { font-size: .75rem; color: var(--muted); text-align: center; margin-bottom: 12px; font-family: monospace; }
+  .pad-status.active { color: #22c55e; }
+  .focus-status { display: flex; align-items: center; gap: 6px; font-size: .7rem; color: var(--muted); font-family: monospace; flex: 0 1 auto; white-space: nowrap; overflow: hidden; min-width: 0; }
+  .focus-status .fs-dot { width: 7px; height: 7px; border-radius: 50%; background: #64748b; flex: 0 0 auto; }
+  .focus-status .fs-dot.on { background: #22c55e; }
+  .focus-status .fs-sep { color: #475569; }
+  .bind-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .bind-panel summary { list-style: none; cursor: pointer; user-select: none; font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .bind-panel summary::-webkit-details-marker { display: none; }
+  .bind-panel summary::after { content: "▾"; font-size: .7rem; }
+  .bind-panel[open] summary { margin-bottom: 8px; }
+  .bind-panel[open] summary::after { content: "▴"; }
+  .bind-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: .8rem; border-bottom: 1px solid var(--border-color); }
+  .bind-row:last-child { border-bottom: none; }
+  .bind-label { flex: 1; }
+  .bind-val { font-family: monospace; color: #38bdf8; min-width: 72px; }
+  .bind-view-toggle { display: flex; background: #1e293b; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; margin-bottom: 8px; }
+  .bind-view-btn { flex: 1; background: transparent; color: var(--muted); border: none; padding: 6px 8px; font-size: .72rem; font-weight: bold; cursor: pointer; }
+  .bind-view-btn.active { background: #2563eb; color: #fff; }
+  .bind-btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 4px 10px; font-size: .72rem; font-weight: bold; cursor: pointer; }
+  .bind-clear { background: none; border: 1px solid var(--border-color); color: var(--muted); border-radius: 6px; padding: 2px 7px; font-size: .72rem; cursor: pointer; }
+  .bind-clear:hover { color: #fff; border-color: #fff; }
+  .bind-conflict .bind-val { color: #f87171; }
+  .bind-conflict .bind-label { color: #f87171; }
+  .bind-status { font-size: .72rem; color: #fbbf24; margin: 8px 0 4px; min-height: 1em; }
+  .bind-reset { background: none; border: 1px solid #ff5b6a; color: #ff5b6a; border-radius: 6px; padding: 4px 10px; font-size: .72rem; cursor: pointer; margin-top: 6px; }
+  .bind-hint { font-size: .7rem; color: var(--muted); margin-bottom: 8px; line-height: 1.35; }
+  .bind-actions { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+  .bind-wizard { background: #7c3aed; color: #fff; border: none; border-radius: 6px; padding: 5px 10px; font-size: .72rem; font-weight: bold; cursor: pointer; }
+  .wizard-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.72); display: flex; align-items: center; justify-content: center; z-index: 50; padding: 16px; }
+  .wizard-box { background: #111827; border: 1px solid var(--border-color); border-radius: 14px; padding: 18px; max-width: 360px; width: 100%; box-shadow: 0 20px 50px rgba(0,0,0,.8); }
+  .wizard-title { font-size: .8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+  .wizard-progress { font-size: .72rem; color: #38bdf8; font-family: monospace; margin-bottom: 10px; }
+  .wizard-label { font-size: 1.15rem; font-weight: bold; color: #fff; margin-bottom: 6px; }
+  .wizard-prompt { font-size: .82rem; color: #fbbf24; margin-bottom: 8px; }
+  .wizard-help { font-size: .75rem; color: var(--muted); line-height: 1.4; margin-bottom: 14px; }
+  .wizard-note { font-size: .75rem; color: #f87171; margin-bottom: 12px; line-height: 1.35; }
+  .wizard-seg { display: flex; background: #1e293b; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; margin-bottom: 10px; }
+  .wizard-seg-btn { flex: 1; background: transparent; color: var(--muted); border: none; padding: 7px 10px; font-size: .75rem; font-weight: bold; cursor: pointer; }
+  .wizard-seg-btn.active { background: #2563eb; color: #fff; }
+  .wizard-row { display: flex; gap: 8px; justify-content: flex-end; }
+  .wizard-btn { border: 1px solid var(--border-color); background: #1f2937; color: #fff; border-radius: 6px; padding: 6px 12px; font-size: .75rem; cursor: pointer; }
+  .wizard-btn.ghost { background: transparent; }
+  .wizard-btn.danger { border-color: #dc2626; color: #dc2626; background: transparent; }
+  .pad-debug { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 10px; margin-top: 12px; }
+  .pad-debug summary { list-style: none; cursor: pointer; user-select: none; font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .pad-debug summary::-webkit-details-marker { display: none; }
+  .pad-debug pre { font-family: 'Courier New', monospace; font-size: .7rem; color: #38bdf8; white-space: pre-wrap; margin: 8px 0 0; }
+  .tabs-container { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .tab-row { display: flex; justify-content: space-between; gap: 4px; }
+  .tab-box {
+    flex: 1; background-color: #3a3a3a; border-radius: 4px; text-align: center;
+    padding: 6px 2px; font-size: .78rem; font-weight: bold; color: var(--text-color);
+    border: 2px solid transparent; cursor: pointer;
+  }
+  .tab-value { font-size: .85rem; font-weight: bold; line-height: 1.1; }
+  .tab-name { font-size: .55rem; font-weight: normal; line-height: 1.1; margin-top: 2px; }
+  .visualizer-area { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 16px; }
+  .meter-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; }
+  .meter-bar { width: 12px; height: 132px; background-color: var(--panel-bg); border: 2px solid var(--border-color); border-radius: 4px; position: relative; overflow: hidden; }
+  .meter-fill { position: absolute; bottom: 0; width: 100%; height: 50%; transition: height .1s; }
+  .meter-label { font-size: 10px; color: var(--muted); text-align: center; }
+  canvas { display: block; background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 6px; width: 280px; max-width: 100%; height: auto; flex: 0 1 auto; min-width: 0; }
+  .sliders-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
+  .focused-sliders { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; }
+  .slider-group { margin-bottom: 12px; }
+  .slider-group:last-child { margin-bottom: 0; }
+  .slider-label { display: flex; justify-content: space-between; font-size: .8rem; margin-bottom: 4px; }
+  .slider-label .val-num { font-family: monospace; font-size: .9rem; font-weight: bold; }
+  .inline-toggle { display: flex; align-items: center; justify-content: space-between; font-size: .8rem; color: var(--text-color); cursor: pointer; }
+  .switch { position: relative; display: inline-block; width: 36px; height: 20px; flex: 0 0 auto; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #4b5563; border-radius: 20px; transition: .2s; }
+  .switch .slider:before { content: ""; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .slider { background-color: #22c55e; }
+  .switch input:checked + .slider:before { transform: translateX(16px); }
+  input[type=range] { width: 100%; height: 6px; background: #1e293b; border-radius: 3px; outline: none; -webkit-appearance: none; appearance: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer; }
+  .slider-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .slider-row .slider-name { flex: 1 1 auto; min-width: 0; font-size: .8rem; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slider-row .val-num { flex: 0 0 auto; min-width: 40px; text-align: center; line-height: 26px; padding: 0 7px; border-radius: 4px; font-family: monospace; font-size: .85rem; font-weight: bold; }
+  .val-input { width: 2.5em; min-width: 0; background: transparent; border: none; outline: none; color: inherit; font: inherit; text-align: inherit; padding: 0; margin: 0; height: 24px; vertical-align: middle; }
+  .val-input::-webkit-outer-spin-button, .val-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .val-input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  .slider-row input[type=range] { flex: 1 1 100%; order: 10; }
+  .step-btn {
+    flex: 0 0 auto; width: 26px; height: 26px;
+    background: #1e293b; border: 1px solid var(--border-color); border-radius: 6px;
+    color: #fff; font-size: 1.05rem; font-weight: bold; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; cursor: pointer; user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  .step-btn:active { background: #334155; }
+  select { background: #1e293b; border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 8px; font-size: .85rem; width: 100%; }
+  .pattern-desc { font-size: .72rem; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+  .start-stop-row { position: sticky; bottom: 0; z-index: 10; margin-top: 8px; padding-top: 8px; background: #05050a; }
+  .speed-line { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .speed-label { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+  .speed-val { font-family: monospace; font-size: .9rem; font-weight: bold; color: #fff; min-width: 30px; text-align: right; }
+  .speed-line input[type=range] { flex: 1; }
+  #btnStart { width: 100%; background-color: #16a34a; border: none; border-radius: 10px; padding: 14px; color: #fff; font-weight: bold; font-size: 1rem; cursor: pointer; }
+  #btnStart.stop { background-color: #dc2626; }
+  .reset-row { text-align: center; margin-bottom: 4px; }
+  #btnResetValues { background: none; border: none; color: #ff5b6a; font-size: .78rem; cursor: pointer; text-decoration: underline; padding: 4px 8px; }
+  .mode-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 10px; }
+  .mode-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .mode-seg { display: flex; background: #1e293b; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
+  .mode-btn { background: transparent; color: var(--muted); border: none; padding: 5px 12px; font-size: .78rem; font-weight: bold; cursor: pointer; }
+  .mode-btn.active { background: #2563eb; color: #fff; }
+  .presets-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; margin-top: 12px; }
+  .presets-panel summary {
+    list-style: none; cursor: pointer; user-select: none;
+    font-size: .8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .presets-panel .summary-left { display: flex; align-items: baseline; min-width: 0; }
+  .presets-panel .summary-value { text-transform: none; letter-spacing: 0; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .presets-panel .summary-value:empty { display: none; }
+  .presets-panel .summary-value:not(:empty)::before { content: ":"; margin-right: 5px; }
+  .presets-panel summary::-webkit-details-marker { display: none; }
+  .presets-panel summary::after { content: "▾"; font-size: .7rem; }
+  .presets-panel[open] summary { margin-bottom: 8px; }
+  .presets-panel[open] summary::after { content: "▴"; }
+  #presetList { display: flex; gap: 8px; align-items: center; }
+  #presetList select { flex: 1; width: auto; min-width: 0; }
+  #presetList button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+  #presetList button.danger { background: #7f1d1d; }
+  .preset-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--border-color); font-size: .85rem; }
+  .preset-item .pname { flex: 1; }
+  .preset-item button { background: transparent; border: 1px solid #5b8cff; color: #5b8cff; border-radius: 6px; padding: 4px 8px; font-size: .75rem; cursor: pointer; margin-left: 4px; }
+  .preset-item button.danger { border-color: #ff5b6a; color: #ff5b6a; }
+  .preset-row { display: flex; gap: 8px; margin-top: 10px; }
+  .preset-row input { flex: 1; background: #1e293b; border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 8px; font-size: .85rem; }
+  .preset-row button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
+  .preset-row button.danger { background: #7f1d1d; }
+  .cpp-logger { width: 100%; max-width: 400px; background: #000; font-family: 'Courier New', monospace; font-size: .75rem; color: #38bdf8; padding: 12px; border-radius: 8px; margin-top: 16px; border: 1px solid #1e293b; box-sizing: border-box; max-height: 250px; overflow-y: auto; }
+  @media (max-width: 480px) {
+    body { padding: 0; }
+    .phone-container {
+      max-width: none;
+      border: none;
+      border-radius: 0;
+      padding: 12px;
+      padding-top: max(12px, env(safe-area-inset-top));
+      padding-bottom: max(12px, env(safe-area-inset-bottom));
+      box-shadow: none;
+    }
+    .cpp-logger { max-height: 160px; }
+    .step-btn { width: 36px; height: 36px; }
+    .speed-line { flex-wrap: wrap; }
+    .speed-line .speed-label { order: 0; }
+    .speed-line .step-btn.minus { order: 1; margin-left: auto; }
+    .speed-line .speed-val { order: 2; }
+    .speed-line .step-btn.plus { order: 3; }
+    .speed-line input[type=range] { order: 4; flex: 1 1 100%; }
+    input[type=range] { height: 8px; }
+    input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; }
+    .start-stop-row { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  }
+  @media (orientation: landscape) and (max-height: 520px) {
+    body { padding: 4px; }
+    .phone-container {
+      max-width: 100%;
+      border-radius: 0;
+      border-width: 2px;
+      padding: 8px;
+      display: grid;
+      grid-template-columns: 250px 1fr 230px;
+      align-items: start;
+      gap: 8px;
+    }
+    .phone-container.hide-left  { grid-template-columns: 1fr 230px; }
+    .phone-container.hide-right { grid-template-columns: 250px 1fr; }
+    .phone-container.hide-left.hide-right { grid-template-columns: 1fr; }
+    .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+    .col-left  { max-height: calc(100vh - 20px); }
+    .col-right { max-height: calc(100vh - 20px); overflow-y: auto; }
+    .phone-container.hide-left  .col-left  { display: none; }
+    .phone-container.hide-right .col-right { display: none; }
+    .col > * { margin: 0; }
+    #col-left > *, #col-center > *, #col-right > * { order: 0; }
+    .col-toggle { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; flex: 0 0 auto; background: #1e293b; border: 1px solid var(--border-color); border-radius: 6px; color: #cbd5e1; font-size: .8rem; cursor: pointer; padding: 0; }
+    #sliders-wrapper { flex: 1 1 auto; overflow-y: auto; }
+    #sliders-wrapper > .slider-group:first-child:has(.switch) { position: sticky; top: 0; background: var(--panel-bg); z-index: 2; padding-bottom: 4px; }
+    .start-stop-row { position: static; padding-top: 0; margin-top: auto; }
+    .meter-bar { height: 105px; }
+    canvas { width: 250px; }
+    #btnStart { padding: 10px; font-size: .9rem; }
+    .wizard-box { max-height: 94vh; overflow-y: auto; }
+    .cpp-logger { display: none; }
+
+    /* Focused mode (both sidebars hidden): graph fills width, Start beside it */
+    .phone-container.hide-left.hide-right .col-center {
+      display: grid;
+      grid-template-columns: 1fr 78px;
+      grid-template-areas:
+        "header  header"
+        "visual  start"
+        "speed   speed"
+        "tabs    tabs"
+        "sliders sliders";
+      column-gap: 8px;
+      row-gap: 4px;
+      align-items: start;
+    }
+    .phone-container.hide-left.hide-right .header-row { grid-area: header; }
+    .phone-container.hide-left.hide-right .conn-dot { display: none !important; }
+    .phone-container.hide-left.hide-right .visualizer-area { grid-area: visual; }
+    .phone-container.hide-left.hide-right .start-stop-row { grid-area: start; align-self: stretch; margin: 0; width: auto; }
+    .phone-container.hide-left.hide-right .start-stop-row #btnStart { height: 100%; min-height: 88px; padding: 8px 6px; font-size: .85rem; }
+    .phone-container.hide-left.hide-right .speed-line { grid-area: speed; }
+    .phone-container.hide-left.hide-right .tabs-container { grid-area: tabs; }
+    .phone-container.hide-left.hide-right .focused-sliders { grid-area: sliders; }
+    .phone-container.hide-left.hide-right .meter-bar { height: 96px; }
+    .phone-container.hide-left.hide-right .tab-box { padding: 3px 2px; font-size: .7rem; }
+    .phone-container.hide-left.hide-right .tab-value { font-size: .75rem; }
+    .phone-container.hide-left.hide-right .tab-name { font-size: .48rem; margin-top: 1px; }
+    .phone-container.hide-left.hide-right .focused-sliders { padding: 8px 10px; }
+    .phone-container.hide-left.hide-right .focused-sliders .slider-group { margin-bottom: 6px; }
+    .phone-container.hide-left.hide-right .focused-sliders .slider-row { flex-wrap: nowrap; }
+    .phone-container.hide-left.hide-right .focused-sliders .slider-name { flex: 0 0 auto; }
+    .phone-container.hide-left.hide-right .focused-sliders .slider-row input[type=range] { flex: 1 1 0; order: 0; }
+  }
+</style>
+</head>
+<body>
+<div class="phone-container">
+  <div class="col col-left" id="col-left">
+    <div class="sliders-panel" id="sliders-wrapper"></div>
+    <div class="start-stop-row">
+      <button id="btnStart">Start</button>
+    </div>
+    <div class="reset-row" id="reset-row">
+      <button id="btnResetValues">Reset all values</button>
+    </div>
+  </div>
+
+  <div class="col col-center" id="col-center">
+    <div class="header-row">
+      <button class="col-toggle" id="toggleColLeft" title="Show / hide sliders column">◀</button>
+      <span class="conn-dot" id="conn-dot" style="display:none;"></span>
+      <div class="screen-header" id="active-title">OSSM Advanced Penetration</div>
+      <div class="focus-status" id="focus-status" style="display:none;"></div>
+      <button class="col-toggle" id="toggleColRight" title="Show / hide settings column">▶</button>
+      <button class="ble-btn small danger" id="header-disconnect" style="display:none;">Disconnect</button>
+    </div>
+
+    <div class="visualizer-area">
+      <div class="meter-col"><div class="meter-label">Max</div><div class="meter-bar"><div class="meter-fill" id="left-meter" style="background-color: var(--color-top);"></div></div></div>
+      <canvas id="graphCanvas" width="280" height="132"></canvas>
+      <div class="meter-col"><div class="meter-label">Min</div><div class="meter-bar"><div class="meter-fill" id="right-meter" style="background-color: var(--color-bottom);"></div></div></div>
+    </div>
+
+    <div class="speed-line" id="speed-control"></div>
+
+    <div class="tabs-container" id="tabs-wrapper"></div>
+
+    <div class="focused-sliders" id="focused-sliders" style="display:none;"></div>
+  </div>
+
+  <div class="col col-right" id="col-right">
+    <div class="ble-panel" id="ble-panel">
+      <span class="ble-status" id="ble-text">OSSM: Disconnected</span>
+      <button class="ble-btn" id="ble-button">Connect</button>
+    </div>
+
+    <div class="pad-status" id="pad-status">🎮 Press a button on the controller, or use the keyboard…</div>
+
+    <div class="mode-row" id="mode-row">
+      <span class="mode-label">Mode</span>
+      <div class="mode-seg">
+        <button id="modeAp" class="mode-btn active">Advanced</button>
+        <button id="modeStd" class="mode-btn">Standard</button>
+      </div>
+    </div>
+
+    <details class="presets-panel" id="presets-panel">
+      <summary><span class="summary-left">Presets<span class="summary-value" id="presetSummaryName"></span></span></summary>
+      <div id="presetList"></div>
+      <div class="preset-row">
+        <input type="text" id="presetName" placeholder="New preset name" />
+        <button id="btnSavePreset">Save</button>
+        <button id="btnFactoryReset" class="danger">Reset</button>
+      </div>
+    </details>
+
+    <details class="bind-panel" id="bind-panel">
+      <summary>🎮 Controller & keyboard mapping</summary>
+      <div class="bind-hint">Tap <b>✨ Run setup wizard</b> to assign every input step-by-step, or tap <b>Bind</b> on a single row. Works with a gamepad or the keyboard (on PC). If an input is already in use, it is moved from its previous action automatically.</div>
+      <div class="bind-view-toggle">
+        <button id="bindViewPad" class="bind-view-btn active">🎮 Controller</button>
+        <button id="bindViewKb" class="bind-view-btn">⌨ Keyboard</button>
+      </div>
+      <div id="bind-list"></div>
+      <div class="bind-status" id="bind-status"></div>
+      <div class="bind-actions">
+        <button class="bind-wizard" id="btnWizard">✨ Run setup wizard</button>
+        <button class="bind-reset" id="bind-reset">Reset to default</button>
+      </div>
+    </details>
+
+    <details class="pad-debug" id="pad-debug">
+      <summary>🎮 Raw input</summary>
+      <pre id="pad-debug-axes">Axes: —</pre>
+      <pre id="pad-debug-buttons">Pressed: —</pre>
+    </details>
+  </div>
+
+  <div class="wizard-overlay" id="wizard" style="display:none;">
+    <div class="wizard-box">
+      <div class="wizard-title">✨ Input setup wizard</div>
+      <div class="wizard-progress" id="wizard-progress"></div>
+      <div class="wizard-label" id="wizard-label"></div>
+      <div class="wizard-seg">
+        <button id="wizardViewPad" class="wizard-seg-btn active">🎮 Controller</button>
+        <button id="wizardViewKb" class="wizard-seg-btn">⌨ Keyboard</button>
+      </div>
+      <div class="wizard-prompt" id="wizard-prompt"></div>
+      <div class="wizard-help" id="wizard-help"></div>
+      <div class="wizard-note" id="wizard-note" style="display:none;"></div>
+      <div class="wizard-row">
+        <button class="wizard-btn ghost" id="wizard-back">‹ Back</button>
+        <button class="wizard-btn ghost" id="wizard-skip">Skip</button>
+        <button class="wizard-btn danger" id="wizard-cancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="cpp-logger">
+  <strong style="color:#fff;">OSSM Live Dashboard Monitor:</strong>
+  <div id="log" style="margin-top:6px;">Open this in Chrome or Edge to control the OSSM over Bluetooth.</div>
+</div>
+
+<script>
+"use strict";
+
+const SERVICE_UUID   = "4f53534d-0000-0000-0000-000000000000";
+const CONTROL_UUID   = "4f53534d-6164-7661-6e63-6564636f6e74";
+const CONFIG_UUID    = "4f53534d-6164-7661-6e63-6564636f6e66";
+const STATUS_UUID    = "4f53534d-6164-7661-6e63-656473746174";
+const PRESETS_UUID   = "4f53534d-6164-7661-6e63-656470727374";
+
+// Standard (home) mode lives on the legacy OSSM service.
+const LEGACY_SERVICE_UUID = "522b443a-4f53-534d-0001-420badbabe69";
+const STD_CMD_UUID        = "522b443a-4f53-534d-1000-420badbabe69";
+const STD_STATE_UUID      = "522b443a-4f53-534d-2000-420badbabe69";
+const STD_PATTERNS_UUID   = "522b443a-4f53-534d-3000-420badbabe69";
+const STD_SENPTL_UUID     = "4f53534d-456e-6769-6e65-5061744c7374";
+const STD_PATTERN_FALLBACK = ["Simple Stroke", "Teasing Pounding", "Robo Stroke", "Half'n'Half", "Deeper", "Stop'n'Go", "Insist", "Progressive Stroke", "Random Stroke", "Go to Point"];
+const STD_PATTERN_DESC_FALLBACK = [
+  "Acceleration, coasting, deceleration equally split; sensation adds randomness in stroke.",
+  "Speed shifts with sensation; balances faster strokes.",
+  "Sensation varies acceleration; from robotic to gradual.",
+  "Full and half depth strokes alternate; sensation affects speed.",
+  "Stroke depth increases per cycle; sensation sets count.",
+  "Pauses between strokes; sensation adjusts length.",
+  "Stroke length decreases per cycle; sensation sets count.",
+  "Strokes are made of substrokes controlled by sensation.",
+  "Random stroke; sensation controls maximum randomness from current location.",
+  "Moves to a point between depth and stroke based on sensation."
+];
+const STD_KNOWN_PATTERN_COUNT = 10;  // indices 0..9 have graph renderers; newer ones show no line
+
+let device = null, server = null;
+let ctlChar = null, cfgChar = null, stsChar = null, prsChar = null;
+let stdCmd = null, stdState = null, stdPatternsChar = null, senptlChar = null;
+let presetNames = [];
+let connected = false;
+let running = false;
+let padStateText = "";       // last gamepad/keyboard status text
+let appMode = "ap";          // "ap" (advanced penetration) | "std" (standard home)
+let stdValues = { speed: 0, max: 100, min: 0, sensation: 50, pattern: 0 };
+let stdPatterns = STD_PATTERN_FALLBACK.map((name, idx) => ({ name, idx, desc: STD_PATTERN_DESC_FALLBACK[idx] || "" }));
+let stdStateName = "";
+let stdRunning = false;
+let lastNonZeroSpeed = 50;
+
+const BASE_NAMES = ["Max Depth", "Min Depth", "In Speed", "Out Speed", "In Accel", "Out Accel"];
+const BASE_COLORS = ["#ff0c00", "#ff8100", "#ffff00", "#00ff00", "#0000ff", "#ac8dee"];
+const MODIFIER_NAMES = ["Amplitude", "Steps to Min", "Steps at Min", "Steps to Max", "Steps at Max", "Offset"];
+const MOD_COLORS = ["#38bdf8", "#34d399", "#fbbf24", "#f87171", "#c084fc", "#94a3b8"];
+const SPEED_KEY = "SP";
+
+// Firmware defaults (OSSM-Lite advanced_penetration_structs.h).
+const BASE_DEFAULTS = [10, 0, 100, 100, 40, 40];   // Max Depth, Min Depth, In Speed, Out Speed, In Accel, Out Accel
+const SPEED_DEFAULT = 0;
+const MODIFIER_DEFAULTS = [100, 1, 0, 1, 0, 0];    // Amplitude, Steps to Min, Steps at Min, Steps to Max, Steps at Max, Offset
+
+// Firmware names -> canonical keys (used when parsing CONFIG strings).
+const BASE_ALIAS = {
+  "Max Depth": "Max Depth", "Min Depth": "Min Depth",
+  "In Speed": "In Speed", "Out Speed": "Out Speed",
+  "In Accel": "In Accel", "Out Accel": "Out Accel"
+};
+const MODIFIER_ALIAS = {
+  "Amplitude": "Amplitude",
+  "Steps to Min": "Steps to Min", "Steps at Min": "Steps at Min",
+  "Steps to Max": "Steps to Max", "Steps at Max": "Steps at Max",
+  "Offset": "Offset"
+};
+
+// Combined-key dictionary: settings["Max Depth"], settings["Max DepthAmplitude"], settings["In SpeedSteps to Min"], settings["SP"], ...
+// Each entry: { min, max, value }.
+// Seeded with the OSSM-Lite advanced-penetration firmware defaults so the graph
+// and tabs render consistently before the device is connected.
+function buildDefaultSettings() {
+  const s = {};
+  const baseMin = [0, 0, 1, 1, 0, 0];
+  const baseMax = [100, 100, 100, 100, 100, 100];
+  const modMin = [0, 1, 0, 1, 0, 0];
+  const modMax = [100, 25, 25, 25, 25, 100];
+  for (let i = 0; i < BASE_NAMES.length; i++) {
+    s[BASE_NAMES[i]] = { min: baseMin[i], max: baseMax[i], value: BASE_DEFAULTS[i] };
+    for (let mi = 0; mi < MODIFIER_NAMES.length; mi++) {
+      s[BASE_NAMES[i] + MODIFIER_NAMES[mi]] = { min: modMin[mi], max: modMax[mi], value: MODIFIER_DEFAULTS[mi] };
+    }
+  }
+  s[SPEED_KEY] = { min: 0, max: 100, value: SPEED_DEFAULT };
+  return s;
+}
+let settings = buildDefaultSettings();
+
+const $ = (id) => document.getElementById(id);
+const log = (msg) => { $("log").textContent = msg || ""; };
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const decode = (dv) => new TextDecoder().decode(dv);
+const encode = (s) => new TextEncoder().encode(s);
+
+const speedIndex = () => 6; // firmware: 6 base controls + speed at index 6
+function baseKey(i) { return i === speedIndex() ? SPEED_KEY : BASE_NAMES[i]; }
+function modifierKey(bi, mi) { return BASE_NAMES[bi] + MODIFIER_NAMES[mi]; }
+function getSetting(key) { return settings[key] || { min: 0, max: 100, value: 0 }; }
+function settingValue(key, fallback = 0) {
+  const s = settings[key];
+  return s ? s.value : fallback;
+}
+
+const canvas = $("graphCanvas");
+const ctx = canvas.getContext("2d");
+
+// ---------- BLE ----------
+async function readStr(ch) { return decode(await ch.readValue()); }
+async function writeControl(s) {
+  try { await ctlChar.writeValueWithoutResponse(encode(s)); }
+  catch { await ctlChar.writeValueWithResponse(encode(s)); }
+}
+async function writePreset(s) { await prsChar.writeValueWithResponse(encode(s)); }
+
+function parseConfig(raw) {
+  const parsed = {};
+  for (const entry of raw.split(",")) {
+    const m = entry.match(/^([^(]+)\((\d+)\/(\d+)\)(.*)$/);
+    if (!m) continue;
+    const rawName = m[1].trim();
+    const min = parseInt(m[2], 10);
+    const max = parseInt(m[3], 10);
+
+    let canonical;
+    if (rawName === "Speed" || rawName === "SP") canonical = SPEED_KEY;
+    else canonical = BASE_ALIAS[rawName];
+    if (!canonical) continue;
+
+    parsed[canonical] = { min, max, value: min };
+    if (canonical === SPEED_KEY) continue; // speed has no modifiers
+
+    const re = /:([^(]+)\((\d+)\/(\d+)\)/g;
+    let mm;
+    while ((mm = re.exec(m[4])) !== null) {
+      const modCanonical = MODIFIER_ALIAS[mm[1].trim()];
+      if (!modCanonical) continue;
+      const modMin = parseInt(mm[2], 10);
+      const modMax = parseInt(mm[3], 10);
+      parsed[canonical + modCanonical] = { min: modMin, max: modMax, value: modMin };
+    }
+  }
+  settings = parsed;
+  if (!settings[SPEED_KEY]) settings[SPEED_KEY] = { min: 0, max: 100, value: 0 };
+}
+
+function parseStatus(raw) {
+  const entries = raw.split(",");
+  entries.forEach((entry, i) => {
+    const parts = entry.split(":");
+    if (i === speedIndex()) {
+      const v = parseFloat(parts[0]);
+      if (!isNaN(v)) {
+        const s = getSetting(SPEED_KEY);
+        s.value = clamp(v, s.min, s.max);
+        settings[SPEED_KEY] = s;
+      }
+      return;
+    }
+    if (i >= BASE_NAMES.length) return;
+
+    const key = BASE_NAMES[i];
+    const base = parseFloat(parts[0]);
+    if (!isNaN(base)) {
+      const s = getSetting(key);
+      s.value = clamp(base, s.min, s.max);
+      settings[key] = s;
+    }
+    for (let mi = 0; mi < MODIFIER_NAMES.length; mi++) {
+      if (mi + 1 >= parts.length) break;
+      const v = parseFloat(parts[mi + 1]);
+      if (isNaN(v)) continue;
+      const mk = key + MODIFIER_NAMES[mi];
+      const s = getSetting(mk);
+      s.value = clamp(v, s.min, s.max);
+      settings[mk] = s;
+    }
+  });
+}
+
+const speed = () => Math.round(settingValue(SPEED_KEY));
+
+async function connect() {
+  if (!navigator.bluetooth) { log("Web Bluetooth not available. Use Chrome/Edge over HTTPS or localhost."); return; }
+  log("Requesting device…");
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      filters: [{ services: [SERVICE_UUID] }],
+      optionalServices: [SERVICE_UUID, LEGACY_SERVICE_UUID]
+    });
+    device.addEventListener("gattserverdisconnected", onDisconnected);
+    log("Connecting to " + (device.name || "OSSM") + "…");
+    server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(SERVICE_UUID);
+    ctlChar = await svc.getCharacteristic(CONTROL_UUID);
+    cfgChar = await svc.getCharacteristic(CONFIG_UUID);
+    stsChar = await svc.getCharacteristic(STATUS_UUID);
+    prsChar = await svc.getCharacteristic(PRESETS_UUID);
+
+    // Standard-mode characteristics (legacy service) — best effort.
+    stdCmd = null; stdState = null; stdPatternsChar = null; senptlChar = null;
+    try { senptlChar = await svc.getCharacteristic(STD_SENPTL_UUID); } catch (e) {}
+    try {
+      const legacy = await server.getPrimaryService(LEGACY_SERVICE_UUID);
+      try { stdCmd = await legacy.getCharacteristic(STD_CMD_UUID); } catch (e) {}
+      try { stdState = await legacy.getCharacteristic(STD_STATE_UUID); } catch (e) {}
+      try { stdPatternsChar = await legacy.getCharacteristic(STD_PATTERNS_UUID); } catch (e) {}
+    } catch (e) {}
+
+    if (stsChar.properties.notify) {
+      stsChar.addEventListener("characteristicvaluechanged", onStatus);
+      await stsChar.startNotifications();
+    }
+    if (stdState && stdState.properties.notify) {
+      stdState.addEventListener("characteristicvaluechanged", onStdState);
+      try { await stdState.startNotifications(); } catch (e) {}
+    }
+    log("Reading configuration…");
+    const cfg = await readStr(cfgChar);
+    parseConfig(cfg);
+    await refreshStatus();
+    await refreshPresets();
+    await refreshStdPatterns();
+    await refreshStdValues();
+    connected = true;
+    updateFocusStatus();
+    running = speed() > 0;
+    lastNonZeroSpeed = speed() > 0 ? speed() : 50;
+    $("ble-panel").style.display = "none";
+    $("conn-dot").style.display = "inline-block";
+    $("header-disconnect").style.display = "inline-block";
+    buildInterface();
+    log("");
+  } catch (e) {
+    $("ble-text").textContent = "OSSM: Error 🔴";
+    log("Bluetooth error: " + e.message);
+  }
+}
+
+function onDisconnected() {
+  connected = false; running = false; stdRunning = false;
+  updateFocusStatus();
+  $("ble-panel").style.display = "";
+  $("conn-dot").style.display = "none";
+  $("header-disconnect").style.display = "none";
+  log("Disconnected from OSSM.");
+  buildInterface();
+}
+
+function disconnect() {
+  try {
+    if (server && server.connected) server.disconnect();
+    else if (device && device.gatt.connected) device.gatt.disconnect();
+  } catch (e) { log("Disconnect failed: " + e.message); }
+}
+
+function onStatus(ev) { parseStatus(decode(ev.target.value)); buildInterface(); }
+async function refreshStatus() { parseStatus(await readStr(stsChar)); }
+async function refreshPresets() {
+  presetNames = (await readStr(prsChar)).split(",").map(s => s.trim()).filter(Boolean);
+  renderPresets();
+}
+
+// ---------- Standard (home) mode ----------
+function parseStdState(raw) {
+  let j;
+  try { j = JSON.parse(raw); } catch (e) { return; }
+  if (typeof j.speed === "number") stdValues.speed = Math.round(j.speed);
+  if (typeof j.maxPosition === "number") stdValues.max = Math.round(j.maxPosition);
+  if (typeof j.minPosition === "number") stdValues.min = Math.round(j.minPosition);
+  if (typeof j.sensation === "number") stdValues.sensation = Math.round(j.sensation);
+  if (typeof j.pattern === "number") stdValues.pattern = Math.round(j.pattern);
+  if (typeof j.state === "string") stdStateName = j.state;
+  stdRunning = stdValues.speed > 0.5;
+}
+function onStdState(ev) { parseStdState(decode(ev.target.value)); if (appMode === "std") buildInterface(); }
+
+async function stdWrite(cmd) {
+  if (!stdCmd) return;
+  const data = encode(cmd);
+  try { await stdCmd.writeValueWithoutResponse(data); }
+  catch (e) { try { await stdCmd.writeValueWithResponse(data); } catch (e2) { log("Std write failed: " + e2.message); } }
+}
+
+async function refreshStdPatterns() {
+  stdPatterns = [];
+  if (stdPatternsChar) {
+    try {
+      const arr = JSON.parse(decode(await stdPatternsChar.readValue()));
+      if (Array.isArray(arr)) stdPatterns = arr.map(p => ({ name: p.name, idx: p.idx, desc: "" }));
+    } catch (e) {}
+  }
+  if (!stdPatterns.length) stdPatterns = STD_PATTERN_FALLBACK.map((name, idx) => ({ name, idx, desc: "" }));
+
+  // Fetch live descriptions from the OSSM: write the index, read back "name:description".
+  if (senptlChar) {
+    for (const p of stdPatterns) {
+      try {
+        await senptlChar.writeValueWithResponse(encode(String(p.idx)));
+        const resp = decode(await senptlChar.readValue());
+        const colon = resp.indexOf(":");
+        p.desc = (colon >= 0 ? resp.slice(colon + 1) : resp).trim();
+      } catch (e) {}
+    }
+  }
+  // Fill any still-missing descriptions from the built-in list.
+  stdPatterns.forEach(p => {
+    if (!p.desc && p.idx >= 0 && p.idx < STD_PATTERN_DESC_FALLBACK.length) p.desc = STD_PATTERN_DESC_FALLBACK[p.idx];
+  });
+}
+
+async function refreshStdValues() {
+  if (!stdState) return;
+  try { parseStdState(decode(await stdState.readValue())); } catch (e) {}
+}
+
+// ---------- Commands ----------
+function baseRange(i) {
+  const s = getSetting(baseKey(i));
+  let lo = s.min, hi = s.max;
+  if (i === 0) lo = Math.max(lo, Math.round(settingValue(BASE_NAMES[1])));
+  else if (i === 1) hi = Math.min(hi, Math.round(settingValue(BASE_NAMES[0])));
+  return { min: lo, max: hi };
+}
+
+function setBase(i, v) {
+  const key = baseKey(i);
+  const s = getSetting(key);
+  v = clamp(Math.round(v), s.min, s.max);
+  if (i === 0) v = Math.max(v, Math.round(settingValue(BASE_NAMES[1])));
+  else if (i === 1) v = Math.min(v, Math.round(settingValue(BASE_NAMES[0])));
+  s.value = v;
+  settings[key] = s;
+  if (i >= 0 && i < BASE_NAMES.length) activeBaseIndex = i; // highlight the moved setting
+  writeControl(`${i}:${v},`).catch(e => log("Write failed: " + e));
+  buildInterface();
+}
+function setSpeed(v) { setBase(speedIndex(), v); if (v > 0) lastNonZeroSpeed = v; }
+function setModifier(bi, mi, v) {
+  const key = modifierKey(bi, mi);
+  const s = getSetting(key);
+  v = clamp(Math.round(v), s.min, s.max);
+  s.value = v;
+  settings[key] = s;
+  activeModifierIndex = mi; // highlight the moved modifier
+  writeControl(`${bi}:${mi}:${v},`).catch(e => log("Write failed: " + e));
+  buildInterface();
+}
+function toggleStart() {
+  if (appMode === "std") {
+    if (stdRunning) stdWrite("set:speed:0");
+    else {
+      stdWrite("go:strokeEngine");
+      stdWrite("set:speed:" + (stdValues.speed > 0 ? stdValues.speed : 50));
+    }
+    return;
+  }
+  if (speed() > 0) setSpeed(0);
+  else setSpeed(lastNonZeroSpeed > 0 ? lastNonZeroSpeed : 50);
+}
+
+function setLocal(key, v) {
+  const s = getSetting(key);
+  s.value = clamp(Math.round(v), s.min, s.max);
+  settings[key] = s;
+}
+
+// Resets every base value, speed, and all modifiers to the firmware defaults.
+function resetAllValues() {
+  for (let i = 0; i < BASE_NAMES.length; i++) setLocal(baseKey(i), BASE_DEFAULTS[i]);
+  setLocal(SPEED_KEY, SPEED_DEFAULT);
+  for (let bi = 0; bi < BASE_NAMES.length; bi++)
+    for (let mi = 0; mi < MODIFIER_NAMES.length; mi++)
+      setLocal(modifierKey(bi, mi), MODIFIER_DEFAULTS[mi]);
+  buildInterface();
+
+  const parts = [];
+  for (let i = 0; i < BASE_NAMES.length; i++) parts.push(`${i}:${BASE_DEFAULTS[i]}`);
+  parts.push(`${speedIndex()}:${SPEED_DEFAULT}`);
+  for (let bi = 0; bi < BASE_NAMES.length; bi++)
+    for (let mi = 0; mi < MODIFIER_NAMES.length; mi++)
+      parts.push(`${bi}:${mi}:${MODIFIER_DEFAULTS[mi]}`);
+  writeControl(parts.join(",") + ",")
+    .then(() => setTimeout(async () => { await refreshStatus(); buildInterface(); }, 800))
+    .catch(e => log("Reset failed: " + e));
+}
+
+// ---------- UI ----------
+let viewMode = "main";          // "main" | "mod"
+let activeBaseIndex = 0;        // 0..5 (main base controls)
+let activeModifierIndex = 0;    // 0..5 (modifier type)
+let presetSelection = "";       // currently selected preset in the dropdown
+let showAll = (window.matchMedia && window.matchMedia("(orientation: landscape)").matches); // landscape defaults to showing all sliders
+let modifierRowVisible = (window.matchMedia && window.matchMedia("(orientation: landscape)").matches); // show modifier boxes by default in landscape
+
+// Picks a readable text color (black/white) for the active tab's bright background.
+function tabTextColor(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.5 ? "#000000" : "#ffffff";
+}
+function placeStartButton() {
+  const row = document.querySelector(".start-stop-row");
+  if (!row) return;
+  const anchor = (appMode === "std" || focusedMode()) ? $("speed-control") : $("sliders-wrapper");
+  if (anchor && anchor.nextElementSibling !== row) anchor.insertAdjacentElement("afterend", row);
+}
+function updateFocusStatus() {
+  const el = $("focus-status");
+  if (!el) return;
+  const ble = connected ? "Connected" : "Disconnected";
+  el.innerHTML = `<span class="fs-dot${connected ? " on" : ""}"></span><span>${ble}</span>` +
+                 (padStateText ? `<span class="fs-sep">·</span><span>${padStateText}</span>` : "");
+}
+function buildInterface() {
+  const isStd = appMode === "std";
+  $("active-title").textContent = isStd
+    ? "OSSM Standard"
+    : (viewMode === "main" ? "OSSM Advanced Penetration" : "Modifier for: " + BASE_NAMES[activeBaseIndex]);
+  const runningNow = isStd ? stdRunning : speed() > 0;
+  $("btnStart").textContent = runningNow ? "Stop" : "Start";
+  $("btnStart").classList.toggle("stop", runningNow);
+
+  $("tabs-wrapper").style.display = isStd ? "none" : "";
+  $("reset-row").style.display = (isStd || viewMode !== "main" || !showAll) ? "none" : "";
+  $("presets-panel").style.display = isStd ? "none" : "";
+  $("modeAp").classList.toggle("active", !isStd);
+  $("modeStd").classList.toggle("active", isStd);
+  const fst = $("focus-status"); if (fst) fst.style.display = focusedMode() ? "" : "none";
+
+  if (isStd) { buildStdSliders(); const fs = $("focused-sliders"); if (fs) fs.style.display = "none"; }
+  else {
+    buildTabs();
+    if (focusedMode()) { buildFocusedSliders(); const fs = $("focused-sliders"); if (fs) fs.style.display = ""; }
+    else { buildSliders(); const fs = $("focused-sliders"); if (fs) fs.style.display = "none"; }
+    renderPresets();
+  }
+  buildSpeed();
+  placeStartButton();
+  resizeCanvas();
+  drawGraph();
+}
+
+function buildTabs() {
+  const wrap = $("tabs-wrapper");
+  wrap.innerHTML = "";
+  const mk = (text, active, color, title, label, dim = false) => {
+    const d = document.createElement("div");
+    d.className = "tab-box";
+    d.title = title;
+    d.innerHTML = `<div class="tab-value">${text}</div>` + (label ? `<div class="tab-name">${label}</div>` : "");
+    d.style.background = active ? color : (dim ? `color-mix(in srgb, ${color} 22%, #3a3a3a)` : "#3a3a3a");
+    d.style.color = active ? tabTextColor(color) : "#dde6f0";
+    d.style.borderColor = active ? "#ffffff" : "transparent";
+    return d;
+  };
+  const addRow = () => {
+    const row = document.createElement("div");
+    row.className = "tab-row";
+    wrap.appendChild(row);
+    return row;
+  };
+
+  // Base squares row (always visible — acts as navigation).
+  const baseRow = addRow();
+  for (let i = 0; i < BASE_NAMES.length; i++) {
+    const d = mk(Math.round(settingValue(BASE_NAMES[i])), i === activeBaseIndex, BASE_COLORS[i], BASE_NAMES[i], BASE_NAMES[i], true);
+    d.onclick = () => {
+      if (activeBaseIndex === i) modifierRowVisible = !modifierRowVisible;
+      else { activeBaseIndex = i; modifierRowVisible = true; }
+      viewMode = "main";
+      buildInterface();
+    };
+    baseRow.appendChild(d);
+  }
+
+  // Modifier squares row for the selected base (only while toggled on).
+  if (modifierRowVisible) {
+    const modRow = addRow();
+    const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+    const activeColor = BASE_COLORS[bi];
+    const modActive = viewMode === "mod";
+    MODIFIER_NAMES.forEach((name, mi) => {
+      const d = mk(Math.round(settingValue(BASE_NAMES[bi] + name)), modActive && mi === activeModifierIndex, activeColor, name, name, true);
+      d.onclick = () => { activeModifierIndex = mi; viewMode = "mod"; buildInterface(); };
+      modRow.appendChild(d);
+    });
+  }
+}
+
+function buildSpeed() {
+  const wrap = $("speed-control");
+  wrap.innerHTML = "";
+  wrap.className = "speed-line";
+  const isStd = appMode === "std";
+  const lo = 0, hi = 100;
+  const val = isStd ? stdValues.speed : Math.round(settingValue(SPEED_KEY));
+  const onSet = isStd
+    ? (v) => { stdValues.speed = v; stdWrite("set:speed:" + v); }
+    : (v) => setSpeed(v);
+  const label = document.createElement("span");
+  label.className = "speed-label";
+  label.textContent = "Speed:";
+  const num = document.createElement("span");
+  num.className = "speed-val";
+  num.textContent = val;
+  makeEditable(num, lo, hi, onSet);
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = lo;
+  input.max = hi;
+  input.value = val;
+  input.step = 1;
+  input.addEventListener("input", () => { num.textContent = input.value; });
+  input.addEventListener("change", () => onSet(parseInt(input.value, 10)));
+  const minus = document.createElement("button");
+  minus.type = "button";
+  minus.className = "step-btn minus";
+  minus.textContent = "−";
+  const plus = document.createElement("button");
+  plus.type = "button";
+  plus.className = "step-btn plus";
+  plus.textContent = "+";
+  wrap.appendChild(label);
+  wrap.appendChild(num);
+  wrap.appendChild(minus);
+  wrap.appendChild(input);
+  wrap.appendChild(plus);
+  attachStepButton(minus, -1, input, num, lo, hi, onSet);
+  attachStepButton(plus, +1, input, num, lo, hi, onSet);
+}
+
+function buildSliders() {
+  const wrap = $("sliders-wrapper");
+  wrap.innerHTML = "";
+
+  const toggleGroup = document.createElement("div");
+  toggleGroup.className = "slider-group";
+  const toggleLabel = viewMode === "main" ? "Show all settings" : "Show all modifiers";
+  toggleGroup.innerHTML = `<label class="inline-toggle">
+    <span>${toggleLabel}</span>
+    <span class="switch">
+      <input type="checkbox" id="showAllCheck" ${showAll ? "checked" : ""}>
+      <span class="slider"></span>
+    </span>
+  </label>`;
+  wrap.appendChild(toggleGroup);
+  toggleGroup.querySelector("#showAllCheck").onchange = (e) => {
+    showAll = e.target.checked;
+    buildInterface();
+  };
+
+  const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+  const baseColor = BASE_COLORS[bi];
+  const modColor = (mi) => (viewMode === "mod" && mi === activeModifierIndex)
+    ? baseColor
+    : `color-mix(in srgb, ${baseColor} 22%, #3a3a3a)`;
+
+  if (showAll) {
+    if (viewMode === "main") {
+      for (let i = 0; i < BASE_NAMES.length; i++) {
+        const r = baseRange(i);
+        wrap.appendChild(sliderEl(BASE_NAMES[i], r.min, r.max, Math.round(settingValue(BASE_NAMES[i])), BASE_COLORS[i], (v) => setBase(i, v)));
+      }
+    } else {
+      const selGroup = document.createElement("div");
+      selGroup.className = "slider-group";
+      selGroup.innerHTML = `<div class="slider-label"><span>Base control</span></div>`;
+      const sel = document.createElement("select");
+      for (let i = 0; i < BASE_NAMES.length; i++) {
+        const o = document.createElement("option");
+        o.value = i; o.textContent = BASE_NAMES[i];
+        if (i === activeBaseIndex) o.selected = true;
+        sel.appendChild(o);
+      }
+      sel.onchange = () => { activeBaseIndex = parseInt(sel.value, 10); activeModifierIndex = 0; buildInterface(); };
+      selGroup.appendChild(sel);
+      wrap.appendChild(selGroup);
+
+      MODIFIER_NAMES.forEach((name, mi) => {
+        const s = getSetting(BASE_NAMES[bi] + name);
+        wrap.appendChild(sliderEl(name, s.min, s.max, Math.round(s.value), modColor(mi), (v) => setModifier(bi, mi, v)));
+      });
+    }
+  } else {
+    if (viewMode === "main") {
+      const r = baseRange(bi);
+      wrap.appendChild(sliderEl(BASE_NAMES[bi], r.min, r.max, Math.round(settingValue(BASE_NAMES[bi])), BASE_COLORS[bi], (v) => setBase(bi, v)));
+    } else {
+      const mi = clamp(activeModifierIndex, 0, MODIFIER_NAMES.length - 1);
+      const name = MODIFIER_NAMES[mi];
+      const s = getSetting(BASE_NAMES[bi] + name);
+      wrap.appendChild(sliderEl(name, s.min, s.max, Math.round(s.value), modColor(mi), (v) => setModifier(bi, mi, v)));
+    }
+  }
+}
+
+function buildFocusedSliders() {
+  const wrap = $("focused-sliders");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+  const r = baseRange(bi);
+  wrap.appendChild(sliderEl(BASE_NAMES[bi], r.min, r.max, Math.round(settingValue(BASE_NAMES[bi])), BASE_COLORS[bi], (v) => setBase(bi, v)));
+  if (viewMode === "mod") {
+    const mi = clamp(activeModifierIndex, 0, MODIFIER_NAMES.length - 1);
+    const name = MODIFIER_NAMES[mi];
+    const s = getSetting(BASE_NAMES[bi] + name);
+    wrap.appendChild(sliderEl(name, s.min, s.max, Math.round(s.value), BASE_COLORS[bi], (v) => setModifier(bi, mi, v)));
+  }
+}
+
+function buildStdSliders() {
+  const wrap = $("sliders-wrapper");
+  wrap.innerHTML = "";
+
+  wrap.appendChild(sliderEl("Max Depth", 0, 100, stdValues.max, BASE_COLORS[0], (v) => {
+    stdValues.max = v;
+    if (stdValues.min > stdValues.max) { stdValues.min = stdValues.max; stdWrite("set:min:" + stdValues.min); }
+    stdWrite("set:max:" + v);
+    drawGraph();
+  }));
+  wrap.appendChild(sliderEl("Min Depth", 0, stdValues.max, stdValues.min, BASE_COLORS[1], (v) => {
+    stdValues.min = Math.min(v, stdValues.max);
+    stdWrite("set:min:" + stdValues.min);
+    drawGraph();
+  }));
+  wrap.appendChild(sliderEl("Sensation", 0, 100, stdValues.sensation, "#c084fc", (v) => {
+    stdValues.sensation = v;
+    stdWrite("set:sensation:" + v);
+    drawGraph();
+  }));
+
+  const pg = document.createElement("div");
+  pg.className = "slider-group";
+  pg.innerHTML = `<div class="slider-label"><span>Pattern</span></div>`;
+  const sel = document.createElement("select");
+  stdPatterns.forEach(p => {
+    const o = document.createElement("option");
+    o.value = p.idx; o.textContent = p.name;
+    if (p.idx === stdValues.pattern) o.selected = true;
+    sel.appendChild(o);
+  });
+  const desc = document.createElement("div");
+  desc.className = "pattern-desc";
+  const updateDesc = () => {
+    const cur = stdPatterns.find(p => p.idx === stdValues.pattern);
+    desc.textContent = cur ? (cur.desc || "") : "";
+  };
+  sel.onchange = () => {
+    stdValues.pattern = parseInt(sel.value, 10);
+    stdWrite("set:pattern:" + stdValues.pattern);
+    updateDesc();
+    drawGraph();
+  };
+  updateDesc();
+  pg.appendChild(sel);
+  pg.appendChild(desc);
+  wrap.appendChild(pg);
+}
+
+let activeStep = null;
+
+function stopStepRepeat() {
+  if (activeStep) {
+    clearTimeout(activeStep.timer);
+    activeStep = null;
+  }
+}
+document.addEventListener("pointerup", stopStepRepeat);
+document.addEventListener("pointercancel", stopStepRepeat);
+
+function attachStepButton(btn, delta, input, valNum, min, max, onSet) {
+  const apply = () => {
+    const cur = parseInt(input.value, 10);
+    let v = cur + delta;
+    if (v < min) v = min;
+    if (v > max) v = max;
+    if (v === cur) return;
+    input.value = v;
+    valNum.textContent = v;
+    onSet(v);
+  };
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    apply();
+    stopStepRepeat(); // cancel any previous hold before starting this one
+    const st = { timer: null };
+    activeStep = st;
+    let delay = 400;
+    st.timer = setTimeout(function repeat() {
+      apply();
+      delay = Math.max(90, delay - 40);
+      st.timer = setTimeout(repeat, delay);
+    }, delay);
+  });
+  btn.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+
+function makeEditable(el, min, max, onSet) {
+  const commit = (v) => {
+    v = clamp(Math.round(parseInt(v, 10) || 0), min, max);
+    el.textContent = v;
+    onSet(v);
+  };
+  if (!el.title) el.title = "Click to edit";
+  el.addEventListener("click", () => {
+    if (el.querySelector("input")) return;
+    const original = el.textContent;
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.className = "val-input";
+    inp.value = original;
+    el.textContent = "";
+    el.appendChild(inp);
+    inp.focus();
+    inp.select();
+    let done = false;
+    const finish = (apply) => {
+      if (done) return;
+      done = true;
+      if (apply) commit(inp.value);
+      else el.textContent = original;
+    };
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); finish(true); }
+      else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+    });
+    inp.addEventListener("blur", () => finish(true));
+  });
+  return el;
+}
+
+function sliderEl(name, min, max, value, color, onSet) {
+  const g = document.createElement("div");
+  g.className = "slider-group";
+  g.innerHTML = `
+    <div class="slider-row">
+      <span class="slider-name">${name}</span>
+      <span class="val-num" style="background:${color}; color:${tabTextColor(color)}">${value}</span>
+      <button type="button" class="step-btn minus">−</button>
+      <input type="range" min="${min}" max="${max}" value="${value}" step="1">
+      <button type="button" class="step-btn plus">+</button>
+    </div>`;
+  const input = g.querySelector("input");
+  const valNum = g.querySelector(".val-num");
+  makeEditable(valNum, min, max, onSet);
+  input.addEventListener("input", () => { valNum.textContent = input.value; });
+  input.addEventListener("change", () => onSet(parseInt(input.value, 10)));
+  const [minus, plus] = g.querySelectorAll(".step-btn");
+  attachStepButton(minus, -1, input, valNum, min, max, onSet);
+  attachStepButton(plus, +1, input, valNum, min, max, onSet);
+  return g;
+}
+
+function renderPresets() {
+  const list = $("presetList");
+  list.innerHTML = "";
+  const sel = document.createElement("select");
+  presetNames.forEach(name => {
+    const o = document.createElement("option");
+    o.value = name; o.textContent = name;
+    sel.appendChild(o);
+  });
+  if (presetNames.includes(presetSelection)) sel.value = presetSelection;
+  else if (presetNames.length) { sel.selectedIndex = 0; presetSelection = presetNames[0]; }
+  sel.onchange = () => { presetSelection = sel.value; $("presetSummaryName").textContent = presetSelection; };
+
+  const load = document.createElement("button");
+  load.textContent = "Load";
+  load.onclick = async () => {
+    if (!sel.value) return;
+    await writePreset(":" + sel.value);
+    setTimeout(refreshStatus, 800);
+  };
+  const del = document.createElement("button");
+  del.textContent = "Delete";
+  del.className = "danger";
+  del.onclick = async () => {
+    if (!sel.value) return;
+    await writePreset("<" + sel.value);
+    setTimeout(refreshPresets, 800);
+  };
+
+  list.appendChild(sel);
+  list.appendChild(load);
+  list.appendChild(del);
+  $("presetSummaryName").textContent = presetSelection;
+}
+
+// ---------- Graph ----------
+// Faithful port of AP-mode.cpp drawing: same plot bounds, sample counts,
+// colors (RGB565), and Bezier/step-trace math as the M5 screen.
+const SAMPLE_MAIN = 48;   // s_curve_main_pts[48]
+const SAMPLE_MOD = 24;    // s_curve_mod_pts[24]
+const PLOT_X = 2;         // k_graph_plot_x_margin
+const PLOT_Y = 0;         // top margin: keep traces inside the chart box (M5's -12 gets clipped)
+const DOT_MAIN = "#ffffff";
+const DOT_MOD = "#94a3b8";
+
+function sv(k, fb = 0) { return settingValue(k, fb); }
+function bezierMath(v0, v1, v2, v3, t) {
+  return Math.pow(1 - t, 3) * v0 + 3 * Math.pow(1 - t, 2) * t * v1 + 3 * (1 - t) * Math.pow(t, 2) * v2 + Math.pow(t, 3) * v3;
+}
+function baseVal(i) { return clamp(settingValue(BASE_NAMES[i]), 0, 100); }
+
+// computeGraphPlotBounds() for the 280x132 panel.
+function plotBounds() {
+  return { x: PLOT_X, y: PLOT_Y, w: canvas.width - 4, h: canvas.height - 5 };
+}
+
+function dot(x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x), Math.round(y), 2, 2);
+}
+
+// Main screen: AP-mode.cpp updateCurvePreview() "live AP curve" layout.
+function drawMainGraph() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const { x: xMin, y: yMin, w: xSpan, h: ySpan } = plotBounds();
+
+  const topVal = sv("Max Depth", 50), bottomVal = sv("Min Depth", 50);
+  const riseVal = sv("In Speed", 1), fallVal = sv("Out Speed", 1);
+  const curveIn = sv("In Accel", 50), curveOut = sv("Out Accel", 50);
+
+  // Depth guides: top=0xF860, bottom=0xFC00, width=plot.w.
+  const yMax = yMin + (1 - topVal / 100) * ySpan;
+  const yMinDepth = yMin + (1 - bottomVal / 100) * ySpan;
+  ctx.fillStyle = BASE_COLORS[0]; ctx.fillRect(xMin, yMax, xSpan, 2);
+  ctx.fillStyle = BASE_COLORS[1]; ctx.fillRect(xMin, yMinDepth, xSpan, 2);
+
+  const yMinBound = Math.min(yMax, yMinDepth);
+  const yMaxBound = Math.max(yMax, yMinDepth);
+  const diff = yMinDepth - yMax;
+  const yMaxMod = (1 - sv("Max DepthAmplitude", 100) / 100) * diff + yMax;
+  const yMinMod = yMinDepth - (1 - sv("Min DepthAmplitude", 100) / 100) * diff;
+
+  const a = Math.max(1, riseVal), b = Math.max(1, fallVal);
+  const am = Math.max(1, sv("In SpeedAmplitude", 100) / 100 * a);
+  const bm = Math.max(1, sv("Out SpeedAmplitude", 100) / 100 * b);
+
+  let splitXf = xMin + (1 - (a / b) / ((a / b) + 1)) * xSpan;
+  splitXf = clamp(splitXf, xMin, xMin + xSpan);
+  let splitXm = xMin + (1 - (am / bm) / ((am / bm) + 1)) * xSpan;
+  splitXm = clamp(splitXm, xMin, xMin + xSpan);
+
+  const c = Math.max(1, curveIn), d = Math.max(1, curveOut);
+  const cm = Math.max(1, sv("In AccelAmplitude", 100) / 100 * c);
+  const dm = Math.max(1, sv("Out AccelAmplitude", 100) / 100 * d);
+
+  const rIn = 0.1 + 0.4 * (1 - c / 100);
+  const rOut = 0.1 + 0.4 * (1 - d / 100);
+  const rInMod = 0.1 + 0.4 * (1 - cm / 100);
+  const rOutMod = 0.1 + 0.4 * (1 - dm / 100);
+
+  const splitSample = Math.round((splitXf - xMin) / xSpan * (SAMPLE_MAIN - 1));
+  const splitSampleMod = Math.round((splitXm - xMin) / xSpan * (SAMPLE_MAIN - 1));
+  const riseDiff = (splitXf - xMin) * rIn;
+  const fallDiff = ((xMin + xSpan) - splitXf) * rOut;
+  const riseDiffMod = (splitXm - xMin) * rInMod;
+  const fallDiffMod = ((xMin + xSpan) - splitXm) * rOutMod;
+
+  const mainDots = [], modDots = [];
+  for (let i = 0; i < SAMPLE_MAIN; i++) {
+    let x, y;
+    if (i <= splitSample) {
+      const tl = splitSample > 0 ? i / splitSample : 0;
+      x = bezierMath(xMin, xMin + riseDiff, splitXf - riseDiff, splitXf, tl);
+      y = bezierMath(yMinDepth, yMinDepth, yMax, yMax, tl);
+    } else {
+      const fallCount = (SAMPLE_MAIN - 1) - splitSample;
+      const tr = fallCount > 0 ? (i - splitSample) / fallCount : 1;
+      x = bezierMath(splitXf, splitXf + fallDiff, (xMin + xSpan) - fallDiff, xMin + xSpan, tr);
+      y = bezierMath(yMax, yMax, yMinDepth, yMinDepth, tr);
+    }
+    y = clamp(y, yMinBound, yMaxBound);
+    mainDots.push([x, y]);
+
+    if ((i % 2) === 0) {
+      let xM, yM;
+      if (i <= splitSampleMod) {
+        const tl = splitSampleMod > 0 ? i / splitSampleMod : 0;
+        xM = bezierMath(xMin, xMin + riseDiffMod, splitXm - riseDiffMod, splitXm, tl);
+        yM = bezierMath(yMinMod, yMinMod, yMaxMod, yMaxMod, tl);
+      } else {
+        const fallCountMod = (SAMPLE_MAIN - 1) - splitSampleMod;
+        const tr = fallCountMod > 0 ? (i - splitSampleMod) / fallCountMod : 1;
+        xM = bezierMath(splitXm, splitXm + fallDiffMod, (xMin + xSpan) - fallDiffMod, xMin + xSpan, tr);
+        yM = bezierMath(yMaxMod, yMaxMod, yMinMod, yMinMod, tr);
+      }
+      yM = clamp(yM, yMinBound, yMaxBound);
+      modDots.push([xM, yM]);
+    }
+  }
+
+  // Continuous curved line through the main stroke samples.
+  if (mainDots.length > 1) {
+    ctx.strokeStyle = DOT_MAIN; ctx.lineWidth = 2; ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(mainDots[0][0], mainDots[0][1]);
+    for (let i = 1; i < mainDots.length; i++) ctx.lineTo(mainDots[i][0], mainDots[i][1]);
+    ctx.stroke();
+  }
+  modDots.forEach(([x, y]) => dot(x, y, DOT_MOD));
+
+  $("left-meter").style.height = topVal + "%";
+  $("right-meter").style.height = bottomVal + "%";
+}
+
+// Modifier screen: AP-mode.cpp updateModifierPreview() + drawSingleModifierTrace().
+function drawModGraph() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const { x: xMin, y: yMin, w: xSpan, h: ySpan } = plotBounds();
+  const n = BASE_NAMES.length;
+
+  let maxSteps = 4;
+  for (let c = 0; c < n; c++) {
+    let s = 0;
+    for (let m = 1; m <= 4; m++) s += sv(BASE_NAMES[c] + MODIFIER_NAMES[m], 0);
+    if (s > maxSteps) maxSteps = s;
+  }
+
+  const trace = (controlIndex, traceIndex, highlight) => {
+    if (controlIndex < 0 || traceIndex < 0 || traceIndex >= 6) return;
+    if (controlIndex >= n || maxSteps <= 0) return;
+
+    const name = BASE_NAMES[controlIndex];
+    const baseValueRatio = 1 - sv(name, 50) / 100;
+    const modValueRatio = 1 - sv(name + "Amplitude", 100) / 100;
+
+    let strokeRatio = 1 - baseValueRatio;
+    if (controlIndex < 2) strokeRatio = (sv("Max Depth", 50) - sv("Min Depth", 50)) / 100;
+
+    const baseY = yMin + ySpan * baseValueRatio;
+    let modY = baseY + ySpan * strokeRatio * modValueRatio;
+    if (controlIndex === 1) modY = baseY - ySpan * strokeRatio * modValueRatio;
+
+    const stepWidth = xSpan / maxSteps;
+    let startX = xMin - stepWidth * sv(name + "Offset", 0);
+
+    ctx.strokeStyle = BASE_COLORS[traceIndex % BASE_COLORS.length];
+    ctx.lineWidth = highlight ? 3 : 2;
+    ctx.beginPath();
+
+    let segmentIndex = 0, segment = 0, guard = 0, zeroStepGuard = 0;
+    while (startX < (xMin + xSpan) && guard < 96 && segmentIndex < 64) {
+      const stepIndex = Math.min(segment + 1, 5);
+      const step = Math.max(0, sv(name + MODIFIER_NAMES[stepIndex], 0)) * stepWidth;
+
+      if (step <= 0) {
+        segment = (segment + 1) % 4;
+        ++zeroStepGuard;
+        if (zeroStepGuard >= 8) break;
+        continue;
+      }
+      zeroStepGuard = 0;
+
+      const endX = startX + step;
+      let y0 = baseY, y1 = baseY;
+      if (segment === 0) { y0 = baseY; y1 = modY; }
+      else if (segment === 1) { y0 = modY; y1 = modY; }
+      else if (segment === 2) { y0 = modY; y1 = baseY; }
+
+      const cx0 = clamp(startX, xMin, xMin + xSpan);
+      const cx1 = clamp(endX, xMin, xMin + xSpan);
+      const cy0 = clamp(y0, yMin, yMin + ySpan);
+      const cy1 = clamp(y1, yMin, yMin + ySpan);
+      ctx.moveTo(cx0, cy0);
+      ctx.lineTo(cx1, cy1);
+
+      ++segmentIndex;
+      startX = endX;
+      segment = (segment + 1) % 4;
+      ++guard;
+    }
+    ctx.stroke();
+  };
+
+  for (let c = 0; c < n; c++) trace(c, c, false);
+  trace(activeBaseIndex, activeBaseIndex, true);
+
+  $("left-meter").style.height = baseVal(0) + "%";
+  $("right-meter").style.height = baseVal(1) + "%";
+}
+
+// ----- Standard-mode pattern preview (ports StrokeEngine/pattern.h) -----
+function mulberry32(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function arduinoMap(x, inMin, inMax, outMin, outMax) {
+  return (x - inMin) * (outMax - outMin) / (inMax - inMin) + outMin;
+}
+
+function strokeRampCount(sensation) {
+  if (sensation < 0) return Math.round(arduinoMap(sensation, -100, 0, 2, 11));
+  return Math.round(arduinoMap(sensation, 0, 100, 11, 32));
+}
+
+function trapEase(t, x) {
+  // Symmetric trapezoidal position profile; x = acceleration fraction (0 < x <= 0.5).
+  if (x <= 0) return t;
+  const v = 1 / (1 - x);
+  if (t <= x) return 0.5 * v * (t * t / x);
+  if (t <= 1 - x) return v * (t - x / 2);
+  const u = 1 - t;
+  return 1 - 0.5 * v * (u * u / x);
+}
+
+function stdPatternPeriod(pattern, sensation) {
+  const rampN = Math.max(1, strokeRampCount(sensation));
+  switch (pattern) {
+    case 0: case 1: case 2: case 5: case 9: return 2;
+    case 3: return 4;
+    case 4: case 6: return 2 * rampN;
+    case 7: return 2 * (2 * rampN - 1);
+    case 8: return 24;
+    default: return 2;
+  }
+}
+
+function stdStrokeDurations(pattern, sensation, moves) {
+  const fast = 1 - 0.75 * Math.abs(sensation) / 100;
+  const slow = 2 - fast;
+  const inDur = sensation > 0 ? fast : slow;
+  const outDur = sensation > 0 ? slow : fast;
+  const durs = [];
+  for (let i = 0; i < moves; i++) {
+    if (pattern === 1 || pattern === 3) durs.push(i % 2 === 0 ? inDur : outDur);
+    else durs.push(1);
+  }
+  return durs;
+}
+
+function stdStrokeAccel(pattern, sensation) {
+  if (pattern === 2) {
+    if (sensation >= 0) return arduinoMap(sensation, 0, 100, 1 / 3, 0.5);
+    return arduinoMap(-sensation, 0, 100, 1 / 3, 0.05);
+  }
+  return 1 / 3;
+}
+
+// Returns the pattern's target positions (0..100) over `moves` moves,
+// mirroring StrokeEngine's nextTarget() for each pattern.
+function stdPatternTargets(pattern, depth, stroke, sensation, moves) {
+  const rand = mulberry32(0xC0FFEE);
+  const rampN = Math.max(1, strokeRampCount(sensation));
+  const targets = [];
+  let half = true;
+  let lastTarget = depth;
+
+  for (let i = 0; i < moves; i++) {
+    let pos = depth;
+    switch (pattern) {
+      case 0: { // SimpleStroke
+        const maxRange = Math.min(depth, stroke) / 2 * Math.abs(sensation / 100);
+        const r = maxRange * rand();
+        if (i % 2) { pos = depth - stroke; if (sensation < 0) pos += r; }
+        else { pos = depth; if (sensation > 0) pos -= r; }
+        break;
+      }
+      case 1: // TeasingPounding
+      case 2: // RoboStroke
+      case 5: // StopNGo (position envelope; pauses are timing-only)
+        pos = (i % 2) ? depth - stroke : depth;
+        break;
+      case 3: { // HalfnHalf
+        if (i === 0) half = true;
+        const s = half ? stroke / 2 : stroke;
+        if (i % 2) { pos = depth - stroke; half = !half; }
+        else pos = (depth - stroke) + s;
+        break;
+      }
+      case 4: { // Deeper
+        if (i % 2) pos = depth - stroke;
+        else {
+          const slope = Math.min(stroke, depth) / rampN;
+          const cycleIndex = (Math.floor(i / 2) % rampN) + 1;
+          pos = (depth - Math.min(depth, stroke)) + slope * cycleIndex;
+        }
+        break;
+      }
+      case 6: { // Insist
+        if (i % 2) pos = depth;
+        else {
+          const slope = Math.min(stroke, depth) / rampN;
+          const cycleIndex = (Math.floor(i / 2) % rampN) + 1;
+          pos = depth - slope * (rampN - cycleIndex);
+        }
+        break;
+      }
+      case 7: { // ProgressiveStroke
+        const segmentLength = Math.min(stroke, depth) / rampN;
+        const fullCycleIndex = Math.floor(i / 2) % (rampN * 2 - 1);
+        let position = fullCycleIndex % rampN;
+        if (fullCycleIndex > rampN - 1) {
+          position = rampN - position;
+          if (i % 2) position -= 2;
+        } else {
+          if (!(i % 2)) position += 1;
+        }
+        pos = depth - segmentLength * position;
+        break;
+      }
+      case 8: { // RandomStroke
+        const maxRange = Math.min(depth, stroke);
+        const maxStroke = maxRange * (sensation / 250 + 0.5);
+        let dist = maxRange;
+        for (let k = 0; k < 10 && dist >= maxStroke; k++) {
+          const target = maxRange * rand();
+          pos = depth - target;
+          dist = Math.abs(pos - lastTarget);
+        }
+        lastTarget = pos;
+        break;
+      }
+      case 9: { // PointStroke
+        const offset = stroke * (1 - ((sensation + 100) / 200));
+        pos = depth - offset;
+        break;
+      }
+      default:
+        pos = (i % 2) ? depth - stroke : depth;
+    }
+    targets.push(clamp(Math.round(pos), 0, 100));
+  }
+  return targets;
+}
+
+function drawStdGraph() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const { x: xMin, y: yMin, w: xSpan, h: ySpan } = plotBounds();
+  const maxVal = clamp(stdValues.max, 0, 100);
+  const minVal = clamp(stdValues.min, 0, 100);
+  const yMax = yMin + (1 - maxVal / 100) * ySpan;
+  const yMinDepth = yMin + (1 - minVal / 100) * ySpan;
+
+  ctx.fillStyle = BASE_COLORS[0]; ctx.fillRect(xMin, yMax, xSpan, 2);
+  ctx.fillStyle = BASE_COLORS[1]; ctx.fillRect(xMin, yMinDepth, xSpan, 2);
+
+  const depth = maxVal;
+  const stroke = Math.max(0, maxVal - minVal);
+  const sensation = stdValues.sensation * 2 - 100;
+  const pattern = stdValues.pattern;
+
+  // Only draw the motion line for patterns we know how to render.
+  if (pattern >= 0 && pattern < STD_KNOWN_PATTERN_COUNT) {
+    ctx.strokeStyle = DOT_MAIN; ctx.lineWidth = 2; ctx.lineJoin = "round";
+    ctx.beginPath();
+
+    if (pattern === 9) { // PointStroke: flat line at the point
+      const offset = stroke * (1 - ((sensation + 100) / 200));
+      const pos = clamp(depth - offset, 0, 100);
+      const y = yMin + (1 - pos / 100) * ySpan;
+      ctx.moveTo(xMin, y);
+      ctx.lineTo(xMin + xSpan, y);
+    } else {
+      const period = stdPatternPeriod(pattern, sensation);
+      const targets = stdPatternTargets(pattern, depth, stroke, sensation, period);
+      const durations = stdStrokeDurations(pattern, sensation, targets.length);
+      const accelX = stdStrokeAccel(pattern, sensation);
+      const total = durations.reduce((a, b) => a + b, 0) || 1;
+      let pos = minVal;
+      let xAcc = 0;
+      let first = true;
+      for (let i = 0; i < targets.length; i++) {
+        const target = targets[i];
+        const dur = durations[i];
+        const x0 = xMin + (xAcc / total) * xSpan;
+        const x1 = xMin + ((xAcc + dur) / total) * xSpan;
+        const sub = Math.max(2, Math.round(40 / targets.length));
+        for (let j = 0; j <= sub; j++) {
+          const t = j / sub;
+          const p = pos + (target - pos) * trapEase(t, accelX);
+          const px = x0 + (x1 - x0) * t;
+          const py = yMin + (1 - p / 100) * ySpan;
+          if (first) { ctx.moveTo(px, py); first = false; }
+          else ctx.lineTo(px, py);
+        }
+        pos = target;
+        xAcc += dur;
+      }
+    }
+    ctx.stroke();
+  }
+
+  $("left-meter").style.height = maxVal + "%";
+  $("right-meter").style.height = minVal + "%";
+}
+
+function drawGraph() {
+  if (appMode === "std") drawStdGraph();
+  else if (viewMode === "mod") drawModGraph();
+  else drawMainGraph();
+}
+
+function resizeCanvas() {
+  if (focusedMode()) {
+    const wrap = document.querySelector(".visualizer-area");
+    if (wrap) {
+      const meters = [...wrap.querySelectorAll(".meter-col")];
+      const mw = meters.reduce((s, m) => s + m.offsetWidth, 0);
+      const avail = Math.max(120, Math.round(wrap.clientWidth - mw - 16));
+      canvas.width = avail;
+      canvas.height = 96;
+      canvas.style.width = avail + "px";
+      canvas.style.height = "96px";
+    }
+  } else {
+    canvas.width = 280;
+    canvas.height = 132;
+    canvas.style.width = "";
+    canvas.style.height = "";
+  }
+}
+
+// ---------- Events ----------
+$("ble-button").onclick = connect;
+$("header-disconnect").onclick = disconnect;
+$("modeAp").onclick = () => { appMode = "ap"; buildInterface(); };
+$("modeStd").onclick = () => { appMode = "std"; buildInterface(); };
+$("btnStart").onclick = toggleStart;
+$("btnSavePreset").onclick = () => {
+  const n = $("presetName").value.trim();
+  if (!n) return;
+  presetNames.push(n);
+  $("presetName").value = "";
+  writePreset(">" + n).catch(() => {});
+  renderPresets();
+};
+$("btnFactoryReset").onclick = () => {
+  presetNames = [];
+  writePreset("^").catch(() => {});
+  renderPresets();
+};
+$("btnResetValues").onclick = resetAllValues;
+
+// ---------- Gamepad + keyboard mapping ----------
+const BTN_NAMES = { 0:"A", 1:"B", 2:"X", 3:"Y", 4:"LB", 5:"RB", 6:"LT", 7:"RT", 8:"Back", 9:"Start", 10:"L3", 11:"R3", 12:"D-pad Up", 13:"D-pad Down", 14:"D-pad Left", 15:"D-pad Right", 16:"Home" };
+const STICK_NAMES = { 0:"Left stick", 2:"Right stick" };
+const KEY_LABELS = { "ArrowUp":"↑", "ArrowDown":"↓", "ArrowLeft":"←", "ArrowRight":"→", "Space":"Space", "Enter":"Enter", "ShiftLeft":"Shift", "ShiftRight":"Shift", "ControlLeft":"Ctrl", "ControlRight":"Ctrl", "AltLeft":"Alt", "AltRight":"Alt", "Backspace":"⌫", "Tab":"Tab", "Escape":"Esc" };
+const GP_ACTIONS = [
+  { id:"speedUp",   label:"Speed up",        mode:"both", repeat:true, help:"Stroke speed 0–100. BOTH modes: Standard = engine speed; Advanced = the Speed value at the bottom of the screen." },
+  { id:"speedDown", label:"Speed down",      mode:"both", repeat:true, help:"Stroke speed 0–100. BOTH modes: Standard = engine speed; Advanced = the Speed value at the bottom of the screen." },
+  { id:"maxUp",     label:"Max depth up",    mode:"std",  repeat:true, help:"Standard mode: increases the Max depth position (stroke goes deeper)." },
+  { id:"maxDown",   label:"Max depth down",  mode:"std",  repeat:true, help:"Standard mode: decreases the Max depth position." },
+  { id:"minUp",     label:"Min depth up",    mode:"std",  repeat:true, help:"Standard mode: increases the Min depth position (stroke starts deeper)." },
+  { id:"minDown",   label:"Min depth down",  mode:"std",  repeat:true, help:"Standard mode: decreases the Min depth position." },
+  { id:"sensationUp",   label:"Sensation up",   mode:"std", repeat:true, help:"Standard mode: increases sensation 0–100 (50 = neutral)." },
+  { id:"sensationDown", label:"Sensation down", mode:"std", repeat:true, help:"Standard mode: decreases sensation 0–100 (50 = neutral)." },
+  { id:"start",     label:"Start / Stop",    mode:"both", help:"Starts or stops the stroke engine. BOTH modes." },
+  { id:"mode",      label:"Mode toggle",     mode:"both", help:"Switches between the Standard and Advanced screens. BOTH modes." },
+  { id:"patternNext", label:"Pattern next (Std)", mode:"std", repeat:true, help:"Standard mode: next stroke pattern." },
+  { id:"patternPrev", label:"Pattern prev (Std)", mode:"std", repeat:true, help:"Standard mode: previous stroke pattern." },
+  { id:"navNext",   label:"Next base/modifier (AP)", mode:"ap", repeat:true, help:"Advanced mode: moves the highlight to the next base value (or modifier type)." },
+  { id:"navPrev",   label:"Prev base/modifier (AP)", mode:"ap", repeat:true, help:"Advanced mode: moves the highlight to the previous base value (or modifier type)." },
+  { id:"valueUp",   label:"Value +1 (AP)",   mode:"ap", repeat:true, help:"Advanced mode: increases the currently highlighted value by 1." },
+  { id:"valueDown", label:"Value -1 (AP)",   mode:"ap", repeat:true, help:"Advanced mode: decreases the currently highlighted value by 1." },
+  { id:"modEnter",  label:"Enter modifier (AP)", mode:"ap", help:"Advanced mode: opens the modifier controls for the highlighted base value." },
+  { id:"modBack",   label:"Back to main (AP)",  mode:"ap", help:"Advanced mode: closes the modifier controls and returns to the main list." },
+  { id:"presetNext", label:"Preset next (AP)", mode:"ap", repeat:true, help:"Advanced mode: next saved preset." },
+  { id:"presetPrev", label:"Preset prev (AP)", mode:"ap", repeat:true, help:"Advanced mode: previous saved preset." },
+  { id:"colLeft",  label:"Hide/show sliders (◀)",  mode:"both", help:"Landscape: toggles the left sliders column." },
+  { id:"colRight", label:"Hide/show settings (▶)", mode:"both", help:"Landscape: toggles the right settings column." }
+];
+const DEFAULT_BINDINGS = {
+  speedUp:     { src:"pad", kind:"stick", idx:0, dir:"up" },
+  speedDown:   { src:"pad", kind:"stick", idx:0, dir:"down" },
+  maxUp:       { src:"pad", kind:"stick", idx:0, dir:"left" },
+  maxDown:     { src:"pad", kind:"stick", idx:0, dir:"right" },
+  minUp:       { src:"pad", kind:"stick", idx:2, dir:"up" },
+  minDown:     { src:"pad", kind:"stick", idx:2, dir:"down" },
+  sensationUp:   { src:"pad", kind:"stick", idx:2, dir:"left" },
+  sensationDown: { src:"pad", kind:"stick", idx:2, dir:"right" },
+  start:       { src:"pad", kind:"btn", idx:0 },
+  mode:        { src:"pad", kind:"btn", idx:3 },
+  patternNext: { src:"pad", kind:"btn", idx:15 },
+  patternPrev: { src:"pad", kind:"btn", idx:14 },
+  navNext:     { src:"pad", kind:"btn", idx:15 },
+  navPrev:     { src:"pad", kind:"btn", idx:14 },
+  valueUp:     { src:"pad", kind:"btn", idx:12 },
+  valueDown:   { src:"pad", kind:"btn", idx:13 },
+  modEnter:    { src:"pad", kind:"btn", idx:2 },
+  modBack:     { src:"pad", kind:"btn", idx:1 },
+  presetNext:  { src:"pad", kind:"btn", idx:5 },
+  presetPrev:  { src:"pad", kind:"btn", idx:4 },
+  colLeft:     { src:"pad", kind:"btn", idx:10 },
+  colRight:    { src:"pad", kind:"btn", idx:11 }
+};
+const DEFAULT_KB_BINDINGS = {
+  speedUp:       { src:"kb", kind:"btn", code:"ArrowUp", key:"↑" },
+  speedDown:     { src:"kb", kind:"btn", code:"ArrowDown", key:"↓" },
+  maxUp:         { src:"kb", kind:"btn", code:"KeyW", key:"w" },
+  maxDown:       { src:"kb", kind:"btn", code:"KeyS", key:"s" },
+  minUp:         { src:"kb", kind:"btn", code:"KeyE", key:"e" },
+  minDown:       { src:"kb", kind:"btn", code:"KeyD", key:"d" },
+  sensationUp:   { src:"kb", kind:"btn", code:"KeyR", key:"r" },
+  sensationDown: { src:"kb", kind:"btn", code:"KeyF", key:"f" },
+  start:         { src:"kb", kind:"btn", code:"Space", key:" " },
+  mode:          { src:"kb", kind:"btn", code:"KeyM", key:"m" },
+  patternNext:   { src:"kb", kind:"btn", code:"BracketRight", key:"]" },
+  patternPrev:   { src:"kb", kind:"btn", code:"BracketLeft", key:"[" },
+  navNext:       { src:"kb", kind:"btn", code:"Period", key:"." },
+  navPrev:       { src:"kb", kind:"btn", code:"Comma", key:"," },
+  valueUp:       { src:"kb", kind:"btn", code:"Equal", key:"=" },
+  valueDown:     { src:"kb", kind:"btn", code:"Minus", key:"-" },
+  modEnter:      { src:"kb", kind:"btn", code:"Enter", key:"Enter" },
+  modBack:       { src:"kb", kind:"btn", code:"Backspace", key:"⌫" },
+  presetNext:    { src:"kb", kind:"btn", code:"KeyN", key:"n" },
+  presetPrev:    { src:"kb", kind:"btn", code:"KeyB", key:"b" },
+  colLeft:       { src:"kb", kind:"btn", code:"KeyO", key:"o" },
+  colRight:      { src:"kb", kind:"btn", code:"KeyP", key:"p" }
+};
+
+function loadBindings() {
+  let pad = Object.assign({}, DEFAULT_BINDINGS);
+  let kb = Object.assign({}, DEFAULT_KB_BINDINGS);
+  try {
+    const raw = localStorage.getItem("ossm-input-bindings");
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      for (const id in parsed) {
+        const b = parsed[id];
+        if (!b) continue;
+        if (b.src === "kb") kb[id] = b; else pad[id] = b;
+      }
+    }
+  } catch (e) {}
+  try {
+    const raw2 = localStorage.getItem("ossm-input-kb-bindings");
+    if (raw2) {
+      const p2 = JSON.parse(raw2);
+      for (const id in p2) kb[id] = p2[id];
+    }
+  } catch (e) {}
+  return { pad, kb };
+}
+function saveBindings() {
+  try { localStorage.setItem("ossm-input-bindings", JSON.stringify(bindings)); } catch (e) {}
+  try { localStorage.setItem("ossm-input-kb-bindings", JSON.stringify(kbBindings)); } catch (e) {}
+}
+
+let _loadedBindings = loadBindings();
+let bindings = _loadedBindings.pad;
+let kbBindings = _loadedBindings.kb;
+let bindViewSlot = "pad";
+try { const v = localStorage.getItem("ossm-bind-view"); if (v === "kb" || v === "pad") bindViewSlot = v; } catch (e) {}
+let gpIndex = null;
+let gpPrevButtons = [];
+let gpPrevAxes = [];
+let listeningFor = null;
+const gpRepeatState = {};
+const kbDown = {}, kbJust = {};
+
+function currentGamepad() {
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  if (gpIndex !== null && pads[gpIndex] && pads[gpIndex].connected) return pads[gpIndex];
+  for (const p of pads) if (p && p.connected) return p;
+  return null;
+}
+function kbHeldCount() { return Object.keys(kbDown).length; }
+function keyLabel(code, key) {
+  if (KEY_LABELS[code]) return KEY_LABELS[code];
+  if (code && code.startsWith("Key")) return code.slice(3);
+  if (code && code.startsWith("Digit")) return code.slice(5);
+  return key || code || "?";
+}
+
+function describeBinding(b) {
+  if (!b) return "—";
+  if (b.src === "kb") return keyLabel(b.code, b.key);
+  if (b.kind === "btn" || b.kind === "trigger") return BTN_NAMES[b.idx] || ("Button " + b.idx);
+  if (b.kind === "axis") {
+    const axis = (b.idx % 2 === 0) ? "X" : "Y";
+    const stick = STICK_NAMES[b.idx - (b.idx % 2)] || ("Axis " + b.idx);
+    return stick + " " + axis;
+  }
+  if (b.kind === "stick") return (STICK_NAMES[b.idx] || ("Stick " + b.idx)) + " " + b.dir;
+  return "?";
+}
+
+function bindingKey(b) {
+  if (!b) return null;
+  if (b.src === "kb") return "kb:" + b.code;
+  if (b.kind === "btn" || b.kind === "trigger") return "pad:btn:" + b.idx;
+  if (b.kind === "stick") return "pad:stick:" + b.idx + ":" + b.dir;
+  if (b.kind === "axis") return "pad:axis:" + b.idx;
+  return "other:" + JSON.stringify(b);
+}
+
+function modesOverlap(a, b) {
+  return a.mode === b.mode || a.mode === "both" || b.mode === "both";
+}
+
+function dupIn(map, byKey, a) {
+  const k = bindingKey(map[a.id]);
+  if (!k) return false;
+  const arr = byKey[k];
+  if (!arr) return false;
+  for (const o of arr) if (o.id !== a.id && modesOverlap(a, o)) return true;
+  return false;
+}
+
+function buildBindingUI() {
+  const list = $("bind-list");
+  if (!list) return;
+  list.innerHTML = "";
+  const map = bindViewSlot === "kb" ? kbBindings : bindings;
+  const byKey = {};
+  for (const a of GP_ACTIONS) {
+    const k = bindingKey(map[a.id]);
+    if (k) (byKey[k] = byKey[k] || []).push(a);
+  }
+  for (const a of GP_ACTIONS) {
+    const dup = dupIn(map, byKey, a);
+    const row = document.createElement("div");
+    row.className = "bind-row" + (dup ? " bind-conflict" : "");
+    const label = document.createElement("span");
+    label.className = "bind-label";
+    label.textContent = a.label + (dup ? " ⚠" : "");
+    label.title = (a.help || "") + (dup ? "\n\n⚠ Same input is assigned to more than one action." : "");
+    const val = document.createElement("span");
+    val.className = "bind-val";
+    val.textContent = describeBinding(map[a.id]);
+    const btn = document.createElement("button");
+    btn.className = "bind-btn";
+    const listening = listeningFor && listeningFor.id === a.id && listeningFor.slot === bindViewSlot;
+    btn.textContent = listening ? "Listening…" : "Bind";
+    btn.onclick = () => startBind(a.id, bindViewSlot);
+    const clearBtn = document.createElement("button");
+    clearBtn.className = "bind-clear";
+    clearBtn.textContent = "✕";
+    clearBtn.title = "Clear this binding";
+    clearBtn.onclick = () => { map[a.id] = null; saveBindings(); buildBindingUI(); const bs = $("bind-status"); if (bs) bs.textContent = "Cleared."; };
+    row.appendChild(label); row.appendChild(val); row.appendChild(btn); row.appendChild(clearBtn);
+    list.appendChild(row);
+  }
+  const bp = $("bindViewPad"), bk = $("bindViewKb");
+  if (bp) bp.classList.toggle("active", bindViewSlot === "pad");
+  if (bk) bk.classList.toggle("active", bindViewSlot === "kb");
+}
+
+function startBind(actionId, slot) {
+  wizard.active = false;
+  hideWizard();
+  listeningFor = { id: actionId, slot };
+  const a = GP_ACTIONS.find(x => x.id === actionId);
+  const bs = $("bind-status");
+  const what = slot === "kb" ? "a key" : "a button or stick";
+  if (bs) bs.textContent = "Listening for \"" + (a ? a.label : actionId) + "\"… press " + what + ".";
+  buildBindingUI();
+}
+
+function stickAxisSign(b) {
+  const axOff = (b.dir === "up" || b.dir === "down") ? 1 : 0;
+  const sign = (b.dir === "up" || b.dir === "left") ? -1 : 1;
+  return [b.idx + axOff, sign];
+}
+
+function detectInput(slot) {
+  if (slot !== "pad") {
+    for (const code in kbJust) {
+      const k = kbDown[code];
+      if (k) return { src:"kb", kind:"btn", code, key:k.key };
+    }
+  }
+  if (slot === "kb") return null;
+  const gp = currentGamepad();
+  if (!gp) return null;
+  for (let i = 0; i < gp.buttons.length; i++) {
+    const cur = !!(gp.buttons[i] && gp.buttons[i].pressed);
+    if (cur && !gpPrevButtons[i]) return { src:"pad", kind:"btn", idx:i };
+  }
+  for (const stickIdx of [0, 2]) {
+    for (const dir of ["up", "down", "left", "right"]) {
+      const sa = stickAxisSign({ idx: stickIdx, dir });
+      const axIdx = sa[0], sign = sa[1];
+      const cur = gp.axes[axIdx] || 0;
+      const prev = gpPrevAxes[axIdx] || 0;
+      const on = sign > 0 ? cur > 0.6 : cur < -0.6;
+      const was = sign > 0 ? prev > 0.6 : prev < -0.6;
+      if (on && !was) return { src:"pad", kind:"stick", idx: stickIdx, dir };
+    }
+  }
+  return null;
+}
+
+function onBindingCaptured(d) {
+  const lf = listeningFor;
+  const id = lf.id;
+  const slot = d.src === "kb" ? "kb" : "pad";
+  listeningFor = null;
+  const map = slot === "kb" ? kbBindings : bindings;
+  map[id] = d;
+  const key = bindingKey(d);
+  const target = GP_ACTIONS.find(x => x.id === id);
+  const stolen = [];
+  for (const a of GP_ACTIONS) {
+    if (a.id === id) continue;
+    if (bindingKey(map[a.id]) === key && target && modesOverlap(target, a)) {
+      map[a.id] = null; stolen.push(a.label);
+    }
+  }
+  saveBindings();
+  buildBindingUI();
+  if (wizard.active) {
+    wizard.note = stolen.length ? ("⚠ That input was already used for " + stolen.join(", ") + " — it has been moved.") : "";
+    wizardAdvance();
+  } else {
+    const bs = $("bind-status");
+    if (bs) bs.textContent = stolen.length ? ("Bound. ⚠ Moved from: " + stolen.join(", ")) : "Bound.";
+  }
+}
+
+function gpSpeedStep(d) {
+  if (appMode === "std") {
+    stdValues.speed = clamp(stdValues.speed + d * 4, 0, 100);
+    stdWrite("set:speed:" + stdValues.speed);
+  } else {
+    setSpeed(clamp(speed() + d * 4, 0, 100));
+  }
+}
+function gpStdStep(field, d) {
+  if (appMode !== "std") return;
+  const step = (field === "sensation") ? 3 : 2;
+  stdValues[field] = clamp(stdValues[field] + d * step, 0, 100);
+  if (field === "max" && stdValues.min > stdValues.max) stdValues.min = stdValues.max;
+  if (field === "min" && stdValues.min > stdValues.max) stdValues.min = stdValues.max;
+  stdWrite("set:" + field + ":" + stdValues[field]);
+}
+function gpCyclePattern(delta) {
+  if (appMode !== "std") return;
+  const n = stdPatterns.length || STD_KNOWN_PATTERN_COUNT;
+  stdValues.pattern = ((stdValues.pattern + delta) % n + n) % n;
+  stdWrite("set:pattern:" + stdValues.pattern);
+  buildInterface();
+}
+function gpToggleMode() {
+  appMode = appMode === "std" ? "ap" : "std";
+  buildInterface();
+}
+function gpNav(delta) {
+  if (viewMode === "mod") {
+    activeModifierIndex = clamp(activeModifierIndex + delta, 0, MODIFIER_NAMES.length - 1);
+  } else {
+    activeBaseIndex = clamp(activeBaseIndex + delta, 0, BASE_NAMES.length - 1);
+    modifierRowVisible = true;
+  }
+  buildInterface();
+}
+function gpValueStep(delta) {
+  const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+  if (viewMode === "mod") {
+    const mi = clamp(activeModifierIndex, 0, MODIFIER_NAMES.length - 1);
+    setModifier(bi, mi, Math.round(settingValue(BASE_NAMES[bi] + MODIFIER_NAMES[mi])) + delta);
+  } else {
+    setBase(bi, Math.round(settingValue(BASE_NAMES[bi])) + delta);
+  }
+}
+function gpModEnter() {
+  viewMode = "mod";
+  modifierRowVisible = true;
+  buildInterface();
+}
+function gpModBack() {
+  viewMode = "main";
+  buildInterface();
+}
+function gpPresetNav(delta) {
+  if (!presetNames.length) return;
+  const idx = presetNames.indexOf(presetSelection);
+  const next = ((idx + delta) % presetNames.length + presetNames.length) % presetNames.length;
+  presetSelection = presetNames[next];
+  writePreset(":" + presetSelection).catch(() => {});
+  renderPresets();
+  buildInterface();
+}
+function gpHandleDigital(id) {
+  switch (id) {
+    case "start": toggleStart(); break;
+    case "mode": gpToggleMode(); break;
+    case "speedUp": gpSpeedStep(1); break;
+    case "speedDown": gpSpeedStep(-1); break;
+    case "maxUp": gpStdStep("max", 1); break;
+    case "maxDown": gpStdStep("max", -1); break;
+    case "minUp": gpStdStep("min", 1); break;
+    case "minDown": gpStdStep("min", -1); break;
+    case "sensationUp": gpStdStep("sensation", 1); break;
+    case "sensationDown": gpStdStep("sensation", -1); break;
+    case "patternNext": gpCyclePattern(1); break;
+    case "patternPrev": gpCyclePattern(-1); break;
+    case "navNext": gpNav(1); break;
+    case "navPrev": gpNav(-1); break;
+    case "valueUp": gpValueStep(1); break;
+    case "valueDown": gpValueStep(-1); break;
+    case "modEnter": gpModEnter(); break;
+    case "modBack": gpModBack(); break;
+    case "presetNext": gpPresetNav(1); break;
+    case "presetPrev": gpPresetNav(-1); break;
+    case "colLeft": toggleColSide(1); break;
+    case "colRight": toggleColSide(3); break;
+  }
+}
+
+function bindingHeld(b, gp) {
+  if (!b) return false;
+  if (b.src === "kb") return !!kbDown[b.code];
+  if (!gp) return false;
+  if (b.kind === "btn" || b.kind === "trigger") return !!(gp.buttons[b.idx] && gp.buttons[b.idx].pressed);
+  if (b.kind === "stick") {
+    const sa = stickAxisSign(b);
+    const v = gp.axes[sa[0]] || 0;
+    return sa[1] > 0 ? v > 0.6 : v < -0.6;
+  }
+  return false;
+}
+function gpFire(held, id, handler, repeat) {
+  const now = performance.now();
+  const st = gpRepeatState[id] || (gpRepeatState[id] = { on:false, since:0, last:0 });
+  if (held && !st.on) { st.on = true; st.since = now; st.last = now; handler(); return; }
+  if (held && st.on) {
+    if (repeat && now - st.since > 400 && now - st.last > 90) { st.last = now; handler(); }
+    return;
+  }
+  st.on = false;
+}
+
+function gpPoll() {
+  const gp = currentGamepad();
+  const status = $("pad-status");
+  if (gp) {
+    padStateText = "🎮 " + gp.id;
+    if (status) { status.textContent = "🎮 Connected: " + gp.id; status.classList.add("active"); }
+  } else if (kbHeldCount()) {
+    padStateText = "⌨️ Keyboard";
+    if (status) { status.textContent = "⌨️ Keyboard input"; status.classList.add("active"); }
+  } else {
+    padStateText = "";
+    if (status) { status.textContent = "🎮 Press a button on the controller, or use the keyboard…"; status.classList.remove("active"); }
+  }
+  updateFocusStatus();
+
+  if (listeningFor) {
+    const d = detectInput(listeningFor.slot);
+    if (d) onBindingCaptured(d);
+    if (gp) { gpPrevButtons = gp.buttons.slice(); gpPrevAxes = (gp.axes || []).slice(); }
+    for (const k in kbJust) delete kbJust[k];
+    return;
+  }
+
+  for (const da of GP_ACTIONS) {
+    if (da.mode !== "both" && da.mode !== appMode) continue;
+    const held = bindingHeld(bindings[da.id], gp) || bindingHeld(kbBindings[da.id], null);
+    gpFire(held, da.id, () => gpHandleDigital(da.id), !!da.repeat);
+  }
+
+  const dbg = $("pad-debug");
+  if (dbg && dbg.open) {
+    let axes = "";
+    if (gp) axes = (gp.axes || []).map((a, i) => "ax" + i + "=" + a.toFixed(2)).join("  ");
+    const pressed = [];
+    if (gp) {
+      for (let i = 0; i < gp.buttons.length; i++) {
+        const b = gp.buttons[i];
+        if (b && (b.pressed || b.value > 0.1)) pressed.push("B" + i + (b.value > 0.1 ? "(" + b.value.toFixed(2) + ")" : ""));
+      }
+    }
+    const keys = Object.keys(kbDown).map(c => keyLabel(c, kbDown[c].key));
+    const aEl = $("pad-debug-axes");
+    if (aEl) aEl.textContent = "Axes: " + (axes || "—") + (keys.length ? "   |   Keys: " + keys.join(" ") : "");
+    const bEl = $("pad-debug-buttons");
+    if (bEl) bEl.textContent = "Pressed: " + (pressed.length ? pressed.join("  ") : "—");
+  }
+
+  if (gp) { gpPrevButtons = gp.buttons.slice(); gpPrevAxes = (gp.axes || []).slice(); }
+  for (const k in kbJust) delete kbJust[k];
+}
+
+window.addEventListener("gamepadconnected", (e) => { gpIndex = e.gamepad.index; });
+window.addEventListener("gamepaddisconnected", (e) => { if (gpIndex === e.gamepad.index) { gpIndex = null; gpPrevButtons = []; gpPrevAxes = []; } });
+
+// Keyboard input (PC browsers) — ignored while typing in form fields.
+window.addEventListener("keydown", (e) => {
+  const t = e.target && e.target.tagName;
+  if (t === "INPUT" || t === "TEXTAREA" || t === "SELECT") return;
+  if (e.ctrlKey || e.metaKey || e.altKey || e.repeat) return;
+  const code = e.code || ("Key" + (e.key || "").toUpperCase());
+  kbDown[code] = { key: e.key, code };
+  kbJust[code] = true;
+  const used = Object.values(kbBindings).some(b => b && b.code === code);
+  if (listeningFor || wizard.active || used) e.preventDefault();
+});
+window.addEventListener("keyup", (e) => { const code = e.code || ""; delete kbDown[code]; });
+window.addEventListener("blur", () => { for (const k in kbDown) delete kbDown[k]; for (const k in kbJust) delete kbJust[k]; });
+
+// ---- Setup wizard (guided, step-by-step input assignment) ----
+const wizard = { active: false, step: 0, order: [], note: null, slot: "pad" };
+function hideWizard() { const w = $("wizard"); if (w) w.style.display = "none"; }
+function wizardModeNote(a) {
+  if (a.mode === "both") return "Works in BOTH Standard and Advanced modes.";
+  if (a.mode === "std") return "Standard mode only.";
+  return "Advanced mode only.";
+}
+function wizardGoTo(step) {
+  wizard.step = clamp(step, 0, wizard.order.length - 1);
+  listeningFor = { id: wizard.order[wizard.step], slot: wizard.slot };
+  wizardRender();
+}
+function wizardRender() {
+  const w = $("wizard");
+  if (!w) return;
+  if (!wizard.active) { w.style.display = "none"; return; }
+  w.style.display = "";
+  const id = wizard.order[wizard.step];
+  const a = GP_ACTIONS.find(x => x.id === id);
+  $("wizard-progress").textContent = "Step " + (wizard.step + 1) + " of " + wizard.order.length;
+  $("wizard-label").textContent = a ? a.label : id;
+  const defDesc = wizard.slot === "kb" ? describeBinding(DEFAULT_KB_BINDINGS[id]) : describeBinding(DEFAULT_BINDINGS[id]);
+  const how = wizard.slot === "kb" ? "Press a key" : "Press a button or move a stick";
+  $("wizard-prompt").textContent = how + " — default: " + (wizard.slot === "kb" ? "⌨ " : "🎮 ") + defDesc + ".";
+  $("wizard-help").textContent = (a ? a.help : "") + "  " + (a ? wizardModeNote(a) : "");
+  const note = $("wizard-note");
+  if (note) { note.style.display = wizard.note ? "" : "none"; note.textContent = wizard.note || ""; }
+  wizard.note = null;
+  const wvp = $("wizardViewPad"), wvk = $("wizardViewKb");
+  if (wvp) wvp.classList.toggle("active", wizard.slot === "pad");
+  if (wvk) wvk.classList.toggle("active", wizard.slot === "kb");
+  buildBindingUI();
+}
+function wizardAdvance() {
+  if (wizard.step >= wizard.order.length - 1) { wizardFinish(); return; }
+  wizardGoTo(wizard.step + 1);
+}
+function wizardBack() { if (wizard.step > 0) wizardGoTo(wizard.step - 1); }
+function wizardSkip() {
+  const id = wizard.order[wizard.step];
+  bindings[id] = null;
+  kbBindings[id] = null;
+  saveBindings();
+  buildBindingUI();
+  wizardAdvance();
+}
+function wizardCancel() {
+  wizard.active = false; listeningFor = null; hideWizard(); buildBindingUI();
+  const bs = $("bind-status"); if (bs) bs.textContent = "Setup cancelled.";
+}
+function wizardFinish() {
+  wizard.active = false; listeningFor = null; hideWizard(); buildBindingUI();
+  const bs = $("bind-status"); if (bs) bs.textContent = "✅ Setup complete — saved in this browser.";
+}
+function startWizard() {
+  wizard.active = true;
+  wizard.order = GP_ACTIONS.map(a => a.id);
+  wizard.slot = bindViewSlot;
+  const panel = $("bind-panel"); if (panel) panel.open = true;
+  listeningFor = null;
+  wizardGoTo(0);
+}
+
+const bw = $("btnWizard");
+if (bw) bw.onclick = startWizard;
+const wbk = $("wizard-back"); if (wbk) wbk.onclick = wizardBack;
+const wsk = $("wizard-skip"); if (wsk) wsk.onclick = wizardSkip;
+const wcn = $("wizard-cancel"); if (wcn) wcn.onclick = wizardCancel;
+const wvp2 = $("wizardViewPad");
+if (wvp2) wvp2.onclick = () => { wizard.slot = "pad"; if (listeningFor) listeningFor.slot = "pad"; wizardRender(); };
+const wvk2 = $("wizardViewKb");
+if (wvk2) wvk2.onclick = () => { wizard.slot = "kb"; if (listeningFor) listeningFor.slot = "kb"; wizardRender(); };
+
+const br = $("bind-reset");
+if (br) br.onclick = () => { wizard.active = false; listeningFor = null; hideWizard(); bindings = Object.assign({}, DEFAULT_BINDINGS); kbBindings = Object.assign({}, DEFAULT_KB_BINDINGS); saveBindings(); buildBindingUI(); };
+const bvp = $("bindViewPad");
+if (bvp) bvp.onclick = () => { bindViewSlot = "pad"; try { localStorage.setItem("ossm-bind-view", bindViewSlot); } catch (e) {} buildBindingUI(); };
+const bvk = $("bindViewKb");
+if (bvk) bvk.onclick = () => { bindViewSlot = "kb"; try { localStorage.setItem("ossm-bind-view", bindViewSlot); } catch (e) {} buildBindingUI(); };
+buildBindingUI();
+setInterval(gpPoll, 33);
+
+// ---- Landscape sidebar toggles ----
+const landCols = (() => { try { return JSON.parse(localStorage.getItem("ossm-land-cols") || "{}"); } catch (e) { return {}; } })();
+function applyColToggles() {
+  const pc = document.querySelector(".phone-container");
+  if (!pc) return;
+  pc.classList.toggle("hide-left", !!landCols.hideLeft);
+  pc.classList.toggle("hide-right", !!landCols.hideRight);
+}
+function focusedMode() {
+  return !!(window.matchMedia && window.matchMedia("(orientation: landscape) and (max-height: 520px)").matches) &&
+         !!landCols.hideLeft && !!landCols.hideRight;
+}
+function toggleColSide(col) {
+  if (col === 1) landCols.hideLeft = !landCols.hideLeft;
+  else landCols.hideRight = !landCols.hideRight;
+  try { localStorage.setItem("ossm-land-cols", JSON.stringify(landCols)); } catch (e) {}
+  applyColToggles();
+  buildInterface();
+}
+applyColToggles();
+const tcl = $("toggleColLeft");
+if (tcl) tcl.onclick = () => toggleColSide(1);
+const tcr = $("toggleColRight");
+if (tcr) tcr.onclick = () => toggleColSide(3);
+
+buildInterface();
+window.addEventListener("resize", () => { if (focusedMode()) { resizeCanvas(); drawGraph(); } });
+</script>
+<script>
+  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>
