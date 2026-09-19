@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>OSSM Advanced Penetration Web</title>
+<title>OSSM Advanced Penetration</title>
 <style>
   :root {
     --bg-color: #0a0a12;
@@ -27,7 +27,7 @@
     display: flex; flex-direction: column; align-items: center;
   }
   .phone-container {
-    width: 100%; max-width: 800px;
+    width: 100%; max-width: 400px;
     background-color: #05050a;
     border: 4px solid #1e293b; border-radius: 24px;
     padding: 16px;
@@ -38,16 +38,24 @@
     background-color: #111827; padding: 10px; border-radius: 12px;
     margin-bottom: 14px; border: 1px solid var(--border-color);
   }
+  .ble-panel.small { padding: 6px 10px; margin-bottom: 10px; }
   .ble-btn { background-color: #2563eb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: .85rem; }
-  .ble-btn.connected { background-color: #16a34a; }
+  .ble-btn.small { padding: 4px 10px; font-size: .75rem; }
+  .ble-btn.danger { background-color: #dc2626; }
   .ble-status { font-size: .8rem; font-family: monospace; color: var(--muted); }
-  .screen-header { text-align: center; font-size: 1.1rem; font-weight: bold; margin-bottom: 12px; color: #fff; }
-  .tabs-container { display: flex; justify-content: space-between; gap: 4px; margin-bottom: 14px; }
+  .ble-status.small { font-size: .7rem; }
+  .header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
+  .screen-header { flex: 1; min-width: 0; text-align: left; font-size: 1.05rem; font-weight: bold; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .conn-dot { width: 10px; height: 10px; border-radius: 50%; background-color: #22c55e; flex: 0 0 auto; box-shadow: 0 0 6px rgba(34, 197, 94, 0.8); }
+  .tabs-container { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .tab-row { display: flex; justify-content: space-between; gap: 4px; }
   .tab-box {
     flex: 1; background-color: #3a3a3a; border-radius: 4px; text-align: center;
     padding: 6px 2px; font-size: .78rem; font-weight: bold; color: var(--text-color);
     border: 2px solid transparent; cursor: pointer;
   }
+  .tab-value { font-size: .85rem; font-weight: bold; line-height: 1.1; }
+  .tab-name { font-size: .55rem; font-weight: normal; line-height: 1.1; margin-top: 2px; }
   .visualizer-area { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 16px; }
   .meter-col { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 0 0 auto; }
   .meter-bar { width: 12px; height: 132px; background-color: var(--panel-bg); border: 2px solid var(--border-color); border-radius: 4px; position: relative; overflow: hidden; }
@@ -59,15 +67,55 @@
   .slider-group:last-child { margin-bottom: 0; }
   .slider-label { display: flex; justify-content: space-between; font-size: .8rem; margin-bottom: 4px; }
   .slider-label .val-num { font-family: monospace; font-size: .9rem; font-weight: bold; }
+  .inline-toggle { display: flex; align-items: center; justify-content: space-between; font-size: .8rem; color: var(--text-color); cursor: pointer; }
+  .switch { position: relative; display: inline-block; width: 36px; height: 20px; flex: 0 0 auto; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #4b5563; border-radius: 20px; transition: .2s; }
+  .switch .slider:before { content: ""; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: #fff; border-radius: 50%; transition: .2s; }
+  .switch input:checked + .slider { background-color: #22c55e; }
+  .switch input:checked + .slider:before { transform: translateX(16px); }
   input[type=range] { width: 100%; height: 6px; background: #1e293b; border-radius: 3px; outline: none; -webkit-appearance: none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer; }
+  .slider-row { display: flex; align-items: center; gap: 8px; }
+  .slider-row .slider-name { flex: 0 0 90px; font-size: .8rem; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .slider-row .val-num { flex: 0 0 auto; min-width: 40px; text-align: left; line-height: 26px; padding: 0 7px; border-radius: 4px; font-family: monospace; font-size: .85rem; font-weight: bold; }
+  .val-input { width: 2.5em; min-width: 0; background: transparent; border: none; outline: none; color: inherit; font: inherit; text-align: inherit; padding: 0; margin: 0; height: 24px; vertical-align: middle; }
+  .val-input::-webkit-outer-spin-button, .val-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .val-input[type=number] { -moz-appearance: textfield; }
+  .slider-row input[type=range] { flex: 1; }
+  .step-btn {
+    flex: 0 0 auto; width: 26px; height: 26px;
+    background: #1e293b; border: 1px solid var(--border-color); border-radius: 6px;
+    color: #fff; font-size: 1.05rem; font-weight: bold; line-height: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0; cursor: pointer; user-select: none; -webkit-user-select: none;
+    touch-action: manipulation;
+  }
+  .step-btn:active { background: #334155; }
   select { background: #1e293b; border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 8px; font-size: .85rem; width: 100%; }
-  .m5-buttons { display: flex; justify-content: space-between; gap: 8px; }
-  .m5-btn { flex: 1; background-color: #1e293b; border: 1px solid #334155; padding: 8px; border-radius: 6px; color: #dde6f0; font-weight: bold; font-size: .8rem; cursor: pointer; }
-  .m5-btn.active { border-color: #5b8cff; color: #5b8cff; }
-  .m5-btn.green { color: #22c55e; }
+  .start-stop-row { position: sticky; bottom: 0; z-index: 10; margin-top: 8px; padding-top: 8px; background: #05050a; }
+  .speed-line { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .speed-label { font-size: .8rem; color: var(--muted); white-space: nowrap; }
+  .speed-val { font-family: monospace; font-size: .9rem; font-weight: bold; color: #fff; min-width: 30px; text-align: right; }
+  .speed-line input[type=range] { flex: 1; }
+  #btnStart { width: 100%; background-color: #16a34a; border: none; border-radius: 10px; padding: 14px; color: #fff; font-weight: bold; font-size: 1rem; cursor: pointer; }
+  #btnStart.stop { background-color: #dc2626; }
+  .reset-row { text-align: center; margin-bottom: 4px; }
+  #btnResetValues { background: none; border: none; color: #ff5b6a; font-size: .78rem; cursor: pointer; text-decoration: underline; padding: 4px 8px; }
   .presets-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; margin-top: 12px; }
-  .presets-panel h3 { margin: 0 0 8px; font-size: .8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .presets-panel summary {
+    list-style: none; cursor: pointer; user-select: none;
+    font-size: .8rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .presets-panel .summary-left { display: flex; align-items: baseline; min-width: 0; }
+  .presets-panel .summary-value { text-transform: none; letter-spacing: 0; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .presets-panel .summary-value:empty { display: none; }
+  .presets-panel .summary-value:not(:empty)::before { content: ":"; margin-right: 5px; }
+  .presets-panel summary::-webkit-details-marker { display: none; }
+  .presets-panel summary::after { content: "▾"; font-size: .7rem; }
+  .presets-panel[open] summary { margin-bottom: 8px; }
+  .presets-panel[open] summary::after { content: "▴"; }
   #presetList { display: flex; gap: 8px; align-items: center; }
   #presetList select { flex: 1; width: auto; min-width: 0; }
   #presetList button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
@@ -78,9 +126,9 @@
   .preset-item button.danger { border-color: #ff5b6a; color: #ff5b6a; }
   .preset-row { display: flex; gap: 8px; margin-top: 10px; }
   .preset-row input { flex: 1; background: #1e293b; border: 1px solid var(--border-color); color: var(--text-color); border-radius: 6px; padding: 8px; font-size: .85rem; }
-  .preset-row button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; }
+  .preset-row button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
   .preset-row button.danger { background: #7f1d1d; }
-  .cpp-logger { width: 100%; max-width: 800px; background: #000; font-family: 'Courier New', monospace; font-size: .75rem; color: #38bdf8; padding: 12px; border-radius: 8px; margin-top: 16px; border: 1px solid #1e293b; box-sizing: border-box; max-height: 250px; overflow-y: auto; }
+  .cpp-logger { width: 100%; max-width: 400px; background: #000; font-family: 'Courier New', monospace; font-size: .75rem; color: #38bdf8; padding: 12px; border-radius: 8px; margin-top: 16px; border: 1px solid #1e293b; box-sizing: border-box; max-height: 250px; overflow-y: auto; }
   @media (max-width: 420px) {
     body { padding: 8px; }
     .phone-container { border-width: 2px; padding: 12px; }
@@ -89,37 +137,45 @@
 </head>
 <body>
 <div class="phone-container">
-  <div class="ble-panel">
+  <div class="ble-panel" id="ble-panel">
     <span class="ble-status" id="ble-text">OSSM: Disconnected</span>
     <button class="ble-btn" id="ble-button">Connect</button>
   </div>
 
-  <div class="screen-header" id="active-title">Advanced Penetration Web</div>
+  <div class="header-row">
+    <span class="conn-dot" id="conn-dot" style="display:none;"></span>
+    <div class="screen-header" id="active-title">OSSM Advanced Penetration</div>
+    <button class="ble-btn small danger" id="header-disconnect" style="display:none;">Disconnect</button>
+  </div>
 
   <div class="tabs-container" id="tabs-wrapper"></div>
 
   <div class="visualizer-area">
-    <div class="meter-col"><div class="meter-label">Top</div><div class="meter-bar"><div class="meter-fill" id="left-meter" style="background-color: var(--color-top);"></div></div></div>
+    <div class="meter-col"><div class="meter-label">Max</div><div class="meter-bar"><div class="meter-fill" id="left-meter" style="background-color: var(--color-top);"></div></div></div>
     <canvas id="graphCanvas" width="280" height="132"></canvas>
-    <div class="meter-col"><div class="meter-label">Bot</div><div class="meter-bar"><div class="meter-fill" id="right-meter" style="background-color: var(--color-bottom);"></div></div></div>
+    <div class="meter-col"><div class="meter-label">Min</div><div class="meter-bar"><div class="meter-fill" id="right-meter" style="background-color: var(--color-bottom);"></div></div></div>
   </div>
+
+  <div class="speed-line" id="speed-control"></div>
 
   <div class="sliders-panel" id="sliders-wrapper"></div>
 
-  <div class="m5-buttons">
-    <button class="m5-btn active" id="btnMain">Main</button>
-    <button class="m5-btn green" id="btnStart">Start</button>
-    <button class="m5-btn" id="btnMods">Modifiers</button>
+  <div class="reset-row" id="reset-row">
+    <button id="btnResetValues">Reset all values</button>
   </div>
 
-  <div class="presets-panel">
-    <h3>Presets</h3>
+  <details class="presets-panel">
+    <summary><span class="summary-left">Presets<span class="summary-value" id="presetSummaryName"></span></span></summary>
     <div id="presetList"></div>
     <div class="preset-row">
       <input type="text" id="presetName" placeholder="New preset name" />
       <button id="btnSavePreset">Save</button>
       <button id="btnFactoryReset" class="danger">Reset</button>
     </div>
+  </details>
+
+  <div class="start-stop-row">
+    <button id="btnStart">Start</button>
   </div>
 </div>
 
@@ -144,33 +200,50 @@ let connected = false;
 let running = false;
 let lastNonZeroSpeed = 50;
 
-const BASE_NAMES = ["Top", "Bottom", "Rise", "Fall", "CurveIn", "CurveOut"];
+const BASE_NAMES = ["Max Depth", "Min Depth", "In Speed", "Out Speed", "In Accel", "Out Accel"];
 const BASE_COLORS = ["#ff0c00", "#ff8100", "#ffff00", "#00ff00", "#0000ff", "#ac8dee"];
-const MODIFIER_NAMES = ["Amount", "StepA", "StepB", "StepC", "StepD", "Phase"];
-const MODIFIER_DISPLAY = ["Amount", "Steps to Min", "Steps at Min", "Steps to Max", "Steps at Max", "Offset"];
+const MODIFIER_NAMES = ["Amplitude", "Steps to Min", "Steps at Min", "Steps to Max", "Steps at Max", "Offset"];
 const MOD_COLORS = ["#38bdf8", "#34d399", "#fbbf24", "#f87171", "#c084fc", "#94a3b8"];
 const SPEED_KEY = "SP";
 
-// Firmware names -> canonical names (used when parsing CONFIG/STATUS strings).
+// Firmware defaults (OSSM-Lite advanced_penetration_structs.h).
+const BASE_DEFAULTS = [10, 0, 100, 100, 40, 40];   // Max Depth, Min Depth, In Speed, Out Speed, In Accel, Out Accel
+const SPEED_DEFAULT = 0;
+const MODIFIER_DEFAULTS = [100, 1, 0, 1, 0, 0];    // Amplitude, Steps to Min, Steps at Min, Steps to Max, Steps at Max, Offset
+
+// Firmware names -> canonical keys (used when parsing CONFIG strings).
 const BASE_ALIAS = {
-  "Max Depth": "Max", "Min": "Bottom",
-  "In Speed": "Rise", "Out Speed": "Fall",
-  "In Accel": "CurveIn", "Out Accel": "CurveOut",
-  "Top": "Top", "Bottom": "Bottom", "Rise": "Rise",
-  "Fall": "Fall", "CurveIn": "CurveIn", "CurveOut": "CurveOut"
+  "Max Depth": "Max Depth", "Min Depth": "Min Depth",
+  "In Speed": "In Speed", "Out Speed": "Out Speed",
+  "In Accel": "In Accel", "Out Accel": "Out Accel"
 };
 const MODIFIER_ALIAS = {
-  "Amplitude": "Amount",
-  "Steps to Min": "StepA", "Steps at Min": "StepB",
-  "Steps to Max": "StepC", "Steps at Max": "StepD",
-  "Offset": "Phase",
-  "Amount": "Amount", "StepA": "StepA", "StepB": "StepB",
-  "StepC": "StepC", "StepD": "StepD", "Phase": "Phase"
+  "Amplitude": "Amplitude",
+  "Steps to Min": "Steps to Min", "Steps at Min": "Steps at Min",
+  "Steps to Max": "Steps to Max", "Steps at Max": "Steps at Max",
+  "Offset": "Offset"
 };
 
-// Combined-key dictionary: settings["Top"], settings["TopAmount"], settings["RiseStepA"], settings["SP"], ...
+// Combined-key dictionary: settings["Max Depth"], settings["Max DepthAmplitude"], settings["In SpeedSteps to Min"], settings["SP"], ...
 // Each entry: { min, max, value }.
-let settings = {};
+// Seeded with the OSSM-Lite advanced-penetration firmware defaults so the graph
+// and tabs render consistently before the device is connected.
+function buildDefaultSettings() {
+  const s = {};
+  const baseMin = [0, 0, 1, 1, 0, 0];
+  const baseMax = [100, 100, 100, 100, 100, 100];
+  const modMin = [0, 1, 0, 1, 0, 0];
+  const modMax = [100, 25, 25, 25, 25, 100];
+  for (let i = 0; i < BASE_NAMES.length; i++) {
+    s[BASE_NAMES[i]] = { min: baseMin[i], max: baseMax[i], value: BASE_DEFAULTS[i] };
+    for (let mi = 0; mi < MODIFIER_NAMES.length; mi++) {
+      s[BASE_NAMES[i] + MODIFIER_NAMES[mi]] = { min: modMin[mi], max: modMax[mi], value: MODIFIER_DEFAULTS[mi] };
+    }
+  }
+  s[SPEED_KEY] = { min: 0, max: 100, value: SPEED_DEFAULT };
+  return s;
+}
+let settings = buildDefaultSettings();
 
 const $ = (id) => document.getElementById(id);
 const log = (msg) => { $("log").textContent = msg || ""; };
@@ -291,9 +364,9 @@ async function connect() {
     connected = true;
     running = speed() > 0;
     lastNonZeroSpeed = speed() > 0 ? speed() : 50;
-    $("ble-text").textContent = "OSSM: Connected 🟢";
-    $("ble-button").textContent = "Connected";
-    $("ble-button").classList.add("connected");
+    $("ble-panel").style.display = "none";
+    $("conn-dot").style.display = "inline-block";
+    $("header-disconnect").style.display = "inline-block";
     buildInterface();
     log("");
   } catch (e) {
@@ -304,10 +377,17 @@ async function connect() {
 
 function onDisconnected() {
   connected = false; running = false;
-  $("ble-text").textContent = "OSSM: Disconnected";
-  $("ble-button").textContent = "Connect";
-  $("ble-button").classList.remove("connected");
+  $("ble-panel").style.display = "";
+  $("conn-dot").style.display = "none";
+  $("header-disconnect").style.display = "none";
   log("Disconnected from OSSM.");
+}
+
+function disconnect() {
+  try {
+    if (server && server.connected) server.disconnect();
+    else if (device && device.gatt.connected) device.gatt.disconnect();
+  } catch (e) { log("Disconnect failed: " + e.message); }
 }
 
 function onStatus(ev) { parseStatus(decode(ev.target.value)); buildInterface(); }
@@ -318,12 +398,23 @@ async function refreshPresets() {
 }
 
 // ---------- Commands ----------
+function baseRange(i) {
+  const s = getSetting(baseKey(i));
+  let lo = s.min, hi = s.max;
+  if (i === 0) lo = Math.max(lo, Math.round(settingValue(BASE_NAMES[1])));
+  else if (i === 1) hi = Math.min(hi, Math.round(settingValue(BASE_NAMES[0])));
+  return { min: lo, max: hi };
+}
+
 function setBase(i, v) {
   const key = baseKey(i);
   const s = getSetting(key);
   v = clamp(Math.round(v), s.min, s.max);
+  if (i === 0) v = Math.max(v, Math.round(settingValue(BASE_NAMES[1])));
+  else if (i === 1) v = Math.min(v, Math.round(settingValue(BASE_NAMES[0])));
   s.value = v;
   settings[key] = s;
+  if (i >= 0 && i < BASE_NAMES.length) activeBaseIndex = i; // highlight the moved setting
   writeControl(`${i}:${v},`).catch(e => log("Write failed: " + e));
   buildInterface();
 }
@@ -334,6 +425,7 @@ function setModifier(bi, mi, v) {
   v = clamp(Math.round(v), s.min, s.max);
   s.value = v;
   settings[key] = s;
+  activeModifierIndex = mi; // highlight the moved modifier
   writeControl(`${bi}:${mi}:${v},`).catch(e => log("Write failed: " + e));
   buildInterface();
 }
@@ -342,31 +434,55 @@ function toggleStart() {
   else setSpeed(lastNonZeroSpeed > 0 ? lastNonZeroSpeed : 50);
 }
 
+function setLocal(key, v) {
+  const s = getSetting(key);
+  s.value = clamp(Math.round(v), s.min, s.max);
+  settings[key] = s;
+}
+
+// Resets every base value, speed, and all modifiers to the firmware defaults.
+function resetAllValues() {
+  for (let i = 0; i < BASE_NAMES.length; i++) setLocal(baseKey(i), BASE_DEFAULTS[i]);
+  setLocal(SPEED_KEY, SPEED_DEFAULT);
+  for (let bi = 0; bi < BASE_NAMES.length; bi++)
+    for (let mi = 0; mi < MODIFIER_NAMES.length; mi++)
+      setLocal(modifierKey(bi, mi), MODIFIER_DEFAULTS[mi]);
+  buildInterface();
+
+  const parts = [];
+  for (let i = 0; i < BASE_NAMES.length; i++) parts.push(`${i}:${BASE_DEFAULTS[i]}`);
+  parts.push(`${speedIndex()}:${SPEED_DEFAULT}`);
+  for (let bi = 0; bi < BASE_NAMES.length; bi++)
+    for (let mi = 0; mi < MODIFIER_NAMES.length; mi++)
+      parts.push(`${bi}:${mi}:${MODIFIER_DEFAULTS[mi]}`);
+  writeControl(parts.join(",") + ",")
+    .then(() => setTimeout(async () => { await refreshStatus(); buildInterface(); }, 800))
+    .catch(e => log("Reset failed: " + e));
+}
+
 // ---------- UI ----------
 let viewMode = "main";          // "main" | "mod"
 let activeBaseIndex = 0;        // 0..5 (main base controls)
 let activeModifierIndex = 0;    // 0..5 (modifier type)
 let presetSelection = "";       // currently selected preset in the dropdown
+let showAll = false;            // shared: show all sliders (main + modifier screens)
+let modifierRowVisible = false; // toggles the modifier squares row under the active base
 
-// Opens the modifier view for a specific base control without touching the
-// main base selection — keeps the two navigation states isolated and gives us
-// a single hook to bind future per-row "MOD" buttons to.
-function openModifier(baseIndex) {
-  activeBaseIndex = clamp(baseIndex, 0, BASE_NAMES.length - 1);
-  activeModifierIndex = 0;
-  viewMode = "mod";
-  buildInterface();
+// Picks a readable text color (black/white) for the active tab's bright background.
+function tabTextColor(hex) {
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.5 ? "#000000" : "#ffffff";
 }
-function closeModifier() {
-  viewMode = "main";
-  buildInterface();
-}
-
 function buildInterface() {
-  $("active-title").textContent = viewMode === "main" ? "Advanced Penetration Web" : "Modifier for: " + BASE_NAMES[activeBaseIndex];
-  $("btnMain").classList.toggle("active", viewMode === "main");
-  $("btnMods").classList.toggle("active", viewMode === "mod");
+  $("active-title").textContent = viewMode === "main" ? "OSSM Advanced Penetration" : "Modifier for: " + BASE_NAMES[activeBaseIndex];
+  const runningNow = speed() > 0;
+  $("btnStart").textContent = runningNow ? "Stop" : "Start";
+  $("btnStart").classList.toggle("stop", runningNow);
+  $("reset-row").style.display = (viewMode === "main" && showAll) ? "" : "none";
   buildTabs();
+  buildSpeed();
   buildSliders();
   renderPresets();
   drawGraph();
@@ -375,75 +491,244 @@ function buildInterface() {
 function buildTabs() {
   const wrap = $("tabs-wrapper");
   wrap.innerHTML = "";
-  const mk = (text, active, color, title) => {
+  const mk = (text, active, color, title, label, dim = false) => {
     const d = document.createElement("div");
     d.className = "tab-box";
-    d.textContent = text;
     d.title = title;
-    d.style.background = active ? color : "#3a3a3a";
-    d.style.color = active ? "#000000" : "#dde6f0";
+    d.innerHTML = `<div class="tab-value">${text}</div>` + (label ? `<div class="tab-name">${label}</div>` : "");
+    d.style.background = active ? color : (dim ? `color-mix(in srgb, ${color} 22%, #3a3a3a)` : "#3a3a3a");
+    d.style.color = active ? tabTextColor(color) : "#dde6f0";
+    d.style.borderColor = active ? "#ffffff" : "transparent";
     return d;
   };
-  if (viewMode === "main") {
-    for (let i = 0; i < BASE_NAMES.length; i++) {
-      const d = mk(Math.round(settingValue(BASE_NAMES[i])), i === activeBaseIndex, BASE_COLORS[i], BASE_NAMES[i]);
-      d.onclick = () => { activeBaseIndex = i; buildInterface(); };
-      wrap.appendChild(d);
-    }
-  } else {
+  const addRow = () => {
+    const row = document.createElement("div");
+    row.className = "tab-row";
+    wrap.appendChild(row);
+    return row;
+  };
+
+  // Base squares row (always visible — acts as navigation).
+  const baseRow = addRow();
+  for (let i = 0; i < BASE_NAMES.length; i++) {
+    const d = mk(Math.round(settingValue(BASE_NAMES[i])), i === activeBaseIndex, BASE_COLORS[i], BASE_NAMES[i], BASE_NAMES[i], true);
+    d.onclick = () => {
+      if (activeBaseIndex === i) modifierRowVisible = !modifierRowVisible;
+      else { activeBaseIndex = i; modifierRowVisible = true; }
+      viewMode = "main";
+      buildInterface();
+    };
+    baseRow.appendChild(d);
+  }
+
+  // Modifier squares row for the selected base (only while toggled on).
+  if (modifierRowVisible) {
+    const modRow = addRow();
     const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
     const activeColor = BASE_COLORS[bi];
+    const modActive = viewMode === "mod";
     MODIFIER_NAMES.forEach((name, mi) => {
-      const d = mk(Math.round(settingValue(BASE_NAMES[bi] + name)), mi === activeModifierIndex, activeColor, MODIFIER_DISPLAY[mi]);
-      d.onclick = () => { activeModifierIndex = mi; buildInterface(); };
-      wrap.appendChild(d);
+      const d = mk(Math.round(settingValue(BASE_NAMES[bi] + name)), modActive && mi === activeModifierIndex, activeColor, name, name, true);
+      d.onclick = () => { activeModifierIndex = mi; viewMode = "mod"; buildInterface(); };
+      modRow.appendChild(d);
     });
   }
+}
+
+function buildSpeed() {
+  const wrap = $("speed-control");
+  wrap.innerHTML = "";
+  wrap.className = "speed-line";
+  const spd = getSetting(SPEED_KEY);
+  const val = Math.round(spd.value);
+  const label = document.createElement("span");
+  label.className = "speed-label";
+  label.textContent = "Speed:";
+  const num = document.createElement("span");
+  num.className = "speed-val";
+  num.textContent = val;
+  makeEditable(num, spd.min, spd.max, (v) => setSpeed(v));
+  const input = document.createElement("input");
+  input.type = "range";
+  input.min = spd.min;
+  input.max = spd.max;
+  input.value = val;
+  input.step = 1;
+  input.addEventListener("input", () => { num.textContent = input.value; });
+  input.addEventListener("change", () => setSpeed(parseInt(input.value, 10)));
+  const minus = document.createElement("button");
+  minus.type = "button";
+  minus.className = "step-btn";
+  minus.textContent = "−";
+  const plus = document.createElement("button");
+  plus.type = "button";
+  plus.className = "step-btn";
+  plus.textContent = "+";
+  wrap.appendChild(label);
+  wrap.appendChild(num);
+  wrap.appendChild(minus);
+  wrap.appendChild(input);
+  wrap.appendChild(plus);
+  attachStepButton(minus, -1, input, num, spd.min, spd.max, (v) => setSpeed(v));
+  attachStepButton(plus, +1, input, num, spd.min, spd.max, (v) => setSpeed(v));
 }
 
 function buildSliders() {
   const wrap = $("sliders-wrapper");
   wrap.innerHTML = "";
-  if (viewMode === "main") {
-    const spd = getSetting(SPEED_KEY);
-    wrap.appendChild(sliderEl("Speed", spd.min, spd.max, Math.round(spd.value), "#ffffff", (v) => setSpeed(v)));
-    for (let i = 0; i < BASE_NAMES.length; i++) {
-      const s = getSetting(BASE_NAMES[i]);
-      wrap.appendChild(sliderEl(BASE_NAMES[i], s.min, s.max, Math.round(s.value), BASE_COLORS[i], (v) => setBase(i, v)));
+
+  const toggleGroup = document.createElement("div");
+  toggleGroup.className = "slider-group";
+  const toggleLabel = viewMode === "main" ? "Show all settings" : "Show all modifiers";
+  toggleGroup.innerHTML = `<label class="inline-toggle">
+    <span>${toggleLabel}</span>
+    <span class="switch">
+      <input type="checkbox" id="showAllCheck" ${showAll ? "checked" : ""}>
+      <span class="slider"></span>
+    </span>
+  </label>`;
+  wrap.appendChild(toggleGroup);
+  toggleGroup.querySelector("#showAllCheck").onchange = (e) => {
+    showAll = e.target.checked;
+    buildInterface();
+  };
+
+  const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
+  const baseColor = BASE_COLORS[bi];
+  const modColor = (mi) => (viewMode === "mod" && mi === activeModifierIndex)
+    ? baseColor
+    : `color-mix(in srgb, ${baseColor} 22%, #3a3a3a)`;
+
+  if (showAll) {
+    if (viewMode === "main") {
+      for (let i = 0; i < BASE_NAMES.length; i++) {
+        const r = baseRange(i);
+        wrap.appendChild(sliderEl(BASE_NAMES[i], r.min, r.max, Math.round(settingValue(BASE_NAMES[i])), BASE_COLORS[i], (v) => setBase(i, v)));
+      }
+    } else {
+      const selGroup = document.createElement("div");
+      selGroup.className = "slider-group";
+      selGroup.innerHTML = `<div class="slider-label"><span>Base control</span></div>`;
+      const sel = document.createElement("select");
+      for (let i = 0; i < BASE_NAMES.length; i++) {
+        const o = document.createElement("option");
+        o.value = i; o.textContent = BASE_NAMES[i];
+        if (i === activeBaseIndex) o.selected = true;
+        sel.appendChild(o);
+      }
+      sel.onchange = () => { activeBaseIndex = parseInt(sel.value, 10); activeModifierIndex = 0; buildInterface(); };
+      selGroup.appendChild(sel);
+      wrap.appendChild(selGroup);
+
+      MODIFIER_NAMES.forEach((name, mi) => {
+        const s = getSetting(BASE_NAMES[bi] + name);
+        wrap.appendChild(sliderEl(name, s.min, s.max, Math.round(s.value), modColor(mi), (v) => setModifier(bi, mi, v)));
+      });
     }
   } else {
-    const selGroup = document.createElement("div");
-    selGroup.className = "slider-group";
-    selGroup.innerHTML = `<div class="slider-label"><span>Base control</span></div>`;
-    const sel = document.createElement("select");
-    for (let i = 0; i < BASE_NAMES.length; i++) {
-      const o = document.createElement("option");
-      o.value = i; o.textContent = BASE_NAMES[i];
-      if (i === activeBaseIndex) o.selected = true;
-      sel.appendChild(o);
-    }
-    sel.onchange = () => { activeBaseIndex = parseInt(sel.value, 10); activeModifierIndex = 0; buildInterface(); };
-    selGroup.appendChild(sel);
-    wrap.appendChild(selGroup);
-
-    const bi = clamp(activeBaseIndex, 0, BASE_NAMES.length - 1);
-    MODIFIER_NAMES.forEach((name, mi) => {
+    if (viewMode === "main") {
+      const r = baseRange(bi);
+      wrap.appendChild(sliderEl(BASE_NAMES[bi], r.min, r.max, Math.round(settingValue(BASE_NAMES[bi])), BASE_COLORS[bi], (v) => setBase(bi, v)));
+    } else {
+      const mi = clamp(activeModifierIndex, 0, MODIFIER_NAMES.length - 1);
+      const name = MODIFIER_NAMES[mi];
       const s = getSetting(BASE_NAMES[bi] + name);
-      wrap.appendChild(sliderEl(MODIFIER_DISPLAY[mi], s.min, s.max, Math.round(s.value), MOD_COLORS[mi % MOD_COLORS.length], (v) => setModifier(bi, mi, v)));
-    });
+      wrap.appendChild(sliderEl(name, s.min, s.max, Math.round(s.value), modColor(mi), (v) => setModifier(bi, mi, v)));
+    }
   }
+}
+
+let activeStep = null;
+
+function stopStepRepeat() {
+  if (activeStep) {
+    clearTimeout(activeStep.timer);
+    activeStep = null;
+  }
+}
+document.addEventListener("pointerup", stopStepRepeat);
+document.addEventListener("pointercancel", stopStepRepeat);
+
+function attachStepButton(btn, delta, input, valNum, min, max, onSet) {
+  const apply = () => {
+    const cur = parseInt(input.value, 10);
+    let v = cur + delta;
+    if (v < min) v = min;
+    if (v > max) v = max;
+    if (v === cur) return;
+    input.value = v;
+    valNum.textContent = v;
+    onSet(v);
+  };
+  btn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    apply();
+    stopStepRepeat(); // cancel any previous hold before starting this one
+    const st = { timer: null };
+    activeStep = st;
+    let delay = 400;
+    st.timer = setTimeout(function repeat() {
+      apply();
+      delay = Math.max(90, delay - 40);
+      st.timer = setTimeout(repeat, delay);
+    }, delay);
+  });
+  btn.addEventListener("contextmenu", (e) => e.preventDefault());
+}
+
+function makeEditable(el, min, max, onSet) {
+  const commit = (v) => {
+    v = clamp(Math.round(parseInt(v, 10) || 0), min, max);
+    el.textContent = v;
+    onSet(v);
+  };
+  if (!el.title) el.title = "Click to edit";
+  el.addEventListener("click", () => {
+    if (el.querySelector("input")) return;
+    const original = el.textContent;
+    const inp = document.createElement("input");
+    inp.type = "number";
+    inp.className = "val-input";
+    inp.value = original;
+    el.textContent = "";
+    el.appendChild(inp);
+    inp.focus();
+    inp.select();
+    let done = false;
+    const finish = (apply) => {
+      if (done) return;
+      done = true;
+      if (apply) commit(inp.value);
+      else el.textContent = original;
+    };
+    inp.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); finish(true); }
+      else if (e.key === "Escape") { e.preventDefault(); finish(false); }
+    });
+    inp.addEventListener("blur", () => finish(true));
+  });
+  return el;
 }
 
 function sliderEl(name, min, max, value, color, onSet) {
   const g = document.createElement("div");
   g.className = "slider-group";
   g.innerHTML = `
-    <div class="slider-label"><span>${name}</span><span class="val-num" style="color:${color}">${value}</span></div>
-    <input type="range" min="${min}" max="${max}" value="${value}" step="1">`;
+    <div class="slider-row">
+      <span class="slider-name">${name}</span>
+      <span class="val-num" style="background:${color}; color:${tabTextColor(color)}">${value}</span>
+      <button type="button" class="step-btn">−</button>
+      <input type="range" min="${min}" max="${max}" value="${value}" step="1">
+      <button type="button" class="step-btn">+</button>
+    </div>`;
   const input = g.querySelector("input");
   const valNum = g.querySelector(".val-num");
+  makeEditable(valNum, min, max, onSet);
   input.addEventListener("input", () => { valNum.textContent = input.value; });
   input.addEventListener("change", () => onSet(parseInt(input.value, 10)));
+  const [minus, plus] = g.querySelectorAll(".step-btn");
+  attachStepButton(minus, -1, input, valNum, min, max, onSet);
+  attachStepButton(plus, +1, input, valNum, min, max, onSet);
   return g;
 }
 
@@ -458,7 +743,7 @@ function renderPresets() {
   });
   if (presetNames.includes(presetSelection)) sel.value = presetSelection;
   else if (presetNames.length) { sel.selectedIndex = 0; presetSelection = presetNames[0]; }
-  sel.onchange = () => { presetSelection = sel.value; };
+  sel.onchange = () => { presetSelection = sel.value; $("presetSummaryName").textContent = presetSelection; };
 
   const load = document.createElement("button");
   load.textContent = "Load";
@@ -479,6 +764,7 @@ function renderPresets() {
   list.appendChild(sel);
   list.appendChild(load);
   list.appendChild(del);
+  $("presetSummaryName").textContent = presetSelection;
 }
 
 // ---------- Graph ----------
@@ -512,9 +798,9 @@ function drawMainGraph() {
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   const { x: xMin, y: yMin, w: xSpan, h: ySpan } = plotBounds();
 
-  const topVal = sv("Top", 50), bottomVal = sv("Bottom", 50);
-  const riseVal = sv("Rise", 1), fallVal = sv("Fall", 1);
-  const curveIn = sv("CurveIn", 50), curveOut = sv("CurveOut", 50);
+  const topVal = sv("Max Depth", 50), bottomVal = sv("Min Depth", 50);
+  const riseVal = sv("In Speed", 1), fallVal = sv("Out Speed", 1);
+  const curveIn = sv("In Accel", 50), curveOut = sv("Out Accel", 50);
 
   // Depth guides: top=0xF860, bottom=0xFC00, width=plot.w.
   const yMax = yMin + (1 - topVal / 100) * ySpan;
@@ -525,12 +811,12 @@ function drawMainGraph() {
   const yMinBound = Math.min(yMax, yMinDepth);
   const yMaxBound = Math.max(yMax, yMinDepth);
   const diff = yMinDepth - yMax;
-  const yMaxMod = (1 - sv("TopAmount", 100) / 100) * diff + yMax;
-  const yMinMod = yMinDepth - (1 - sv("BottomAmount", 100) / 100) * diff;
+  const yMaxMod = (1 - sv("Max DepthAmplitude", 100) / 100) * diff + yMax;
+  const yMinMod = yMinDepth - (1 - sv("Min DepthAmplitude", 100) / 100) * diff;
 
   const a = Math.max(1, riseVal), b = Math.max(1, fallVal);
-  const am = Math.max(1, sv("RiseAmount", 100) / 100 * a);
-  const bm = Math.max(1, sv("FallAmount", 100) / 100 * b);
+  const am = Math.max(1, sv("In SpeedAmplitude", 100) / 100 * a);
+  const bm = Math.max(1, sv("Out SpeedAmplitude", 100) / 100 * b);
 
   let splitXf = xMin + (1 - (a / b) / ((a / b) + 1)) * xSpan;
   splitXf = clamp(splitXf, xMin, xMin + xSpan);
@@ -538,8 +824,8 @@ function drawMainGraph() {
   splitXm = clamp(splitXm, xMin, xMin + xSpan);
 
   const c = Math.max(1, curveIn), d = Math.max(1, curveOut);
-  const cm = Math.max(1, sv("CurveInAmount", 100) / 100 * c);
-  const dm = Math.max(1, sv("CurveOutAmount", 100) / 100 * d);
+  const cm = Math.max(1, sv("In AccelAmplitude", 100) / 100 * c);
+  const dm = Math.max(1, sv("Out AccelAmplitude", 100) / 100 * d);
 
   const rIn = 0.1 + 0.4 * (1 - c / 100);
   const rOut = 0.1 + 0.4 * (1 - d / 100);
@@ -619,17 +905,17 @@ function drawModGraph() {
 
     const name = BASE_NAMES[controlIndex];
     const baseValueRatio = 1 - sv(name, 50) / 100;
-    const modValueRatio = 1 - sv(name + "Amount", 100) / 100;
+    const modValueRatio = 1 - sv(name + "Amplitude", 100) / 100;
 
     let strokeRatio = 1 - baseValueRatio;
-    if (controlIndex < 2) strokeRatio = (sv("Top", 50) - sv("Bottom", 50)) / 100;
+    if (controlIndex < 2) strokeRatio = (sv("Max Depth", 50) - sv("Min Depth", 50)) / 100;
 
     const baseY = yMin + ySpan * baseValueRatio;
     let modY = baseY + ySpan * strokeRatio * modValueRatio;
     if (controlIndex === 1) modY = baseY - ySpan * strokeRatio * modValueRatio;
 
     const stepWidth = xSpan / maxSteps;
-    let startX = xMin - stepWidth * sv(name + "Phase", 0);
+    let startX = xMin - stepWidth * sv(name + "Offset", 0);
 
     ctx.strokeStyle = BASE_COLORS[traceIndex % BASE_COLORS.length];
     ctx.lineWidth = highlight ? 3 : 2;
@@ -683,8 +969,7 @@ function drawGraph() {
 
 // ---------- Events ----------
 $("ble-button").onclick = connect;
-$("btnMain").onclick = () => closeModifier();
-$("btnMods").onclick = () => openModifier(activeBaseIndex);
+$("header-disconnect").onclick = disconnect;
 $("btnStart").onclick = toggleStart;
 $("btnSavePreset").onclick = () => {
   const n = $("presetName").value.trim();
@@ -699,6 +984,7 @@ $("btnFactoryReset").onclick = () => {
   writePreset("^").catch(() => {});
   renderPresets();
 };
+$("btnResetValues").onclick = resetAllValues;
 
 buildInterface();
 </script>
