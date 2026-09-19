@@ -154,6 +154,12 @@
     }
     .cpp-logger { max-height: 160px; }
     .step-btn { width: 36px; height: 36px; }
+    .slider-row, .speed-line { flex-wrap: wrap; }
+    .slider-row .slider-name, .speed-line .speed-label { order: 0; }
+    .step-btn.minus { order: 1; margin-left: auto; }
+    .slider-row .val-num, .speed-line .speed-val { order: 2; }
+    .step-btn.plus { order: 3; }
+    .slider-row input[type=range], .speed-line input[type=range] { order: 4; flex: 1 1 100%; }
     input[type=range] { height: 8px; }
     input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; }
     .start-stop-row { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
@@ -680,11 +686,11 @@ function buildSpeed() {
   input.addEventListener("change", () => onSet(parseInt(input.value, 10)));
   const minus = document.createElement("button");
   minus.type = "button";
-  minus.className = "step-btn";
+  minus.className = "step-btn minus";
   minus.textContent = "−";
   const plus = document.createElement("button");
   plus.type = "button";
-  plus.className = "step-btn";
+  plus.className = "step-btn plus";
   plus.textContent = "+";
   wrap.appendChild(label);
   wrap.appendChild(num);
@@ -875,9 +881,9 @@ function sliderEl(name, min, max, value, color, onSet) {
     <div class="slider-row">
       <span class="slider-name">${name}</span>
       <span class="val-num" style="background:${color}; color:${tabTextColor(color)}">${value}</span>
-      <button type="button" class="step-btn">−</button>
+      <button type="button" class="step-btn minus">−</button>
       <input type="range" min="${min}" max="${max}" value="${value}" step="1">
-      <button type="button" class="step-btn">+</button>
+      <button type="button" class="step-btn plus">+</button>
     </div>`;
   const input = g.querySelector("input");
   const valNum = g.querySelector(".val-num");
