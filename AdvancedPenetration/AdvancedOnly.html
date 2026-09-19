@@ -2,15 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#0a0a12" />
-<link rel="manifest" href="manifest.json" />
-<link rel="icon" href="icon.svg" type="image/svg+xml" />
-<link rel="apple-touch-icon" href="icon.svg" />
-<meta name="mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<title>OSSM Remote</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>OSSM Advanced Penetration</title>
 <style>
   :root {
     --bg-color: #0a0a12;
@@ -81,14 +74,14 @@
   .switch .slider:before { content: ""; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: #fff; border-radius: 50%; transition: .2s; }
   .switch input:checked + .slider { background-color: #22c55e; }
   .switch input:checked + .slider:before { transform: translateX(16px); }
-  input[type=range] { width: 100%; height: 6px; background: #1e293b; border-radius: 3px; outline: none; -webkit-appearance: none; appearance: none; }
+  input[type=range] { width: 100%; height: 6px; background: #1e293b; border-radius: 3px; outline: none; -webkit-appearance: none; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer; }
   .slider-row { display: flex; align-items: center; gap: 8px; }
   .slider-row .slider-name { flex: 0 0 90px; font-size: .8rem; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .slider-row .val-num { flex: 0 0 auto; min-width: 40px; text-align: left; line-height: 26px; padding: 0 7px; border-radius: 4px; font-family: monospace; font-size: .85rem; font-weight: bold; }
   .val-input { width: 2.5em; min-width: 0; background: transparent; border: none; outline: none; color: inherit; font: inherit; text-align: inherit; padding: 0; margin: 0; height: 24px; vertical-align: middle; }
   .val-input::-webkit-outer-spin-button, .val-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  .val-input[type=number] { -moz-appearance: textfield; appearance: textfield; }
+  .val-input[type=number] { -moz-appearance: textfield; }
   .slider-row input[type=range] { flex: 1; }
   .step-btn {
     flex: 0 0 auto; width: 26px; height: 26px;
@@ -109,11 +102,6 @@
   #btnStart.stop { background-color: #dc2626; }
   .reset-row { text-align: center; margin-bottom: 4px; }
   #btnResetValues { background: none; border: none; color: #ff5b6a; font-size: .78rem; cursor: pointer; text-decoration: underline; padding: 4px 8px; }
-  .mode-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 10px; }
-  .mode-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
-  .mode-seg { display: flex; background: #1e293b; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
-  .mode-btn { background: transparent; color: var(--muted); border: none; padding: 5px 12px; font-size: .78rem; font-weight: bold; cursor: pointer; }
-  .mode-btn.active { background: #2563eb; color: #fff; }
   .presets-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; margin-top: 12px; }
   .presets-panel summary {
     list-style: none; cursor: pointer; user-select: none;
@@ -141,22 +129,9 @@
   .preset-row button { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 8px 12px; font-weight: bold; cursor: pointer; white-space: nowrap; }
   .preset-row button.danger { background: #7f1d1d; }
   .cpp-logger { width: 100%; max-width: 400px; background: #000; font-family: 'Courier New', monospace; font-size: .75rem; color: #38bdf8; padding: 12px; border-radius: 8px; margin-top: 16px; border: 1px solid #1e293b; box-sizing: border-box; max-height: 250px; overflow-y: auto; }
-  @media (max-width: 480px) {
-    body { padding: 0; }
-    .phone-container {
-      max-width: none;
-      border: none;
-      border-radius: 0;
-      padding: 12px;
-      padding-top: max(12px, env(safe-area-inset-top));
-      padding-bottom: max(12px, env(safe-area-inset-bottom));
-      box-shadow: none;
-    }
-    .cpp-logger { max-height: 160px; }
-    .step-btn { width: 36px; height: 36px; }
-    input[type=range] { height: 8px; }
-    input[type=range]::-webkit-slider-thumb { width: 22px; height: 22px; }
-    .start-stop-row { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+  @media (max-width: 420px) {
+    body { padding: 8px; }
+    .phone-container { border-width: 2px; padding: 12px; }
   }
 </style>
 </head>
@@ -189,15 +164,7 @@
     <button id="btnResetValues">Reset all values</button>
   </div>
 
-  <div class="mode-row" id="mode-row">
-    <span class="mode-label">Mode</span>
-    <div class="mode-seg">
-      <button id="modeAp" class="mode-btn active">Advanced</button>
-      <button id="modeStd" class="mode-btn">Standard</button>
-    </div>
-  </div>
-
-  <details class="presets-panel" id="presets-panel">
+  <details class="presets-panel">
     <summary><span class="summary-left">Presets<span class="summary-value" id="presetSummaryName"></span></span></summary>
     <div id="presetList"></div>
     <div class="preset-row">
@@ -226,24 +193,11 @@ const CONFIG_UUID    = "4f53534d-6164-7661-6e63-6564636f6e66";
 const STATUS_UUID    = "4f53534d-6164-7661-6e63-656473746174";
 const PRESETS_UUID   = "4f53534d-6164-7661-6e63-656470727374";
 
-// Standard (home) mode lives on the legacy OSSM service.
-const LEGACY_SERVICE_UUID = "522b443a-4f53-534d-0001-420badbabe69";
-const STD_CMD_UUID        = "522b443a-4f53-534d-1000-420badbabe69";
-const STD_STATE_UUID      = "522b443a-4f53-534d-2000-420badbabe69";
-const STD_PATTERNS_UUID   = "522b443a-4f53-534d-3000-420badbabe69";
-const STD_PATTERN_FALLBACK = ["Simple Stroke", "Teasing Pounding", "Robo Stroke", "Half'n'Half", "Deeper", "Stop'n'Go", "Insist", "Progressive Stroke", "Random Stroke", "Go to Point"];
-
 let device = null, server = null;
 let ctlChar = null, cfgChar = null, stsChar = null, prsChar = null;
-let stdCmd = null, stdState = null, stdPatternsChar = null;
 let presetNames = [];
 let connected = false;
 let running = false;
-let appMode = "ap";          // "ap" (advanced penetration) | "std" (standard home)
-let stdValues = { speed: 0, max: 100, min: 0, sensation: 50, pattern: 0 };
-let stdPatterns = STD_PATTERN_FALLBACK.map((name, idx) => ({ name, idx }));
-let stdStateName = "";
-let stdRunning = false;
 let lastNonZeroSpeed = 50;
 
 const BASE_NAMES = ["Max Depth", "Min Depth", "In Speed", "Out Speed", "In Accel", "Out Accel"];
@@ -388,10 +342,7 @@ async function connect() {
   if (!navigator.bluetooth) { log("Web Bluetooth not available. Use Chrome/Edge over HTTPS or localhost."); return; }
   log("Requesting device…");
   try {
-    device = await navigator.bluetooth.requestDevice({
-      filters: [{ services: [SERVICE_UUID] }],
-      optionalServices: [SERVICE_UUID, LEGACY_SERVICE_UUID]
-    });
+    device = await navigator.bluetooth.requestDevice({ filters: [{ services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID] });
     device.addEventListener("gattserverdisconnected", onDisconnected);
     log("Connecting to " + (device.name || "OSSM") + "…");
     server = await device.gatt.connect();
@@ -401,30 +352,15 @@ async function connect() {
     stsChar = await svc.getCharacteristic(STATUS_UUID);
     prsChar = await svc.getCharacteristic(PRESETS_UUID);
 
-    // Standard-mode characteristics (legacy service) — best effort.
-    stdCmd = null; stdState = null; stdPatternsChar = null;
-    try {
-      const legacy = await server.getPrimaryService(LEGACY_SERVICE_UUID);
-      try { stdCmd = await legacy.getCharacteristic(STD_CMD_UUID); } catch (e) {}
-      try { stdState = await legacy.getCharacteristic(STD_STATE_UUID); } catch (e) {}
-      try { stdPatternsChar = await legacy.getCharacteristic(STD_PATTERNS_UUID); } catch (e) {}
-    } catch (e) {}
-
     if (stsChar.properties.notify) {
       stsChar.addEventListener("characteristicvaluechanged", onStatus);
       await stsChar.startNotifications();
-    }
-    if (stdState && stdState.properties.notify) {
-      stdState.addEventListener("characteristicvaluechanged", onStdState);
-      try { await stdState.startNotifications(); } catch (e) {}
     }
     log("Reading configuration…");
     const cfg = await readStr(cfgChar);
     parseConfig(cfg);
     await refreshStatus();
     await refreshPresets();
-    await refreshStdPatterns();
-    await refreshStdValues();
     connected = true;
     running = speed() > 0;
     lastNonZeroSpeed = speed() > 0 ? speed() : 50;
@@ -440,12 +376,11 @@ async function connect() {
 }
 
 function onDisconnected() {
-  connected = false; running = false; stdRunning = false;
+  connected = false; running = false;
   $("ble-panel").style.display = "";
   $("conn-dot").style.display = "none";
   $("header-disconnect").style.display = "none";
   log("Disconnected from OSSM.");
-  buildInterface();
 }
 
 function disconnect() {
@@ -460,43 +395,6 @@ async function refreshStatus() { parseStatus(await readStr(stsChar)); }
 async function refreshPresets() {
   presetNames = (await readStr(prsChar)).split(",").map(s => s.trim()).filter(Boolean);
   renderPresets();
-}
-
-// ---------- Standard (home) mode ----------
-function parseStdState(raw) {
-  let j;
-  try { j = JSON.parse(raw); } catch (e) { return; }
-  if (typeof j.speed === "number") stdValues.speed = Math.round(j.speed);
-  if (typeof j.maxPosition === "number") stdValues.max = Math.round(j.maxPosition);
-  if (typeof j.minPosition === "number") stdValues.min = Math.round(j.minPosition);
-  if (typeof j.sensation === "number") stdValues.sensation = Math.round(j.sensation);
-  if (typeof j.pattern === "number") stdValues.pattern = Math.round(j.pattern);
-  if (typeof j.state === "string") stdStateName = j.state;
-  stdRunning = stdValues.speed > 0.5;
-}
-function onStdState(ev) { parseStdState(decode(ev.target.value)); if (appMode === "std") buildInterface(); }
-
-async function stdWrite(cmd) {
-  if (!stdCmd) return;
-  const data = encode(cmd);
-  try { await stdCmd.writeValueWithoutResponse(data); }
-  catch (e) { try { await stdCmd.writeValueWithResponse(data); } catch (e2) { log("Std write failed: " + e2.message); } }
-}
-
-async function refreshStdPatterns() {
-  stdPatterns = [];
-  if (stdPatternsChar) {
-    try {
-      const arr = JSON.parse(decode(await stdPatternsChar.readValue()));
-      if (Array.isArray(arr)) stdPatterns = arr.map(p => ({ name: p.name, idx: p.idx }));
-    } catch (e) {}
-  }
-  if (!stdPatterns.length) stdPatterns = STD_PATTERN_FALLBACK.map((name, idx) => ({ name, idx }));
-}
-
-async function refreshStdValues() {
-  if (!stdState) return;
-  try { parseStdState(decode(await stdState.readValue())); } catch (e) {}
 }
 
 // ---------- Commands ----------
@@ -532,14 +430,6 @@ function setModifier(bi, mi, v) {
   buildInterface();
 }
 function toggleStart() {
-  if (appMode === "std") {
-    if (stdRunning) stdWrite("set:speed:0");
-    else {
-      stdWrite("go:strokeEngine");
-      stdWrite("set:speed:" + (stdValues.speed > 0 ? stdValues.speed : 50));
-    }
-    return;
-  }
   if (speed() > 0) setSpeed(0);
   else setSpeed(lastNonZeroSpeed > 0 ? lastNonZeroSpeed : 50);
 }
@@ -586,23 +476,15 @@ function tabTextColor(hex) {
   return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.5 ? "#000000" : "#ffffff";
 }
 function buildInterface() {
-  const isStd = appMode === "std";
-  $("active-title").textContent = isStd
-    ? "OSSM Standard"
-    : (viewMode === "main" ? "OSSM Advanced Penetration" : "Modifier for: " + BASE_NAMES[activeBaseIndex]);
-  const runningNow = isStd ? stdRunning : speed() > 0;
+  $("active-title").textContent = viewMode === "main" ? "OSSM Advanced Penetration" : "Modifier for: " + BASE_NAMES[activeBaseIndex];
+  const runningNow = speed() > 0;
   $("btnStart").textContent = runningNow ? "Stop" : "Start";
   $("btnStart").classList.toggle("stop", runningNow);
-
-  $("tabs-wrapper").style.display = isStd ? "none" : "";
-  $("reset-row").style.display = (isStd || viewMode !== "main" || !showAll) ? "none" : "";
-  $("presets-panel").style.display = isStd ? "none" : "";
-  $("modeAp").classList.toggle("active", !isStd);
-  $("modeStd").classList.toggle("active", isStd);
-
-  if (isStd) buildStdSliders();
-  else { buildTabs(); buildSliders(); renderPresets(); }
+  $("reset-row").style.display = (viewMode === "main" && showAll) ? "" : "none";
+  buildTabs();
   buildSpeed();
+  buildSliders();
+  renderPresets();
   drawGraph();
 }
 
@@ -657,27 +539,23 @@ function buildSpeed() {
   const wrap = $("speed-control");
   wrap.innerHTML = "";
   wrap.className = "speed-line";
-  const isStd = appMode === "std";
-  const lo = 0, hi = 100;
-  const val = isStd ? stdValues.speed : Math.round(settingValue(SPEED_KEY));
-  const onSet = isStd
-    ? (v) => { stdValues.speed = v; stdWrite("set:speed:" + v); }
-    : (v) => setSpeed(v);
+  const spd = getSetting(SPEED_KEY);
+  const val = Math.round(spd.value);
   const label = document.createElement("span");
   label.className = "speed-label";
   label.textContent = "Speed:";
   const num = document.createElement("span");
   num.className = "speed-val";
   num.textContent = val;
-  makeEditable(num, lo, hi, onSet);
+  makeEditable(num, spd.min, spd.max, (v) => setSpeed(v));
   const input = document.createElement("input");
   input.type = "range";
-  input.min = lo;
-  input.max = hi;
+  input.min = spd.min;
+  input.max = spd.max;
   input.value = val;
   input.step = 1;
   input.addEventListener("input", () => { num.textContent = input.value; });
-  input.addEventListener("change", () => onSet(parseInt(input.value, 10)));
+  input.addEventListener("change", () => setSpeed(parseInt(input.value, 10)));
   const minus = document.createElement("button");
   minus.type = "button";
   minus.className = "step-btn";
@@ -691,8 +569,8 @@ function buildSpeed() {
   wrap.appendChild(minus);
   wrap.appendChild(input);
   wrap.appendChild(plus);
-  attachStepButton(minus, -1, input, num, lo, hi, onSet);
-  attachStepButton(plus, +1, input, num, lo, hi, onSet);
+  attachStepButton(minus, -1, input, num, spd.min, spd.max, (v) => setSpeed(v));
+  attachStepButton(plus, +1, input, num, spd.min, spd.max, (v) => setSpeed(v));
 }
 
 function buildSliders() {
@@ -758,42 +636,6 @@ function buildSliders() {
       wrap.appendChild(sliderEl(name, s.min, s.max, Math.round(s.value), modColor(mi), (v) => setModifier(bi, mi, v)));
     }
   }
-}
-
-function buildStdSliders() {
-  const wrap = $("sliders-wrapper");
-  wrap.innerHTML = "";
-
-  wrap.appendChild(sliderEl("Max Depth", 0, 100, stdValues.max, BASE_COLORS[0], (v) => {
-    stdValues.max = v;
-    if (stdValues.min > stdValues.max) { stdValues.min = stdValues.max; stdWrite("set:min:" + stdValues.min); }
-    stdWrite("set:max:" + v);
-  }));
-  wrap.appendChild(sliderEl("Min Depth", 0, stdValues.max, stdValues.min, BASE_COLORS[1], (v) => {
-    stdValues.min = Math.min(v, stdValues.max);
-    stdWrite("set:min:" + stdValues.min);
-  }));
-  wrap.appendChild(sliderEl("Sensation", 0, 100, stdValues.sensation, "#c084fc", (v) => {
-    stdValues.sensation = v;
-    stdWrite("set:sensation:" + v);
-  }));
-
-  const pg = document.createElement("div");
-  pg.className = "slider-group";
-  pg.innerHTML = `<div class="slider-label"><span>Pattern</span></div>`;
-  const sel = document.createElement("select");
-  stdPatterns.forEach(p => {
-    const o = document.createElement("option");
-    o.value = p.idx; o.textContent = p.name;
-    if (p.idx === stdValues.pattern) o.selected = true;
-    sel.appendChild(o);
-  });
-  sel.onchange = () => {
-    stdValues.pattern = parseInt(sel.value, 10);
-    stdWrite("set:pattern:" + stdValues.pattern);
-  };
-  pg.appendChild(sel);
-  wrap.appendChild(pg);
 }
 
 let activeStep = null;
@@ -1120,45 +962,14 @@ function drawModGraph() {
   $("right-meter").style.height = baseVal(1) + "%";
 }
 
-function drawStdGraph() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const { x: xMin, y: yMin, w: xSpan, h: ySpan } = plotBounds();
-  const topVal = clamp(stdValues.max, 0, 100);
-  const bottomVal = clamp(stdValues.min, 0, 100);
-  const yMax = yMin + (1 - topVal / 100) * ySpan;
-  const yMinDepth = yMin + (1 - bottomVal / 100) * ySpan;
-
-  ctx.fillStyle = BASE_COLORS[0]; ctx.fillRect(xMin, yMax, xSpan, 2);
-  ctx.fillStyle = BASE_COLORS[1]; ctx.fillRect(xMin, yMinDepth, xSpan, 2);
-
-  // Simple in-and-out stroke curve between min and max depth.
-  ctx.strokeStyle = DOT_MAIN; ctx.lineWidth = 2; ctx.lineJoin = "round";
-  ctx.beginPath();
-  for (let i = 0; i <= SAMPLE_MAIN; i++) {
-    const t = SAMPLE_MAIN ? i / SAMPLE_MAIN : 0;
-    const wave = 0.5 - 0.5 * Math.cos(2 * Math.PI * t);
-    const depth = bottomVal + (topVal - bottomVal) * wave;
-    const px = xMin + t * xSpan;
-    const py = yMin + (1 - depth / 100) * ySpan;
-    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-  }
-  ctx.stroke();
-
-  $("left-meter").style.height = topVal + "%";
-  $("right-meter").style.height = bottomVal + "%";
-}
-
 function drawGraph() {
-  if (appMode === "std") drawStdGraph();
-  else if (viewMode === "mod") drawModGraph();
+  if (viewMode === "mod") drawModGraph();
   else drawMainGraph();
 }
 
 // ---------- Events ----------
 $("ble-button").onclick = connect;
 $("header-disconnect").onclick = disconnect;
-$("modeAp").onclick = () => { appMode = "ap"; buildInterface(); };
-$("modeStd").onclick = () => { appMode = "std"; buildInterface(); };
 $("btnStart").onclick = toggleStart;
 $("btnSavePreset").onclick = () => {
   const n = $("presetName").value.trim();
@@ -1176,11 +987,6 @@ $("btnFactoryReset").onclick = () => {
 $("btnResetValues").onclick = resetAllValues;
 
 buildInterface();
-</script>
-<script>
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-  }
 </script>
 </body>
 </html>

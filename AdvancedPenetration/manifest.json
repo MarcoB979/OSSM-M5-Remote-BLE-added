@@ -1,0 +1,14 @@
+{
+  "name": "OSSM Remote",
+  "short_name": "OSSM Remote",
+  "description": "Bluetooth remote for the OSSM — Advanced Penetration and Standard modes.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0a12",
+  "theme_color": "#0a0a12",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}
