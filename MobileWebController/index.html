@@ -2394,19 +2394,12 @@ function updateCastButton() {
   if (!b) return;
   const row = b.parentElement;
   const url = funState.videoUrl;
-  if (!castAvailable) { if (row) row.style.display = "none"; return; }
+  const castable = /^https?:\/\//i.test(url || "");
+  if (!castAvailable || !castable) { if (row) row.style.display = "none"; return; }
   if (row) row.style.display = "";
-  if (!url) {
-    b.disabled = true; b.textContent = "Cast";
-    if (info) info.textContent = "load a video first";
-  } else if (!/^https?:\/\//i.test(url)) {
-    b.disabled = true; b.textContent = "Cast";
-    if (info) info.textContent = "local file can't be cast";
-  } else {
-    b.disabled = false;
-    b.textContent = castConnected ? "Stop cast" : "Cast";
-    if (info) info.textContent = castConnected ? "casting…" : "";
-  }
+  b.disabled = false;
+  b.textContent = castConnected ? "Stop cast" : "Cast";
+  if (info) info.textContent = castConnected ? "casting…" : "";
 }
 
 // ---------- Events ----------
