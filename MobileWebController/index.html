@@ -927,7 +927,8 @@ function toggleStart() {
     if (!machineRunningState()) { funLog("Waiting for the OSSM to finish homing…"); return; }
     if (castConnected && castSession) {
       try {
-        const ps = castMedia ? castMedia.playerState : null;
+        const media = castSession.getMediaSession ? castSession.getMediaSession() : (castMedia || null);
+        const ps = media ? media.playerState : null;
         const playing = ps === "PLAYING" || ps === "BUFFERING";
         if (playing) castSession.pause(); else castSession.play();
       } catch (e) { funLog("Cast control failed."); }
@@ -2396,20 +2397,24 @@ function castableUrl() {
   return u && /^https?:\/\//i.test(u) ? u : null;
 }
 function pollCastTime() {
-  if (!castConnected || !castMedia) return;
+  if (!castConnected) return;
+  const session = castSession || (castContext && castContext.getCurrentSession());
+  if (!session || !session.getMediaSession) return;
+  let media = null;
+  try { media = session.getMediaSession(); } catch (e) {}
+  if (!media) return;
+  castMedia = media;
   try {
-    let est = castMedia.currentTime;
-    if (typeof est !== "number" || !isFinite(est)) est = castMedia.getEstimatedTime();
+    let est = media.currentTime;
+    if (typeof est !== "number" || !isFinite(est)) {
+      if (typeof media.getEstimatedTime === "function") est = media.getEstimatedTime();
+    }
     if (typeof est !== "number" || !isFinite(est)) return;
-    if (castMedia.playerState === "PAUSED") {
-      // Receiver paused: freeze at its reported position.
+    if (media.playerState === "PAUSED") {
       castRemoteTime = est;
       castClockBaseMs = 0;
       return;
     }
-    // Re-anchor only when the receiver time has actually moved (advance or seek).
-    // Missing/stuck reports (or unknown player state) keep the running clock, so the
-    // OSSM follows even when the receiver does not report time for HLS streams.
     if (!castClockBaseMs || est > castRemoteTime + 0.1 || est < castRemoteTime - 1.0) {
       castRemoteTime = est;
       castClockBaseMs = Date.now();
@@ -2440,6 +2445,12 @@ function setCastOverlay(show) {
     ov.style.display = "none";
   }
 }
+function startCastPolling() {
+  castRemoteTime = 0; castClockBaseMs = Date.now(); // autoplay: clock starts now
+  if (castTickTimer) clearInterval(castTickTimer);
+  castTickTimer = setInterval(pollCastTime, 250);
+  pollCastTime();
+}
 function loadCastMedia() {
   const url = castableUrl();
   if (!url || !castContext) return;
@@ -2454,22 +2465,23 @@ function loadCastMedia() {
   } catch (e) {}
   const req = new chrome.cast.media.LoadRequest(mi);
   req.autoplay = true;
-  session.loadMedia(req).then(
-    (media) => {
-      castMedia = media;
-      castRemoteTime = 0; castClockBaseMs = Date.now(); // autoplay: start the clock now
-      media.addUpdateListener(() => pollCastTime());
-      pollCastTime();
-      if (castTickTimer) clearInterval(castTickTimer);
-      castTickTimer = setInterval(pollCastTime, 250);
-      funLog("Casting to TV…");
-    },
-    (err) => {
-      const msg = (err && (err.description || err.code)) || "unknown";
-      funLog("Cast failed (" + msg + ") — playing locally.");
-      if (castContext) castContext.endCurrentSession(true);
+  // CAF v3 loadMedia may not return the media object (and may not return a promise),
+  // so start polling the media session independently of its return value.
+  try {
+    const r = session.loadMedia(req);
+    if (r && typeof r.then === "function") {
+      r.then(() => startCastPolling(), (err) => {
+        const msg = (err && (err.description || err.code)) || "unknown";
+        funLog("Cast failed (" + msg + ") — playing locally.");
+        if (castContext) castContext.endCurrentSession(true);
+      });
+    } else {
+      startCastPolling();
     }
-  );
+  } catch (e) {
+    startCastPolling();
+  }
+  funLog("Casting to TV…");
 }
 function toggleCast() {
   if (!castContext) return;
