@@ -181,7 +181,7 @@
   .switch .slider:before { content: ""; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: #fff; border-radius: 50%; transition: .2s; }
   .switch input:checked + .slider { background-color: #22c55e; }
   .switch input:checked + .slider:before { transform: translateX(16px); }
-  input[type=range] { width: 100%; height: 6px; background: #1e293b; border-radius: 3px; outline: none; -webkit-appearance: none; appearance: none; }
+  input[type=range] { width: 100%; height: 6px; background: #1e293b; border-radius: 3px; outline: none; -webkit-appearance: none; appearance: none; touch-action: pan-y; }
   input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #fff; cursor: pointer; }
   .slider-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
   .slider-row .slider-name { flex: 1 1 auto; min-width: 0; font-size: .8rem; color: var(--text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1375,6 +1375,7 @@ function sliderEl(name, min, max, value, color, onSet) {
   const [minus, plus] = g.querySelectorAll(".step-btn");
   attachStepButton(minus, -1, input, valNum, min, max, onSet);
   attachStepButton(plus, +1, input, valNum, min, max, onSet);
+  g.setValue = (v) => { input.value = v; valNum.textContent = v; };
   return g;
 }
 
@@ -2004,8 +2005,17 @@ function buildFunControls() {
   settings.appendChild(st);
 
   wrap.appendChild(sliderEl("Max Speed", 1, 100, funState.maxSpeed, "#22c55e", v => { funState.maxSpeed = v; if (funState.playing) stdWrite("set:speed:" + v); }));
-  wrap.appendChild(sliderEl("Max Depth", 1, 100, funState.maxDepth, "#ff0c00", v => { funState.maxDepth = v; if (funState.minDepth > v) funState.minDepth = v; }));
-  wrap.appendChild(sliderEl("Min Depth", 0, 99, funState.minDepth, "#ff8100", v => { funState.minDepth = Math.min(v, funState.maxDepth); }));
+  const maxDepthSlider = sliderEl("Max Depth", 1, 100, funState.maxDepth, "#ff0c00", v => {
+    funState.maxDepth = v;
+    if (funState.minDepth > v) { funState.minDepth = v; minDepthSlider.setValue(v); }
+  });
+  const minDepthSlider = sliderEl("Min Depth", 0, 99, funState.minDepth, "#ff8100", v => {
+    const clamped = Math.min(v, funState.maxDepth);
+    funState.minDepth = clamped;
+    if (clamped !== v) minDepthSlider.setValue(clamped);
+  });
+  wrap.appendChild(maxDepthSlider);
+  wrap.appendChild(minDepthSlider);
 
   const bufG = document.createElement("div");
   bufG.className = "slider-group";
@@ -2365,6 +2375,7 @@ let castPausedLocal = false;
 let castTickTimer = null, castClockBaseMs = 0;
 let castConnectAt = 0, castFailNotified = false;
 let castWasPlaying = false;
+let castEnded = false;
 
 function initCast() {
   const onReady = () => {
@@ -2383,7 +2394,7 @@ function initCast() {
           const v = $("funVideo");
           castPausedLocal = !!(v && !v.paused);
           if (castPausedLocal) v.pause();
-          castConnectAt = Date.now(); castFailNotified = false; castWasPlaying = false;
+          castConnectAt = Date.now(); castFailNotified = false; castWasPlaying = false; castEnded = false;
           loadCastMedia();
           if (funState.actions.length && !funState.playing) funStartStreaming();
           setCastOverlay(true);
@@ -2424,7 +2435,12 @@ function pollCastTime() {
       if (typeof est !== "number" || !isFinite(est)) est = media.currentTime;
       if (typeof est === "number" && isFinite(est)) {
         const ps = media.playerState;
-        if (ps === "PAUSED") {
+        if (ps === "PLAYING" || ps === "BUFFERING") castWasPlaying = true;
+        if (castEnded) {
+          // Video already ended — keep the clock frozen until the user seeks/replays.
+          castRemoteTime = est;
+          castClockBaseMs = 0;
+        } else if (ps === "PAUSED") {
           castRemoteTime = est;
           castClockBaseMs = 0;
         } else if (ps === "IDLE") {
@@ -2435,8 +2451,8 @@ function pollCastTime() {
             funStopStreaming();
             funLog("Video ended.");
           }
+          castEnded = true;
         } else {
-          if (ps === "PLAYING" || ps === "BUFFERING") castWasPlaying = true;
           if (!castClockBaseMs) {
             castRemoteTime = est;
             castClockBaseMs = Date.now();
@@ -2467,6 +2483,7 @@ function pollCastTime() {
     const d = castDuration();
     if (d > 0 && castTimeNow() >= d - 0.4) {
       castClockBaseMs = 0;
+      castEnded = true;
       funStopStreaming();
       funLog("Video ended.");
     }
@@ -2528,6 +2545,7 @@ function seekCast(seconds) {
     media.seek(req,
       () => {
         castRemoteTime = target; castClockBaseMs = Date.now();
+        castEnded = false;
         if (funState.playing) { syncFunToTime(target * 1000); if (funPreviewShown) drawFunPreview(); }
       },
       (e) => { funLog("Seek failed: " + ((e && (e.description || e.code)) || "unknown")); }
@@ -2537,6 +2555,32 @@ function seekCast(seconds) {
     funLog("Seek threw: " + ((e && e.message) || "unknown"));
     return false;
   }
+}
+function castPlayPause() {
+  if (!castConnected) return;
+  const session = castSession || (castContext && castContext.getCurrentSession());
+  if (!session) return;
+  try {
+    const media = session.getMediaSession ? session.getMediaSession() : (castMedia || null);
+    if (!media) return;
+    const playing = media.playerState === "PLAYING" || media.playerState === "BUFFERING";
+    if (playing && media.pause) {
+      media.pause(mkCastRequest("PauseRequest"), () => {}, () => {});
+    } else if (!playing && media.play) {
+      castEnded = false;
+      media.play(mkCastRequest("PlayRequest"), () => {}, () => {});
+    }
+  } catch (e) {}
+}
+function stopCast() {
+  if (!castConnected || !castContext) return;
+  castPausedLocal = false;
+  try {
+    const s = castContext.getCurrentSession();
+    const m = s && s.getMediaSession && s.getMediaSession();
+    if (m && typeof m.stop === "function") m.stop(mkCastRequest("StopRequest"), () => {}, () => {});
+  } catch (e) {}
+  castContext.endCurrentSession(true);
 }
 function updateCastSeekUI() {
   const r = $("castSeek");
@@ -2552,6 +2596,14 @@ function updateCastSeekUI() {
   if (c) c.textContent = fmtCastTime(t);
   const dl = $("castDurLabel");
   if (dl) dl.textContent = fmtCastTime(d);
+  const pp = $("castPlayPauseBtn");
+  if (pp) {
+    const session = castSession || (castContext && castContext.getCurrentSession());
+    let media = null;
+    try { media = session && session.getMediaSession ? session.getMediaSession() : null; } catch (e) {}
+    const playing = media && (media.playerState === "PLAYING" || media.playerState === "BUFFERING");
+    pp.textContent = playing ? "⏸ Pause" : "▶ Play";
+  }
   if (funPreviewShown) drawFunPreview();
 }
 function setCastOverlay(show) {
@@ -2571,13 +2623,30 @@ function setCastOverlay(show) {
           "<span id=\"castTimeLabel\" style=\"font-size:.7rem;color:#94a3b8;font-variant-numeric:tabular-nums;white-space:nowrap;\">0:00</span>" +
           "<input type=\"range\" id=\"castSeek\" min=\"0\" max=\"100\" step=\"1\" value=\"0\" style=\"flex:1;min-width:0;\">" +
           "<span id=\"castDurLabel\" style=\"font-size:.7rem;color:#94a3b8;font-variant-numeric:tabular-nums;white-space:nowrap;\">0:00</span>" +
-        "</div>";
+        "</div>" +
+        "<div style=\"display:flex;align-items:center;justify-content:center;gap:8px;width:100%;max-width:420px;margin-top:12px;padding:0 12px;box-sizing:border-box;\">" +
+          "<button id=\"castBackBtn\" type=\"button\" style=\"background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 10px;font-size:.8rem;cursor:pointer;\">⏪ 10s</button>" +
+          "<button id=\"castPlayPauseBtn\" type=\"button\" style=\"background:#2563eb;border:none;color:#fff;border-radius:6px;padding:6px 14px;font-size:.8rem;font-weight:bold;cursor:pointer;\">▶ Play</button>" +
+          "<button id=\"castReplayBtn\" type=\"button\" style=\"background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 12px;font-size:.8rem;cursor:pointer;\">↺</button>" +
+          "<button id=\"castFwdBtn\" type=\"button\" style=\"background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:6px;padding:6px 10px;font-size:.8rem;cursor:pointer;\">10s ⏩</button>" +
+        "</div>" +
+        "<button id=\"castStopBtn\" type=\"button\" style=\"background:#dc2626;border:none;color:#fff;border-radius:8px;padding:10px 20px;font-size:.85rem;font-weight:bold;cursor:pointer;margin-top:14px;\">Stop casting</button>";
       wrap.appendChild(ov);
       const r = ov.querySelector("#castSeek");
       if (r) {
         r.addEventListener("input", () => { r.dataset.dragging = "1"; const c = $("castTimeLabel"); if (c) c.textContent = fmtCastTime(parseFloat(r.value) || 0); });
         r.addEventListener("change", () => { r.dataset.dragging = ""; seekCast(parseFloat(r.value) || 0); });
       }
+      const backBtn = ov.querySelector("#castBackBtn");
+      if (backBtn) backBtn.onclick = () => seekCast(castTimeNow() - 10);
+      const fwdBtn = ov.querySelector("#castFwdBtn");
+      if (fwdBtn) fwdBtn.onclick = () => seekCast(castTimeNow() + 10);
+      const replayBtn = ov.querySelector("#castReplayBtn");
+      if (replayBtn) replayBtn.onclick = () => seekCast(0);
+      const ppBtn = ov.querySelector("#castPlayPauseBtn");
+      if (ppBtn) ppBtn.onclick = castPlayPause;
+      const stopBtn = ov.querySelector("#castStopBtn");
+      if (stopBtn) stopBtn.onclick = stopCast;
       updateCastSeekUI();
     }
     ov.style.display = "flex";
@@ -3344,6 +3413,21 @@ if (bvk) bvk.onclick = () => { bindViewSlot = "kb"; try { localStorage.setItem("
 buildBindingUI();
 initCast();
 setInterval(gpPoll, 33);
+// Safety: range sliders only change when dragging the thumb, not when tapping the track
+// (prevents accidental value jumps while scrolling).
+document.addEventListener("pointerdown", (e) => {
+  const el = e.target;
+  if (!el || el.tagName !== "INPUT" || el.type !== "range") return;
+  if (el.id === "castSeek") return; // allow tap-to-seek on the cast scrubber
+  const rect = el.getBoundingClientRect();
+  if (rect.width <= 0) return;
+  const min = parseFloat(el.min), max = parseFloat(el.max);
+  if (!isFinite(min) || !isFinite(max) || max <= min) return;
+  const valPct = (parseFloat(el.value) - min) / (max - min);
+  const clickPct = (e.clientX - rect.left) / rect.width;
+  const distPx = Math.abs(clickPct - valPct) * rect.width;
+  if (distPx > 16) e.preventDefault();
+}, { passive: false });
 // Fallback state polling: keeps the Start button in sync even if BLE notify is flaky.
 setInterval(() => {
   if (!connected || !stdState) return;
