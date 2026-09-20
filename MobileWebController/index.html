@@ -2233,12 +2233,13 @@ async function loadVideoUrl(input) {
     if (!data || data.error) data = await fallbackExtract(pageUrl);
   }
   if (!data || data.error || !data.url) { funLog((data && data.error) || "Could not extract a video."); return; }
+  const videoUrl = absUrl(data.url);
   let name = "Stream";
   try { name = new URL(pageUrl).hostname; } catch (e) {}
   if (/pornhub/i.test(pageUrl)) name = "Pornhub " + extractPhKey(pageUrl);
   if (data.type === "hls") {
     if (typeof Hls === "undefined") { funLog("HLS streams need internet (hls.js)."); return; }
-    funState.videoUrl = data.url;
+    funState.videoUrl = videoUrl;
     funState.videoName = name;
     const nv = $("funVideoName"); if (nv) nv.textContent = name;
     buildFunVideo();
@@ -2247,11 +2248,11 @@ async function loadVideoUrl(input) {
     if (v) {
       if (funState.hls) funState.hls.destroy();
       funState.hls = new Hls();
-      funState.hls.loadSource(data.url);
+      funState.hls.loadSource(videoUrl);
       funState.hls.attachMedia(v);
     }
   } else {
-    setFunVideo(data.url, name);
+    setFunVideo(videoUrl, name);
   }
   funLog("Video loaded — press Start or play.");
 }
@@ -2371,8 +2372,15 @@ function initCast() {
   window.__onGCastApiAvailable = (isAvailable) => { if (isAvailable) onReady(); };
   if (window.chrome && window.chrome.cast && window.chrome.cast.isAvailable) onReady();
 }
+function absUrl(u) {
+  if (!u) return u;
+  u = String(u).trim();
+  if (/^\/\//.test(u)) return "https:" + u;
+  return u;
+}
 function castableUrl() {
-  return funState.videoUrl && /^https?:\/\//i.test(funState.videoUrl) ? funState.videoUrl : null;
+  const u = absUrl(funState.videoUrl);
+  return u && /^https?:\/\//i.test(u) ? u : null;
 }
 function pollCastTime() {
   if (!castConnected || !castMedia) return;
@@ -2459,10 +2467,14 @@ function updateCastButton() {
   const info = $("funCastInfo");
   if (!b) return;
   const row = b.parentElement;
-  const url = funState.videoUrl;
-  const castable = /^https?:\/\//i.test(url || "");
-  if (!castAvailable || !castable) { if (row) row.style.display = "none"; return; }
+  const castable = castableUrl();
+  if (!castable) { if (row) row.style.display = "none"; return; }
   if (row) row.style.display = "";
+  if (!castAvailable) {
+    b.disabled = true; b.textContent = "Cast";
+    if (info) info.textContent = "Cast SDK unavailable";
+    return;
+  }
   b.disabled = false;
   b.textContent = castConnected ? "Stop cast" : "Cast";
   if (info) info.textContent = castConnected ? "casting…" : "";
