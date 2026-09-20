@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.json" />
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"></script>
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -136,6 +137,18 @@
   canvas { display: block; background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 6px; width: 280px; max-width: 100%; height: auto; flex: 0 1 auto; min-width: 0; }
   .sliders-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px; }
   .focused-sliders { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; }
+  .fun-controls { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; }
+  .fun-title { font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
+  .fun-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .fun-btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: .75rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
+  .fun-file { font-family: monospace; font-size: .7rem; color: #38bdf8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fun-video { background: #000; border: 1px solid var(--border-color); border-radius: 8px; min-height: 180px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .fun-video video { display: block; width: 100%; max-height: calc(100vh - 80px); background: #000; }
+  .fun-placeholder { color: var(--muted); font-size: .9rem; padding: 40px; text-align: center; }
+  .phone-container.fun .col-left { display: none; }
+  .phone-container.fun .col-right { display: none; }
+  .phone-container.fun .conn-dot { display: none !important; }
+  .fun-status { font-size: .72rem; color: #fbbf24; margin-top: 8px; min-height: 1em; word-break: break-word; }
   .slider-group { margin-bottom: 12px; }
   .slider-group:last-child { margin-bottom: 0; }
   .slider-label { display: flex; justify-content: space-between; font-size: .8rem; margin-bottom: 4px; }
@@ -294,12 +307,22 @@
     .phone-container.hide-left.hide-right .focused-sliders .slider-row { flex-wrap: nowrap; }
     .phone-container.hide-left.hide-right .focused-sliders .slider-name { flex: 0 0 auto; }
     .phone-container.hide-left.hide-right .focused-sliders .slider-row input[type=range] { flex: 1 1 0; order: 0; }
+
+    /* Funscript mode: controls left, video full-width center, settings hidden */
+    .phone-container.fun { grid-template-columns: 250px 1fr 0; }
+    .phone-container.fun .col-left { display: flex; }
+    .phone-container.fun .col-right { display: none; }
+    .phone-container.fun .col-center { max-height: calc(100vh - 20px); }
+    .phone-container.fun .col-toggle { display: none; }
   }
 </style>
 </head>
 <body>
 <div class="phone-container">
+  <input type="file" id="funVideoInput" accept="video/*" style="display:none;">
+  <input type="file" id="funScriptInput" accept=".funscript,.json,application/json" style="display:none;">
   <div class="col col-left" id="col-left">
+    <div class="fun-controls" id="fun-controls" style="display:none;"></div>
     <div class="sliders-panel" id="sliders-wrapper"></div>
     <div class="start-stop-row">
       <button id="btnStart">Start</button>
@@ -315,8 +338,10 @@
       <span class="conn-dot" id="conn-dot" style="display:none;"></span>
       <div class="screen-header" id="active-title">OSSM Advanced Penetration</div>
       <div class="focus-status" id="focus-status" style="display:none;"></div>
-      <button class="col-toggle" id="toggleColRight" title="Show / hide settings column">▶</button>
+      <button class="ble-btn small" id="header-connect" style="display:none;">Connect</button>
       <button class="ble-btn small danger" id="header-disconnect" style="display:none;">Disconnect</button>
+      <button class="ble-btn small" id="funExit" style="display:none;">Exit Funscript</button>
+      <button class="col-toggle" id="toggleColRight" title="Show / hide settings column">▶</button>
     </div>
 
     <div class="visualizer-area">
@@ -324,6 +349,8 @@
       <canvas id="graphCanvas" width="280" height="132"></canvas>
       <div class="meter-col"><div class="meter-label">Min</div><div class="meter-bar"><div class="meter-fill" id="right-meter" style="background-color: var(--color-bottom);"></div></div></div>
     </div>
+
+    <div class="fun-video" id="fun-video" style="display:none;"></div>
 
     <div class="speed-line" id="speed-control"></div>
 
@@ -345,6 +372,7 @@
       <div class="mode-seg">
         <button id="modeAp" class="mode-btn active">Advanced</button>
         <button id="modeStd" class="mode-btn">Standard</button>
+        <button id="modeFun" class="mode-btn">Funscript</button>
       </div>
     </div>
 
@@ -755,6 +783,11 @@ function setModifier(bi, mi, v) {
   buildInterface();
 }
 function toggleStart() {
+  if (appMode === "fun") {
+    const v = $("funVideo");
+    if (v) { if (v.paused) v.play(); else v.pause(); }
+    return;
+  }
   if (appMode === "std") {
     if (stdRunning) stdWrite("set:speed:0");
     else {
@@ -811,7 +844,10 @@ function tabTextColor(hex) {
 function placeStartButton() {
   const row = document.querySelector(".start-stop-row");
   if (!row) return;
-  const anchor = (appMode === "std" || focusedMode()) ? $("speed-control") : $("sliders-wrapper");
+  let anchor;
+  if (appMode === "fun") anchor = $("fun-controls");
+  else if (appMode === "std" || focusedMode()) anchor = $("speed-control");
+  else anchor = $("sliders-wrapper");
   if (anchor && anchor.nextElementSibling !== row) anchor.insertAdjacentElement("afterend", row);
 }
 function updateFocusStatus() {
@@ -823,31 +859,43 @@ function updateFocusStatus() {
 }
 function buildInterface() {
   const isStd = appMode === "std";
-  $("active-title").textContent = isStd
-    ? "OSSM Standard"
-    : (viewMode === "main" ? "OSSM Advanced Penetration" : "Modifier for: " + BASE_NAMES[activeBaseIndex]);
-  const runningNow = isStd ? stdRunning : speed() > 0;
+  const isFun = appMode === "fun";
+  const pc = document.querySelector(".phone-container");
+  if (pc) pc.classList.toggle("fun", isFun);
+
+  $("active-title").textContent = isFun
+    ? "OSSM Funscript"
+    : (isStd ? "OSSM Standard" : (viewMode === "main" ? "OSSM Advanced Penetration" : "Modifier for: " + BASE_NAMES[activeBaseIndex]));
+  const runningNow = isFun ? funState.playing : (isStd ? stdRunning : speed() > 0);
   $("btnStart").textContent = runningNow ? "Stop" : "Start";
   $("btnStart").classList.toggle("stop", runningNow);
 
-  $("tabs-wrapper").style.display = isStd ? "none" : "";
-  $("reset-row").style.display = (isStd || viewMode !== "main" || !showAll) ? "none" : "";
-  $("presets-panel").style.display = isStd ? "none" : "";
-  $("modeAp").classList.toggle("active", !isStd);
-  $("modeStd").classList.toggle("active", isStd);
-  const fst = $("focus-status"); if (fst) fst.style.display = focusedMode() ? "" : "none";
+  $("tabs-wrapper").style.display = (isStd || isFun) ? "none" : "";
+  $("reset-row").style.display = (isFun || isStd || viewMode !== "main" || !showAll) ? "none" : "";
+  $("presets-panel").style.display = (isStd || isFun) ? "none" : "";
+  $("sliders-wrapper").style.display = isFun ? "none" : "";
+  $("speed-control").style.display = isFun ? "none" : "";
+  $("fun-controls").style.display = isFun ? "" : "none";
+  $("fun-video").style.display = isFun ? "" : "none";
+  $("funExit").style.display = isFun ? "" : "none";
+  const va = document.querySelector(".visualizer-area"); if (va) va.style.display = isFun ? "none" : "";
 
-  if (isStd) { buildStdSliders(); const fs = $("focused-sliders"); if (fs) fs.style.display = "none"; }
+  $("modeAp").classList.toggle("active", !isStd && !isFun);
+  $("modeStd").classList.toggle("active", isStd);
+  const mf = $("modeFun"); if (mf) mf.classList.toggle("active", isFun);
+  const fst = $("focus-status"); if (fst) fst.style.display = (focusedMode() || isFun) ? "" : "none";
+  const hc = $("header-connect"); if (hc) hc.style.display = (isFun && !connected) ? "" : "none";
+
+  if (isFun) { buildFunControls(); buildFunVideo(); }
+  else if (isStd) { buildStdSliders(); const fs = $("focused-sliders"); if (fs) fs.style.display = "none"; }
   else {
     buildTabs();
     if (focusedMode()) { buildFocusedSliders(); const fs = $("focused-sliders"); if (fs) fs.style.display = ""; }
     else { buildSliders(); const fs = $("focused-sliders"); if (fs) fs.style.display = "none"; }
     renderPresets();
   }
-  buildSpeed();
+  if (!isFun) { buildSpeed(); resizeCanvas(); drawGraph(); }
   placeStartButton();
-  resizeCanvas();
-  drawGraph();
 }
 
 function buildTabs() {
@@ -1629,12 +1677,280 @@ function resizeCanvas() {
   }
 }
 
+// ---------- Funscript mode (video + streaming over BLE) ----------
+const funState = {
+  videoUrl: null, videoName: "", scriptName: "",
+  rawActions: [], actions: [],
+  maxSpeed: 100, maxDepth: 100, minDepth: 0,
+  reverse: false, simplify: true,
+  nextIdx: 0, playing: false, timer: null
+};
+
+function buildFunControls() {
+  const wrap = $("fun-controls");
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  const title = document.createElement("div");
+  title.className = "fun-title";
+  title.textContent = "Funscript";
+  wrap.appendChild(title);
+
+  const row1 = document.createElement("div");
+  row1.className = "fun-row";
+  const bv = document.createElement("button");
+  bv.type = "button"; bv.className = "fun-btn"; bv.textContent = "Load Video";
+  bv.onclick = () => $("funVideoInput").click();
+  const nv = document.createElement("span");
+  nv.className = "fun-file"; nv.id = "funVideoName"; nv.textContent = funState.videoName || "no video";
+  row1.appendChild(bv); row1.appendChild(nv);
+  wrap.appendChild(row1);
+
+  const row2 = document.createElement("div");
+  row2.className = "fun-row";
+  const bs = document.createElement("button");
+  bs.type = "button"; bs.className = "fun-btn"; bs.textContent = "Load Funscript";
+  bs.onclick = () => $("funScriptInput").click();
+  const ns = document.createElement("span");
+  ns.className = "fun-file"; ns.id = "funScriptName";
+  ns.textContent = (funState.scriptName || "no script") + (funState.actions.length ? " (" + funState.actions.length + " pts)" : "");
+  row2.appendChild(bs); row2.appendChild(ns);
+  wrap.appendChild(row2);
+
+  const row3 = document.createElement("div");
+  row3.className = "fun-row";
+  const phInput = document.createElement("input");
+  phInput.type = "text"; phInput.id = "funPhId"; phInput.placeholder = "Video URL or Pornhub ID";
+  phInput.style.cssText = "flex:1;min-width:0;background:#1e293b;border:1px solid var(--border-color);color:var(--text-color);border-radius:6px;padding:6px 8px;font-size:.75rem;";
+  const phBtn = document.createElement("button");
+  phBtn.type = "button"; phBtn.className = "fun-btn"; phBtn.textContent = "Load URL";
+  phBtn.onclick = () => loadVideoUrl(phInput.value);
+  row3.appendChild(phInput); row3.appendChild(phBtn);
+  wrap.appendChild(row3);
+
+  const st = document.createElement("div");
+  st.className = "fun-status"; st.id = "funStatus";
+  wrap.appendChild(st);
+
+  wrap.appendChild(sliderEl("Max Speed", 1, 100, funState.maxSpeed, "#22c55e", v => { funState.maxSpeed = v; if (funState.playing) stdWrite("set:speed:" + v); }));
+  wrap.appendChild(sliderEl("Max Depth", 1, 100, funState.maxDepth, "#ff0c00", v => { funState.maxDepth = v; if (funState.minDepth > v) funState.minDepth = v; }));
+  wrap.appendChild(sliderEl("Min Depth", 0, 99, funState.minDepth, "#ff8100", v => { funState.minDepth = Math.min(v, funState.maxDepth); }));
+
+  const mkToggle = (label, checked, onChange) => {
+    const lab = document.createElement("label");
+    lab.className = "inline-toggle";
+    lab.innerHTML = `<span>${label}</span><span class="switch"><input type="checkbox" ${checked ? "checked" : ""}><span class="slider"></span></span>`;
+    lab.querySelector("input").onchange = e => onChange(e.target.checked);
+    wrap.appendChild(lab);
+  };
+  mkToggle("Reverse Script", funState.reverse, v => { funState.reverse = v; rebuildFunscript(); });
+  mkToggle("Simplify Script", funState.simplify, v => { funState.simplify = v; rebuildFunscript(); });
+}
+
+function buildFunVideo() {
+  const wrap = $("fun-video");
+  if (!wrap) return;
+  const landscape = window.matchMedia && window.matchMedia("(orientation: landscape)").matches;
+  if (!landscape) {
+    wrap.innerHTML = `<div class="fun-placeholder">📱↻ Rotate your phone to landscape to use Funscript mode</div>`;
+    return;
+  }
+  if (!funState.videoUrl) {
+    wrap.innerHTML = `<div class="fun-placeholder">🎬 Load a video to start</div>`;
+    return;
+  }
+  let v = wrap.querySelector("video");
+  if (!v) {
+    v = document.createElement("video");
+    v.id = "funVideo";
+    v.controls = true;
+    v.playsInline = true;
+    v.addEventListener("play", funStartStreaming);
+    v.addEventListener("pause", funStopStreaming);
+    v.addEventListener("ended", funStopStreaming);
+    wrap.appendChild(v);
+  }
+  if (funState.videoUrl && !/\.m3u8(\?|$)/i.test(funState.videoUrl) && v.src !== funState.videoUrl) v.src = funState.videoUrl;
+}
+
+function simplifyActions(acts, minDelta, minGap) {
+  if (!acts.length) return acts;
+  const out = [acts[0]];
+  let last = acts[0];
+  for (let i = 1; i < acts.length; i++) {
+    const a = acts[i];
+    if (i === acts.length - 1 || Math.abs(a.pos - last.pos) >= minDelta || (a.at - last.at) >= minGap) {
+      out.push(a); last = a;
+    }
+  }
+  return out;
+}
+function rebuildFunscript() {
+  let acts = funState.rawActions.map(a => ({ at: a.at, pos: a.pos }));
+  if (funState.reverse) acts = acts.map(a => ({ at: a.at, pos: 100 - a.pos }));
+  if (funState.simplify) acts = simplifyActions(acts, 0.6, 150);
+  funState.actions = acts;
+  funState.nextIdx = 0;
+  const ns = $("funScriptName");
+  if (ns) ns.textContent = (funState.scriptName || "no script") + (acts.length ? " (" + acts.length + " pts)" : "");
+}
+
+function funLog(msg) {
+  log(msg);
+  const fs = $("funStatus"); if (fs) fs.textContent = msg;
+}
+function setFunVideo(url, name) {
+  if (funState.videoUrl && funState.videoUrl.startsWith("blob:")) URL.revokeObjectURL(funState.videoUrl);
+  funState.videoUrl = url;
+  funState.videoName = name;
+  const nv = $("funVideoName"); if (nv) nv.textContent = name;
+  buildFunVideo();
+}
+const EXTRACTOR_URL = ""; // e.g. "https://your-worker.workers.dev" — see video-extractor.js
+
+function extractPhKey(raw) {
+  const km = raw.match(/[?&]viewkey=([^&#]+)/);
+  if (km) return km[1];
+  const parts = raw.split(/[\/?=&]/).filter(s => s && /^[a-z0-9]+$/i.test(s));
+  return parts.length ? parts[parts.length - 1] : raw;
+}
+async function callExtractor(url) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return { error: "Extractor status " + r.status };
+    return await r.json();
+  } catch (e) { return { error: "Extractor unreachable" }; }
+}
+function pageExtract(html) {
+  let m = html.match(/setVideoUrlHigh\s*\(\s*['"]([^'"]+\.mp4[^'"]*)['"]/i) || html.match(/setVideoHLS\s*\(\s*['"]([^'"]+\.m3u8[^'"]*)['"]/i) || html.match(/setVideoUrlLow\s*\(\s*['"]([^'"]+\.mp4[^'"]*)['"]/i);
+  if (m) return { url: m[1], type: /m3u8/i.test(m[1]) ? "hls" : "mp4" };
+  const flat = html.replace(/\\\//g, "/");
+  m = flat.match(/<source[^>]+src=["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/i) || flat.match(/<video[^>]+src=["']([^"']+\.(?:mp4|m3u8)[^"']*)["']/i);
+  if (m) return { url: m[1], type: /m3u8/i.test(m[1]) ? "hls" : "mp4" };
+  m = flat.match(/"videoUrl"\s*:\s*"([^"]+\.mp4[^"]*)"/i) || flat.match(/"(?:mp4|src|hls|video_url|videoHLS|streams)"\s*:\s*"([^"]+\.(?:mp4|m3u8)[^"]*)"/i);
+  if (m) return { url: m[1], type: /m3u8/i.test(m[1]) ? "hls" : "mp4" };
+  m = flat.match(/https?:\/\/[^"'\\\s<>]+\.(?:mp4|m3u8)[^"'\\\s<>]*/i);
+  if (m) return { url: m[0], type: /m3u8/i.test(m[0]) ? "hls" : "mp4" };
+  return { error: "No direct video URL found." };
+}
+async function fallbackExtract(pageUrl) {
+  const proxies = ["https://api.allorigins.win/raw?url=", "https://api.codetabs.com/v1/proxy?quest="];
+  let html = "";
+  for (const p of proxies) {
+    try {
+      html = await (await fetch(p + encodeURIComponent(pageUrl))).text();
+      if (html && html.length > 5000) break;
+    } catch (e) {}
+  }
+  if (!html || html.length <= 5000) return { error: "Could not fetch the page." };
+  return pageExtract(html);
+}
+async function loadVideoUrl(input) {
+  const raw = (input || "").trim();
+  if (!raw) { funLog("Enter a video URL or Pornhub ID."); return; }
+  const pageUrl = /^https?:\/\//i.test(raw)
+    ? raw
+    : ("https://www.pornhub.com/view_video.php?viewkey=" + encodeURIComponent(extractPhKey(raw)));
+  funLog("Extracting video…");
+  let data = null;
+  if (EXTRACTOR_URL) data = await callExtractor(EXTRACTOR_URL + "?url=" + encodeURIComponent(pageUrl));
+  if (!data || data.error) data = await fallbackExtract(pageUrl);
+  if (!data || data.error || !data.url) { funLog((data && data.error) || "Could not extract a video."); return; }
+  let name = "Stream";
+  try { name = new URL(pageUrl).hostname; } catch (e) {}
+  if (/pornhub/i.test(pageUrl)) name = "Pornhub " + extractPhKey(pageUrl);
+  if (data.type === "hls") {
+    if (typeof Hls === "undefined") { funLog("HLS streams need internet (hls.js)."); return; }
+    funState.videoUrl = data.url;
+    funState.videoName = name;
+    const nv = $("funVideoName"); if (nv) nv.textContent = name;
+    buildFunVideo();
+    const v = $("funVideo");
+    if (v) {
+      if (funState.hls) funState.hls.destroy();
+      funState.hls = new Hls();
+      funState.hls.loadSource(data.url);
+      funState.hls.attachMedia(v);
+    }
+  } else {
+    setFunVideo(data.url, name);
+  }
+  funLog("Video loaded — press Start or play.");
+}
+
+function funStartStreaming() {
+  if (!funState.actions.length) { funLog("No funscript loaded."); return; }
+  if (!stdCmd) { funLog("Connect to the OSSM to stream."); return; }
+  funState.playing = true;
+  funState.nextIdx = 0;
+  stdWrite("go:streaming");
+  stdWrite("set:speed:" + funState.maxSpeed);
+  stdWrite("set:max:" + funState.maxDepth);
+  stdWrite("set:min:" + funState.minDepth);
+  if (funState.timer) clearInterval(funState.timer);
+  funState.timer = setInterval(funStreamTick, 50);
+  $("btnStart").textContent = "Stop";
+  $("btnStart").classList.add("stop");
+}
+function funStreamTick() {
+  const v = $("funVideo");
+  if (!v || !funState.playing) return;
+  const t = v.currentTime * 1000;
+  const lead = 400;
+  let sent = 0;
+  while (funState.nextIdx < funState.actions.length && sent < 2) {
+    const a = funState.actions[funState.nextIdx];
+    if (a.at > t + lead) break;
+    const prev = funState.nextIdx > 0 ? funState.actions[funState.nextIdx - 1].at : 0;
+    const delta = Math.max(10, Math.round(a.at - prev));
+    const streamPos = Math.round(clamp(100 - a.pos, 0, 100));
+    stdWrite("stream:" + streamPos + ":" + delta);
+    funState.nextIdx++;
+    sent++;
+  }
+}
+function funStopStreaming() {
+  funState.playing = false;
+  if (funState.timer) { clearInterval(funState.timer); funState.timer = null; }
+  stdWrite("go:menu");
+  $("btnStart").textContent = "Start";
+  $("btnStart").classList.remove("stop");
+}
+
 // ---------- Events ----------
 $("ble-button").onclick = connect;
 $("header-disconnect").onclick = disconnect;
 $("modeAp").onclick = () => { appMode = "ap"; buildInterface(); };
 $("modeStd").onclick = () => { appMode = "std"; buildInterface(); };
+const mFun = $("modeFun");
+if (mFun) mFun.onclick = () => { appMode = "fun"; if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {}); buildInterface(); };
+const fEx = $("funExit");
+if (fEx) fEx.onclick = () => { appMode = "ap"; buildInterface(); };
+const hconn = $("header-connect");
+if (hconn) hconn.onclick = connect;
 $("btnStart").onclick = toggleStart;
+const fvi = $("funVideoInput");
+if (fvi) fvi.addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  setFunVideo(URL.createObjectURL(f), f.name);
+});
+const fsi = $("funScriptInput");
+if (fsi) fsi.addEventListener("change", e => {
+  const f = e.target.files && e.target.files[0];
+  if (!f) return;
+  funState.scriptName = f.name;
+  const r = new FileReader();
+  r.onload = () => {
+    try {
+      const j = JSON.parse(r.result);
+      funState.rawActions = (j.actions || [])
+        .filter(a => a && typeof a.at === "number" && typeof a.pos === "number")
+        .sort((a, b) => a.at - b.at);
+    } catch (err) { log("Funscript parse error: " + err.message); funState.rawActions = []; }
+    rebuildFunscript();
+  };
+  r.readAsText(f);
+});
 $("btnSavePreset").onclick = () => {
   const n = $("presetName").value.trim();
   if (!n) return;
@@ -1928,6 +2244,12 @@ function onBindingCaptured(d) {
 }
 
 function gpSpeedStep(d) {
+  if (appMode === "fun") {
+    funState.maxSpeed = clamp(funState.maxSpeed + d * 4, 1, 100);
+    if (funState.playing) stdWrite("set:speed:" + funState.maxSpeed);
+    buildFunControls();
+    return;
+  }
   if (appMode === "std") {
     stdValues.speed = clamp(stdValues.speed + d * 4, 0, 100);
     stdWrite("set:speed:" + stdValues.speed);
@@ -1951,7 +2273,7 @@ function gpCyclePattern(delta) {
   buildInterface();
 }
 function gpToggleMode() {
-  appMode = appMode === "std" ? "ap" : "std";
+  appMode = appMode === "ap" ? "std" : (appMode === "std" ? "fun" : "ap");
   buildInterface();
 }
 function gpNav(delta) {
