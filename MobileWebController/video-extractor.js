@@ -8,7 +8,7 @@
  *   1. npm i -g wrangler   (or use: npx wrangler login)
  *   2. npx wrangler deploy video-extractor.js
  *   3. Copy the resulting URL, e.g. https://ossm-extractor.YOURNAME.workers.dev
- *      into EXTRACTOR_URL at the top of the Funscript code in index.html.
+ *      into the "Your extractor URL" field in Funscript mode (saved per device).
  *
  * Usage:
  *   https://<your-worker>.workers.dev/?url=<encoded page url>

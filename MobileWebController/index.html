@@ -8,6 +8,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml" />
 <link rel="apple-touch-icon" href="icon.svg" />
 <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20"></script>
+<script src="https://www.gstatic.com/cv/js/sender/v1/cast_sender.js?loadCastFramework=1"></script>
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -67,6 +68,7 @@
   .ble-btn { background-color: #2563eb; color: #fff; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: .85rem; }
   .ble-btn.small { padding: 4px 10px; font-size: .75rem; }
   .ble-btn.danger { background-color: #dc2626; }
+  .ble-btn.connecting { background-color: #f59e0b; cursor: progress; }
   .ble-status { font-size: .8rem; font-family: monospace; color: var(--muted); }
   .ble-status.small { font-size: .7rem; }
   .header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
@@ -141,6 +143,16 @@
   .fun-title { font-size: .75rem; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 8px; }
   .fun-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
   .fun-btn { background: #2563eb; color: #fff; border: none; border-radius: 6px; padding: 6px 10px; font-size: .75rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
+  .fun-fold { background: #334155; }
+  .fun-fold.active { background: #7c3aed; }
+  .fun-help { background: #334155; color: #e2e8f0; border: 1px solid var(--border-color); border-radius: 50%; width: 22px; height: 22px; min-width: 22px; font-size: .78rem; font-weight: bold; cursor: pointer; line-height: 1; display: flex; align-items: center; justify-content: center; padding: 0; }
+  .fun-help:hover { background: #475569; color: #fff; }
+  .help-body { font-size: .78rem; color: #d1d5db; line-height: 1.45; }
+  .help-body p { margin: 0 0 10px; }
+  .help-body ol { margin: 0 0 10px; padding-left: 18px; }
+  .help-body li { margin-bottom: 6px; }
+  .help-body code { background: #1e293b; border: 1px solid var(--border-color); border-radius: 4px; padding: 1px 5px; font-size: .7rem; color: #38bdf8; }
+  .help-body b { color: #fff; }
   .fun-file { font-family: monospace; font-size: .7rem; color: #38bdf8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fun-video { background: #000; border: 1px solid var(--border-color); border-radius: 8px; min-height: 180px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
   .fun-video video { display: block; width: 100%; max-height: calc(100vh - 80px); background: #000; }
@@ -187,12 +199,13 @@
   .speed-line input[type=range] { flex: 1; }
   #btnStart { width: 100%; background-color: #16a34a; border: none; border-radius: 10px; padding: 14px; color: #fff; font-weight: bold; font-size: 1rem; cursor: pointer; }
   #btnStart.stop { background-color: #dc2626; }
+  #btnStart:disabled { background-color: #334155; color: #94a3b8; cursor: not-allowed; }
   .reset-row { text-align: center; margin-bottom: 4px; }
   #btnResetValues { background: none; border: none; color: #ff5b6a; font-size: .78rem; cursor: pointer; text-decoration: underline; padding: 4px 8px; }
-  .mode-row { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 2px 0 10px; }
-  .mode-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .mode-row { display: flex; flex-direction: column; align-items: stretch; gap: 6px; margin: 2px 0 10px; }
+  .mode-label { font-size: .72rem; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; text-align: center; }
   .mode-seg { display: flex; background: #1e293b; border: 1px solid var(--border-color); border-radius: 8px; overflow: hidden; }
-  .mode-btn { background: transparent; color: var(--muted); border: none; padding: 5px 12px; font-size: .78rem; font-weight: bold; cursor: pointer; }
+  .mode-btn { flex: 1; background: transparent; color: var(--muted); border: none; padding: 6px 2px; font-size: .7rem; font-weight: bold; cursor: pointer; white-space: nowrap; }
   .mode-btn.active { background: #2563eb; color: #fff; }
   .presets-panel { background-color: var(--panel-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 12px; margin-top: 12px; }
   .presets-panel summary {
@@ -319,7 +332,7 @@
 </head>
 <body>
 <div class="phone-container">
-  <input type="file" id="funVideoInput" accept="video/*" style="display:none;">
+  <input type="file" id="funVideoInput" accept=".mp4,.mkv,.webm,.mov,.m4v,.avi,.mpg,.mpeg" style="display:none;">
   <input type="file" id="funScriptInput" accept=".funscript,.json,application/json" style="display:none;">
   <div class="col col-left" id="col-left">
     <div class="fun-controls" id="fun-controls" style="display:none;"></div>
@@ -365,8 +378,6 @@
       <button class="ble-btn" id="ble-button">Connect</button>
     </div>
 
-    <div class="pad-status" id="pad-status">🎮 Press a button on the controller, or use the keyboard…</div>
-
     <div class="mode-row" id="mode-row">
       <span class="mode-label">Mode</span>
       <div class="mode-seg">
@@ -375,6 +386,8 @@
         <button id="modeFun" class="mode-btn">Funscript</button>
       </div>
     </div>
+
+    <div class="pad-status" id="pad-status">🎮 Press a button on the controller, or use the keyboard…</div>
 
     <details class="presets-panel" id="presets-panel">
       <summary><span class="summary-left">Presets<span class="summary-value" id="presetSummaryName"></span></span></summary>
@@ -406,6 +419,16 @@
       <pre id="pad-debug-axes">Axes: —</pre>
       <pre id="pad-debug-buttons">Pressed: —</pre>
     </details>
+  </div>
+
+  <div class="wizard-overlay" id="helpOverlay" style="display:none;">
+    <div class="wizard-box" style="max-width:440px;">
+      <div class="wizard-title">❓ Extractor URL</div>
+      <div class="help-body" id="helpBody"></div>
+      <div class="wizard-row" style="margin-top:14px;">
+        <button class="wizard-btn" id="helpClose">Got it</button>
+      </div>
+    </div>
   </div>
 
   <div class="wizard-overlay" id="wizard" style="display:none;">
@@ -449,6 +472,7 @@ const STD_CMD_UUID        = "522b443a-4f53-534d-1000-420badbabe69";
 const STD_STATE_UUID      = "522b443a-4f53-534d-2000-420badbabe69";
 const STD_PATTERNS_UUID   = "522b443a-4f53-534d-3000-420badbabe69";
 const STD_SENPTL_UUID     = "4f53534d-456e-6769-6e65-5061744c7374";
+const STREAM_UUID         = "4f53534d-436f-6d6d-6f6e-53747265616D";
 const STD_PATTERN_FALLBACK = ["Simple Stroke", "Teasing Pounding", "Robo Stroke", "Half'n'Half", "Deeper", "Stop'n'Go", "Insist", "Progressive Stroke", "Random Stroke", "Go to Point"];
 const STD_PATTERN_DESC_FALLBACK = [
   "Acceleration, coasting, deceleration equally split; sensation adds randomness in stroke.",
@@ -466,7 +490,7 @@ const STD_KNOWN_PATTERN_COUNT = 10;  // indices 0..9 have graph renderers; newer
 
 let device = null, server = null;
 let ctlChar = null, cfgChar = null, stsChar = null, prsChar = null;
-let stdCmd = null, stdState = null, stdPatternsChar = null, senptlChar = null;
+let stdCmd = null, stdState = null, stdPatternsChar = null, senptlChar = null, streamChar = null;
 let presetNames = [];
 let connected = false;
 let running = false;
@@ -616,8 +640,21 @@ function parseStatus(raw) {
 
 const speed = () => Math.round(settingValue(SPEED_KEY));
 
+function setConnectingUI(on) {
+  const els = [$("ble-button"), $("header-connect")];
+  for (const el of els) {
+    if (!el) continue;
+    el.textContent = on ? "Connecting…" : "Connect";
+    el.classList.toggle("connecting", on);
+    el.disabled = on;
+  }
+  const bt = $("ble-text");
+  if (bt) bt.textContent = on ? "OSSM: Connecting…" : (bt.textContent === "OSSM: Connecting…" ? "OSSM: Disconnected" : bt.textContent);
+}
+
 async function connect() {
   if (!navigator.bluetooth) { log("Web Bluetooth not available. Use Chrome/Edge over HTTPS or localhost."); return; }
+  setConnectingUI(true);
   log("Requesting device…");
   try {
     device = await navigator.bluetooth.requestDevice({
@@ -634,8 +671,9 @@ async function connect() {
     prsChar = await svc.getCharacteristic(PRESETS_UUID);
 
     // Standard-mode characteristics (legacy service) — best effort.
-    stdCmd = null; stdState = null; stdPatternsChar = null; senptlChar = null;
+    stdCmd = null; stdState = null; stdPatternsChar = null; senptlChar = null; streamChar = null;
     try { senptlChar = await svc.getCharacteristic(STD_SENPTL_UUID); } catch (e) {}
+    try { streamChar = await svc.getCharacteristic(STREAM_UUID); } catch (e) {}
     try {
       const legacy = await server.getPrimaryService(LEGACY_SERVICE_UUID);
       try { stdCmd = await legacy.getCharacteristic(STD_CMD_UUID); } catch (e) {}
@@ -662,19 +700,21 @@ async function connect() {
     updateFocusStatus();
     running = speed() > 0;
     lastNonZeroSpeed = speed() > 0 ? speed() : 50;
+    setConnectingUI(false);
     $("ble-panel").style.display = "none";
     $("conn-dot").style.display = "inline-block";
     $("header-disconnect").style.display = "inline-block";
     buildInterface();
     log("");
   } catch (e) {
+    setConnectingUI(false);
     $("ble-text").textContent = "OSSM: Error 🔴";
     log("Bluetooth error: " + e.message);
   }
 }
 
 function onDisconnected() {
-  connected = false; running = false; stdRunning = false;
+  connected = false; running = false; stdRunning = false; stdStateName = ""; streamChar = null;
   updateFocusStatus();
   $("ble-panel").style.display = "";
   $("conn-dot").style.display = "none";
@@ -709,13 +749,19 @@ function parseStdState(raw) {
   if (typeof j.state === "string") stdStateName = j.state;
   stdRunning = stdValues.speed > 0.5;
 }
-function onStdState(ev) { parseStdState(decode(ev.target.value)); if (appMode === "std") buildInterface(); }
+function onStdState(ev) { parseStdState(decode(ev.target.value)); if (appMode === "std") buildInterface(); else if (appMode === "fun") updateStartButton(); }
 
 async function stdWrite(cmd) {
   if (!stdCmd) return;
   const data = encode(cmd);
   try { await stdCmd.writeValueWithoutResponse(data); }
   catch (e) { try { await stdCmd.writeValueWithResponse(data); } catch (e2) { log("Std write failed: " + e2.message); } }
+}
+async function streamWrite(data) {
+  if (!streamChar) return;
+  const enc = encode(data);
+  try { await streamChar.writeValueWithoutResponse(enc); }
+  catch (e) { try { await streamChar.writeValueWithResponse(enc); } catch (e2) {} }
 }
 
 async function refreshStdPatterns() {
@@ -782,18 +828,50 @@ function setModifier(bi, mi, v) {
   writeControl(`${bi}:${mi}:${v},`).catch(e => log("Write failed: " + e));
   buildInterface();
 }
+function machineRunningState() {
+  if (!connected) return false;
+  const s = stdStateName || "";
+  if (appMode === "fun") return s === "streaming" || s === "streaming.idle";
+  if (appMode === "std") return s.indexOf("strokeEngine") === 0;
+  return true; // advanced penetration: not gated (existing behaviour)
+}
+function machineStateLabel() {
+  const s = stdStateName || "";
+  if (s.indexOf("homing") === 0 || s === "measure.run") return "Homing…";
+  if (s.indexOf("preflight") !== -1) return "Preflight…";
+  if (s.indexOf("streaming") === 0) return "Streaming ready";
+  if (s.indexOf("strokeEngine") === 0) return "Stroke engine ready";
+  if (s.indexOf("advancedPenetration") === 0) return "Advanced ready";
+  if (s.indexOf("menu") === 0 || s === "idle") return "In menu…";
+  return s || "Preparing…";
+}
+function updateStartButton() {
+  const b = $("btnStart");
+  if (!b) return;
+  const isFun = appMode === "fun";
+  const isStd = appMode === "std";
+  const runningNow = isFun ? funState.playing : (isStd ? stdRunning : speed() > 0);
+  if (!connected || machineRunningState()) {
+    b.disabled = false;
+    b.textContent = runningNow ? "Stop" : "Start";
+    b.classList.toggle("stop", runningNow);
+  } else {
+    b.disabled = true;
+    b.textContent = machineStateLabel();
+    b.classList.remove("stop");
+  }
+}
 function toggleStart() {
   if (appMode === "fun") {
+    if (!machineRunningState()) { funLog("Waiting for the OSSM to finish homing…"); return; }
     const v = $("funVideo");
     if (v) { if (v.paused) v.play(); else v.pause(); }
     return;
   }
   if (appMode === "std") {
+    if (!machineRunningState()) { log("Waiting for the OSSM to finish homing…"); return; }
     if (stdRunning) stdWrite("set:speed:0");
-    else {
-      stdWrite("go:strokeEngine");
-      stdWrite("set:speed:" + (stdValues.speed > 0 ? stdValues.speed : 50));
-    }
+    else stdWrite("set:speed:" + (stdValues.speed > 0 ? stdValues.speed : 50));
     return;
   }
   if (speed() > 0) setSpeed(0);
@@ -866,9 +944,7 @@ function buildInterface() {
   $("active-title").textContent = isFun
     ? "OSSM Funscript"
     : (isStd ? "OSSM Standard" : (viewMode === "main" ? "OSSM Advanced Penetration" : "Modifier for: " + BASE_NAMES[activeBaseIndex]));
-  const runningNow = isFun ? funState.playing : (isStd ? stdRunning : speed() > 0);
-  $("btnStart").textContent = runningNow ? "Stop" : "Start";
-  $("btnStart").classList.toggle("stop", runningNow);
+  updateStartButton();
 
   $("tabs-wrapper").style.display = (isStd || isFun) ? "none" : "";
   $("reset-row").style.display = (isFun || isStd || viewMode !== "main" || !showAll) ? "none" : "";
@@ -1724,8 +1800,64 @@ function buildFunControls() {
   const phBtn = document.createElement("button");
   phBtn.type = "button"; phBtn.className = "fun-btn"; phBtn.textContent = "Load URL";
   phBtn.onclick = () => loadVideoUrl(phInput.value);
-  row3.appendChild(phInput); row3.appendChild(phBtn);
+  const foldBtn = document.createElement("button");
+  foldBtn.type = "button"; foldBtn.className = "fun-btn fun-fold"; foldBtn.textContent = "⚙";
+  foldBtn.title = "Show extractor settings";
+  foldBtn.onclick = () => {
+    const sec = $("funExtractorSection");
+    if (!sec) return;
+    const show = sec.style.display === "none";
+    sec.style.display = show ? "block" : "none";
+    foldBtn.classList.toggle("active", show);
+    foldBtn.title = show ? "Hide extractor settings" : "Show extractor settings";
+  };
+  row3.appendChild(phInput); row3.appendChild(phBtn); row3.appendChild(foldBtn);
   wrap.appendChild(row3);
+
+  const castRow = document.createElement("div");
+  castRow.className = "fun-row";
+  const castBtn = document.createElement("button");
+  castBtn.type = "button"; castBtn.className = "fun-btn"; castBtn.id = "funCastBtn";
+  castBtn.textContent = "Cast";
+  castBtn.onclick = toggleCast;
+  castRow.appendChild(castBtn);
+  const castInfo = document.createElement("span");
+  castInfo.className = "fun-file"; castInfo.id = "funCastInfo";
+  castRow.appendChild(castInfo);
+  wrap.appendChild(castRow);
+  updateCastButton();
+
+  const sec = document.createElement("div");
+  sec.id = "funExtractorSection";
+  sec.style.display = "none";
+
+  const row4 = document.createElement("div");
+  row4.className = "fun-row";
+  row4.style.cssText = "margin-top:2px;";
+  const exInput = document.createElement("input");
+  exInput.type = "url"; exInput.id = "funExtractorUrl";
+  exInput.placeholder = "Your extractor URL (optional)";
+  exInput.value = getExtractorUrl();
+  exInput.autocomplete = "off"; exInput.spellcheck = false;
+  exInput.style.cssText = "flex:1;min-width:0;background:#1e293b;border:1px solid var(--border-color);color:var(--text-color);border-radius:6px;padding:6px 8px;font-size:.75rem;";
+  exInput.onchange = () => {
+    const v = exInput.value.trim().replace(/\/+$/, "");
+    try { localStorage.setItem("ossm-extractor-url", v); } catch (e) {}
+    funLog(v ? "Extractor saved — using your own worker." : "Extractor cleared — using public proxies.");
+  };
+  row4.appendChild(exInput);
+  const exHelp = document.createElement("button");
+  exHelp.type = "button"; exHelp.className = "fun-help"; exHelp.textContent = "?";
+  exHelp.title = "What is this?";
+  exHelp.onclick = showExtractorHelp;
+  row4.appendChild(exHelp);
+  sec.appendChild(row4);
+  const hint = document.createElement("div");
+  hint.className = "fun-file";
+  hint.style.cssText = "font-size:.68rem;opacity:.75;margin-top:-4px;";
+  hint.textContent = "Optional: deploy video-extractor.js to your own free Cloudflare Worker, paste its URL above. Stored on this device only.";
+  sec.appendChild(hint);
+  wrap.appendChild(sec);
 
   const st = document.createElement("div");
   st.className = "fun-status"; st.id = "funStatus";
@@ -1764,7 +1896,10 @@ function buildFunVideo() {
     v.id = "funVideo";
     v.controls = true;
     v.playsInline = true;
-    v.addEventListener("play", funStartStreaming);
+    v.addEventListener("play", () => {
+      if (!machineRunningState()) { v.pause(); funLog("Waiting for the OSSM to finish homing…"); return; }
+      funStartStreaming();
+    });
     v.addEventListener("pause", funStopStreaming);
     v.addEventListener("ended", funStopStreaming);
     wrap.appendChild(v);
@@ -1804,8 +1939,21 @@ function setFunVideo(url, name) {
   funState.videoName = name;
   const nv = $("funVideoName"); if (nv) nv.textContent = name;
   buildFunVideo();
+  updateCastButton();
 }
-const EXTRACTOR_URL = ""; // e.g. "https://your-worker.workers.dev" — see video-extractor.js
+function getExtractorUrl() {
+  try { return (localStorage.getItem("ossm-extractor-url") || "").trim().replace(/\/+$/, ""); } catch (e) { return ""; }
+}
+function showExtractorHelp() {
+  const body = $("helpBody");
+  if (body) body.innerHTML = `<p><b>What it is</b><br>A tiny helper server (a free "Cloudflare Worker") that fetches a video page for you and returns the direct .mp4 / .m3u8 stream URL. Browsers cannot read other websites' pages directly (a security rule called CORS), so this helper does it on the server side.</p><p><b>Why use it</b><br>Without it, the app uses free public proxies, which are slower and less reliable. Your own worker makes URL loading fast and dependable, and keeps your traffic on your own free account instead of a shared one.</p><p><b>How to set it up</b> (free, about 5 minutes)</p><ol><li>Create a free account at <code>dash.cloudflare.com</code>.</li><li>Go to <b>Workers &amp; Pages → Create → Create Worker</b>.</li><li>Delete the sample code and paste the entire contents of <code>video-extractor.js</code> (included with this app), then click <b>Deploy</b>.</li><li>Copy the URL Cloudflare gives you (it ends in <code>.workers.dev</code>) and paste it into the field on this page.</li></ol><p><b>Privacy</b><br>The URL is stored only in this browser, on this device. Nothing is uploaded or shared, and it is 100% optional.</p>`;
+  const ov = $("helpOverlay");
+  if (ov) ov.style.display = "flex";
+}
+function hideExtractorHelp() {
+  const ov = $("helpOverlay");
+  if (ov) ov.style.display = "none";
+}
 
 function extractPhKey(raw) {
   const km = raw.match(/[?&]viewkey=([^&#]+)/);
@@ -1852,7 +2000,8 @@ async function loadVideoUrl(input) {
     : ("https://www.pornhub.com/view_video.php?viewkey=" + encodeURIComponent(extractPhKey(raw)));
   funLog("Extracting video…");
   let data = null;
-  if (EXTRACTOR_URL) data = await callExtractor(EXTRACTOR_URL + "?url=" + encodeURIComponent(pageUrl));
+  const extractor = getExtractorUrl();
+  if (extractor) data = await callExtractor(extractor + "?url=" + encodeURIComponent(pageUrl));
   if (!data || data.error) data = await fallbackExtract(pageUrl);
   if (!data || data.error || !data.url) { funLog((data && data.error) || "Could not extract a video."); return; }
   let name = "Stream";
@@ -1864,6 +2013,7 @@ async function loadVideoUrl(input) {
     funState.videoName = name;
     const nv = $("funVideoName"); if (nv) nv.textContent = name;
     buildFunVideo();
+    updateCastButton();
     const v = $("funVideo");
     if (v) {
       if (funState.hls) funState.hls.destroy();
@@ -1880,9 +2030,9 @@ async function loadVideoUrl(input) {
 function funStartStreaming() {
   if (!funState.actions.length) { funLog("No funscript loaded."); return; }
   if (!stdCmd) { funLog("Connect to the OSSM to stream."); return; }
+  if (!machineRunningState()) { funLog("Waiting for the OSSM to finish homing…"); return; }
   funState.playing = true;
   funState.nextIdx = 0;
-  stdWrite("go:streaming");
   stdWrite("set:speed:" + funState.maxSpeed);
   stdWrite("set:max:" + funState.maxDepth);
   stdWrite("set:min:" + funState.minDepth);
@@ -1892,9 +2042,10 @@ function funStartStreaming() {
   $("btnStart").classList.add("stop");
 }
 function funStreamTick() {
-  const v = $("funVideo");
-  if (!v || !funState.playing) return;
-  const t = v.currentTime * 1000;
+  if (!funState.playing) return;
+  let t;
+  if (castConnected && castPlayer) t = (castPlayer.currentTime || 0) * 1000;
+  else { const v = $("funVideo"); if (!v) return; t = v.currentTime * 1000; }
   const lead = 400;
   let sent = 0;
   while (funState.nextIdx < funState.actions.length && sent < 2) {
@@ -1903,7 +2054,8 @@ function funStreamTick() {
     const prev = funState.nextIdx > 0 ? funState.actions[funState.nextIdx - 1].at : 0;
     const delta = Math.max(10, Math.round(a.at - prev));
     const streamPos = Math.round(clamp(100 - a.pos, 0, 100));
-    stdWrite("stream:" + streamPos + ":" + delta);
+    if (streamChar) streamWrite(streamPos + ":" + delta);
+    else stdWrite("stream:" + streamPos + ":" + delta);
     funState.nextIdx++;
     sent++;
   }
@@ -1911,20 +2063,139 @@ function funStreamTick() {
 function funStopStreaming() {
   funState.playing = false;
   if (funState.timer) { clearInterval(funState.timer); funState.timer = null; }
-  stdWrite("go:menu");
-  $("btnStart").textContent = "Start";
-  $("btnStart").classList.remove("stop");
+  updateStartButton();
+}
+function toggleVideoFullscreen() {
+  if (appMode !== "fun") return;
+  const v = $("funVideo");
+  if (!v) return;
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  } else if (v.requestFullscreen) {
+    v.requestFullscreen().catch(() => {});
+  } else if (v.webkitRequestFullscreen) {
+    v.webkitRequestFullscreen();
+  }
+}
+
+// ---------- Chromecast (Google Cast SDK) ----------
+let castContext = null, castPlayer = null, castPlayerController = null;
+let castAvailable = false, castConnected = false;
+
+function initCast() {
+  const onReady = () => {
+    try {
+      castContext = cast.framework.CastContext.getInstance();
+      castContext.setOptions({
+        receiverApplicationId: chrome.cast.media.DEFAULT_MEDIA_RECEIVER_APP_ID,
+        autoJoinPolicy: chrome.cast.AutoJoinPolicy.ORIGIN_SCOPED
+      });
+      castPlayer = new cast.framework.RemotePlayer();
+      castPlayerController = new cast.framework.RemotePlayerController(castPlayer);
+      castAvailable = true;
+      castContext.addEventListener(cast.framework.CastContextEventType.CAST_STATE_CHANGED, e => {
+        castConnected = e.castState === cast.framework.CastState.CONNECTED;
+        if (castConnected) {
+          loadCastMedia();
+          const v = $("funVideo");
+          if (v && !v.paused) v.pause();
+          if (funState.actions.length && !funState.playing) funStartStreaming();
+        } else if (funState.playing) {
+          funStopStreaming();
+        }
+        updateCastButton();
+      });
+      updateCastButton();
+    } catch (err) {}
+  };
+  window.__onGCastApiAvailable = (isAvailable) => { if (isAvailable) onReady(); };
+  if (window.chrome && window.chrome.cast && window.chrome.cast.isAvailable) onReady();
+}
+function castableUrl() {
+  return funState.videoUrl && /^https?:\/\//i.test(funState.videoUrl) ? funState.videoUrl : null;
+}
+function loadCastMedia() {
+  const url = castableUrl();
+  if (!url || !castPlayer) return;
+  const mime = /\.m3u8(\?|$)/i.test(url) ? "application/x-mpegURL" : "video/mp4";
+  const mi = new chrome.cast.media.MediaInfo(url, mime);
+  try {
+    const meta = new chrome.cast.media.GenericMediaMetadata();
+    meta.title = funState.videoName || "OSSM video";
+    mi.metadata = meta;
+  } catch (e) {}
+  castPlayer.mediaInfo = mi;
+  castPlayerController.playOrPause();
+}
+function toggleCast() {
+  if (!castContext) return;
+  if (castConnected) castContext.endCurrentSession(true);
+  else castContext.requestSession().catch(() => {});
+}
+function updateCastButton() {
+  const b = $("funCastBtn");
+  const info = $("funCastInfo");
+  if (!b) return;
+  const row = b.parentElement;
+  const url = funState.videoUrl;
+  if (!castAvailable) { if (row) row.style.display = "none"; return; }
+  if (row) row.style.display = "";
+  if (!url) {
+    b.disabled = true; b.textContent = "Cast";
+    if (info) info.textContent = "load a video first";
+  } else if (!/^https?:\/\//i.test(url)) {
+    b.disabled = true; b.textContent = "Cast";
+    if (info) info.textContent = "local file can't be cast";
+  } else {
+    b.disabled = false;
+    b.textContent = castConnected ? "Stop cast" : "Cast";
+    if (info) info.textContent = castConnected ? "casting…" : "";
+  }
 }
 
 // ---------- Events ----------
 $("ble-button").onclick = connect;
 $("header-disconnect").onclick = disconnect;
-$("modeAp").onclick = () => { appMode = "ap"; buildInterface(); };
-$("modeStd").onclick = () => { appMode = "std"; buildInterface(); };
+function leaveStreamingIfNeeded() {
+  if (appMode !== "fun") return;
+  const v = $("funVideo");
+  if (v && !v.paused) { try { v.pause(); } catch (e) {} }
+  funState.playing = false;
+  if (funState.timer) { clearInterval(funState.timer); funState.timer = null; }
+  if (connected && stdCmd && /^streaming/.test(stdStateName || "")) stdWrite("go:menu");
+}
+let modeSwitchToken = 0;
+function requestMode(command) {
+  if (!stdCmd) return;
+  const token = ++modeSwitchToken;
+  stdWrite("go:menu"); // return to menu first — this works from any mode
+  setTimeout(() => {
+    if (token !== modeSwitchToken || !connected || !stdCmd) return;
+    stdWrite(command);
+  }, 300);
+}
+function enterStreamingMode() {
+  if (connected && stdCmd && !/^streaming/.test(stdStateName || "")) {
+    stdStateName = "";
+    requestMode("go:streaming");
+    funLog("Switching to streaming — homing…");
+  }
+  updateStartButton();
+}
+function enterStdMode() {
+  if (connected && stdCmd && stdStateName.indexOf("strokeEngine") !== 0) {
+    stdStateName = "";
+    requestMode("go:strokeEngine");
+  }
+  updateStartButton();
+}
+$("modeAp").onclick = () => { leaveStreamingIfNeeded(); appMode = "ap"; buildInterface(); };
+$("modeStd").onclick = () => { leaveStreamingIfNeeded(); appMode = "std"; buildInterface(); enterStdMode(); };
 const mFun = $("modeFun");
-if (mFun) mFun.onclick = () => { appMode = "fun"; if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {}); buildInterface(); };
+if (mFun) mFun.onclick = () => { leaveStreamingIfNeeded(); appMode = "fun"; if (screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {}); buildInterface(); enterStreamingMode(); };
 const fEx = $("funExit");
-if (fEx) fEx.onclick = () => { appMode = "ap"; buildInterface(); };
+if (fEx) fEx.onclick = () => { leaveStreamingIfNeeded(); appMode = "ap"; buildInterface(); };
 const hconn = $("header-connect");
 if (hconn) hconn.onclick = connect;
 $("btnStart").onclick = toggleStart;
@@ -1992,7 +2263,8 @@ const GP_ACTIONS = [
   { id:"presetNext", label:"Preset next (AP)", mode:"ap", repeat:true, help:"Advanced mode: next saved preset." },
   { id:"presetPrev", label:"Preset prev (AP)", mode:"ap", repeat:true, help:"Advanced mode: previous saved preset." },
   { id:"colLeft",  label:"Hide/show sliders (◀)",  mode:"both", help:"Landscape: toggles the left sliders column." },
-  { id:"colRight", label:"Hide/show settings (▶)", mode:"both", help:"Landscape: toggles the right settings column." }
+  { id:"colRight", label:"Hide/show settings (▶)", mode:"both", help:"Landscape: toggles the right settings column." },
+  { id:"fullscreen", label:"Video fullscreen", mode:"fun", help:"Funscript mode: toggles the video to/from fullscreen." }
 ];
 const DEFAULT_BINDINGS = {
   speedUp:     { src:"pad", kind:"stick", idx:0, dir:"up" },
@@ -2016,7 +2288,8 @@ const DEFAULT_BINDINGS = {
   presetNext:  { src:"pad", kind:"btn", idx:5 },
   presetPrev:  { src:"pad", kind:"btn", idx:4 },
   colLeft:     { src:"pad", kind:"btn", idx:10 },
-  colRight:    { src:"pad", kind:"btn", idx:11 }
+  colRight:    { src:"pad", kind:"btn", idx:11 },
+  fullscreen:  { src:"pad", kind:"btn", idx:9 }
 };
 const DEFAULT_KB_BINDINGS = {
   speedUp:       { src:"kb", kind:"btn", code:"ArrowUp", key:"↑" },
@@ -2040,7 +2313,8 @@ const DEFAULT_KB_BINDINGS = {
   presetNext:    { src:"kb", kind:"btn", code:"KeyN", key:"n" },
   presetPrev:    { src:"kb", kind:"btn", code:"KeyB", key:"b" },
   colLeft:       { src:"kb", kind:"btn", code:"KeyO", key:"o" },
-  colRight:      { src:"kb", kind:"btn", code:"KeyP", key:"p" }
+  colRight:      { src:"kb", kind:"btn", code:"KeyP", key:"p" },
+  fullscreen:    { src:"kb", kind:"btn", code:"KeyV", key:"v" }
 };
 
 function loadBindings() {
@@ -2336,6 +2610,7 @@ function gpHandleDigital(id) {
     case "presetPrev": gpPresetNav(-1); break;
     case "colLeft": toggleColSide(1); break;
     case "colRight": toggleColSide(3); break;
+    case "fullscreen": toggleVideoFullscreen(); break;
   }
 }
 
@@ -2436,6 +2711,7 @@ function hideWizard() { const w = $("wizard"); if (w) w.style.display = "none"; 
 function wizardModeNote(a) {
   if (a.mode === "both") return "Works in BOTH Standard and Advanced modes.";
   if (a.mode === "std") return "Standard mode only.";
+  if (a.mode === "fun") return "Funscript mode only.";
   return "Advanced mode only.";
 }
 function wizardGoTo(step) {
@@ -2499,6 +2775,8 @@ if (bw) bw.onclick = startWizard;
 const wbk = $("wizard-back"); if (wbk) wbk.onclick = wizardBack;
 const wsk = $("wizard-skip"); if (wsk) wsk.onclick = wizardSkip;
 const wcn = $("wizard-cancel"); if (wcn) wcn.onclick = wizardCancel;
+const hc = $("helpClose"); if (hc) hc.onclick = hideExtractorHelp;
+const hov = $("helpOverlay"); if (hov) hov.addEventListener("click", e => { if (e.target === hov) hideExtractorHelp(); });
 const wvp2 = $("wizardViewPad");
 if (wvp2) wvp2.onclick = () => { wizard.slot = "pad"; if (listeningFor) listeningFor.slot = "pad"; wizardRender(); };
 const wvk2 = $("wizardViewKb");
@@ -2511,7 +2789,18 @@ if (bvp) bvp.onclick = () => { bindViewSlot = "pad"; try { localStorage.setItem(
 const bvk = $("bindViewKb");
 if (bvk) bvk.onclick = () => { bindViewSlot = "kb"; try { localStorage.setItem("ossm-bind-view", bindViewSlot); } catch (e) {} buildBindingUI(); };
 buildBindingUI();
+initCast();
 setInterval(gpPoll, 33);
+// Fallback state polling: keeps the Start button in sync even if BLE notify is flaky.
+setInterval(() => {
+  if (!connected || !stdState) return;
+  stdState.readValue().then(v => {
+    const before = stdStateName;
+    parseStdState(decode(v));
+    if (appMode === "std") { updateStartButton(); if (stdStateName !== before) buildInterface(); }
+    else if (appMode === "fun") updateStartButton();
+  }).catch(() => {});
+}, 500);
 
 // ---- Landscape sidebar toggles ----
 const landCols = (() => { try { return JSON.parse(localStorage.getItem("ossm-land-cols") || "{}"); } catch (e) { return {}; } })();
