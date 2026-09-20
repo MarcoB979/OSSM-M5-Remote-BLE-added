@@ -362,7 +362,10 @@
     <div class="header-row">
       <button class="col-toggle" id="toggleColLeft" title="Show / hide sliders column">◀</button>
       <span class="conn-dot" id="conn-dot" style="display:none;"></span>
-      <div class="screen-header" id="active-title">OSSM Advanced Penetration</div>
+      <div class="screen-header">
+        <div id="active-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">OSSM Advanced Penetration</div>
+        <div class="build-info" id="buildInfo" style="font-size:.62rem;color:#64748b;font-weight:normal;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+      </div>
       <div class="focus-status" id="focus-status" style="display:none;"></div>
       <button class="ble-btn small" id="header-connect" style="display:none;">Connect</button>
       <button class="ble-btn small danger" id="header-disconnect" style="display:none;">Disconnect</button>
@@ -478,8 +481,6 @@
   <strong style="color:#fff;">OSSM Live Dashboard Monitor:</strong>
   <div id="log" style="margin-top:6px;">Open this in Chrome or Edge to control the OSSM over Bluetooth.</div>
 </div>
-
-<div class="build-info" id="buildInfo" style="text-align:center;font-size:.68rem;color:#64748b;margin-top:8px;opacity:.85;"></div>
 
 <script>
 "use strict";
