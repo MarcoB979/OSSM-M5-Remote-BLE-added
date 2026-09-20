@@ -1971,7 +1971,7 @@ function buildFunControls() {
   testBtn.type = "button"; testBtn.className = "fun-btn"; testBtn.textContent = "Load test URL";
   testBtn.title = "Loads a known-good test video (Big Buck Bunny) to verify casting.";
   testBtn.onclick = () => {
-    const TEST_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+    const TEST_URL = "https://media.w3.org/2010/05/sintel/trailer.mp4";
     phInput.value = TEST_URL;
     loadVideoUrl(TEST_URL);
   };
