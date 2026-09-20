@@ -2415,10 +2415,27 @@ function pollCastTime() {
       castClockBaseMs = 0;
       return;
     }
-    if (!castClockBaseMs || est > castRemoteTime + 0.1 || est < castRemoteTime - 1.0) {
+    if (!castClockBaseMs) {
+      castRemoteTime = est;
+      castClockBaseMs = Date.now();
+      return;
+    }
+    const jump = est - castRemoteTime;
+    if (jump > 1.0 || jump < -1.0) {
+      // Seek detected (large forward or backward jump): re-anchor and re-sync the
+      // funscript pointer so the OSSM jumps with the video.
+      castRemoteTime = est;
+      castClockBaseMs = Date.now();
+      if (funState.playing) {
+        syncFunToTime(est * 1000);
+        if (funPreviewShown) drawFunPreview();
+      }
+    } else if (jump > 0.1) {
+      // Normal advance: re-anchor.
       castRemoteTime = est;
       castClockBaseMs = Date.now();
     }
+    // else: receiver stuck/behind — keep the running wall clock.
   } catch (e) {}
 }
 function castTimeNow() {
