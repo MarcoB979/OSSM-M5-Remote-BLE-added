@@ -160,6 +160,7 @@
   .fun-file { font-family: monospace; font-size: .7rem; color: #38bdf8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .fun-video { background: #000; border: 1px solid var(--border-color); border-radius: 8px; min-height: 180px; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; }
   .fun-video video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+  .fun-cast-overlay { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 6px; background: #0f172a; border-radius: 8px; z-index: 2; }
   .fun-placeholder { color: var(--muted); font-size: .9rem; padding: 40px; text-align: center; }
   .phone-container.fun .col-left { display: none; }
   .phone-container.fun .col-right { display: none; }
@@ -390,8 +391,6 @@
       <button class="ble-btn small" id="funExit" style="display:none;">Exit Funscript</button>
       <button class="col-toggle" id="toggleColRight" title="Show / hide settings column">▶</button>
     </div>
-
-    <div class="cast-status" id="castStatus" style="display:none;text-align:center;font-size:.75rem;color:#38bdf8;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:6px;margin-bottom:4px;">📺 Casting to TV — OSSM follows the TV</div>
 
     <div class="visualizer-area">
       <div class="meter-col"><div class="meter-label">Max</div><div class="meter-bar"><div class="meter-fill" id="left-meter" style="background-color: var(--color-top);"></div></div></div>
@@ -1026,7 +1025,6 @@ function buildInterface() {
   $("fun-controls").style.display = isFun ? "" : "none";
   $("fun-video").style.display = isFun ? "" : "none";
   $("fun-preview-wrap").style.display = isFun ? "" : "none";
-  const cs = $("castStatus"); if (cs) cs.style.display = (isFun && castConnected) ? "block" : "none";
   const pv = $("funPreview"); if (pv) pv.style.display = funPreviewShown ? "block" : "none";
   const pvt = $("funPreviewToggle"); if (pvt) { pvt.textContent = funPreviewShown ? "▾" : "▴"; pvt.title = funPreviewShown ? "Hide funscript preview" : "Show funscript preview"; }
   $("funExit").style.display = isFun ? "" : "none";
@@ -2070,6 +2068,7 @@ function buildFunVideo() {
     wrap.appendChild(v);
   }
   if (funState.videoUrl && !/\.m3u8(\?|$)/i.test(funState.videoUrl) && v.src !== funState.videoUrl) v.src = funState.videoUrl;
+  setCastOverlay(castConnected);
 }
 
 function simplifyActions(acts, minDelta, minGap) {
@@ -2371,13 +2370,11 @@ function initCast() {
           if (castPausedLocal) v.pause();
           loadCastMedia();
           if (funState.actions.length && !funState.playing) funStartStreaming();
-          const cs = $("castStatus");
-          if (cs) cs.style.display = "block";
+          setCastOverlay(true);
         } else {
           castMedia = null; castRemoteTime = 0; castClockBaseMs = 0;
           if (castTickTimer) { clearInterval(castTickTimer); castTickTimer = null; }
-          const cs = $("castStatus");
-          if (cs) cs.style.display = "none";
+          setCastOverlay(false);
           if (wasConnected) fallbackToLocal();
         }
         updateCastButton();
@@ -2404,31 +2401,44 @@ function pollCastTime() {
     let est = castMedia.currentTime;
     if (typeof est !== "number" || !isFinite(est)) est = castMedia.getEstimatedTime();
     if (typeof est !== "number" || !isFinite(est)) return;
-    const ps = castMedia.playerState;
-    const playing = ps === "PLAYING" || ps === "BUFFERING";
-    if (!playing) {
-      // Frozen: trust the receiver position exactly and stop the clock.
+    if (castMedia.playerState === "PAUSED") {
+      // Receiver paused: freeze at its reported position.
       castRemoteTime = est;
       castClockBaseMs = 0;
       return;
     }
-    const now = Date.now();
-    if (castClockBaseMs === 0) {
+    // Re-anchor only when the receiver time has actually moved (advance or seek).
+    // Missing/stuck reports (or unknown player state) keep the running clock, so the
+    // OSSM follows even when the receiver does not report time for HLS streams.
+    if (!castClockBaseMs || est > castRemoteTime + 0.1 || est < castRemoteTime - 1.0) {
       castRemoteTime = est;
-      castClockBaseMs = now;
-      return;
-    }
-    // Re-anchor only when the receiver time has actually moved (normal advance or a
-    // seek). A stuck estimate (e.g. 0 for some HLS streams) must not reset the clock.
-    if (est > castRemoteTime + 0.1 || est < castRemoteTime - 1.0) {
-      castRemoteTime = est;
-      castClockBaseMs = now;
+      castClockBaseMs = Date.now();
     }
   } catch (e) {}
 }
 function castTimeNow() {
   if (!castClockBaseMs) return castRemoteTime || 0;
   return (castRemoteTime || 0) + (Date.now() - castClockBaseMs) / 1000;
+}
+function setCastOverlay(show) {
+  const wrap = $("fun-video");
+  if (!wrap) return;
+  const v = wrap.querySelector("video");
+  if (v) v.style.display = show ? "none" : "";
+  let ov = wrap.querySelector(".fun-cast-overlay");
+  if (show) {
+    if (!ov) {
+      ov = document.createElement("div");
+      ov.className = "fun-cast-overlay";
+      ov.innerHTML = "<div style=\"font-size:1.5rem;\">📺</div>" +
+        "<div style=\"font-size:.95rem;color:#e2e8f0;font-weight:bold;\">Casting to TV</div>" +
+        "<div style=\"font-size:.75rem;color:#94a3b8;\">The OSSM follows the TV playback</div>";
+      wrap.appendChild(ov);
+    }
+    ov.style.display = "flex";
+  } else if (ov) {
+    ov.style.display = "none";
+  }
 }
 function loadCastMedia() {
   const url = castableUrl();
@@ -2447,7 +2457,7 @@ function loadCastMedia() {
   session.loadMedia(req).then(
     (media) => {
       castMedia = media;
-      castRemoteTime = 0; castClockBaseMs = 0;
+      castRemoteTime = 0; castClockBaseMs = Date.now(); // autoplay: start the clock now
       media.addUpdateListener(() => pollCastTime());
       pollCastTime();
       if (castTickTimer) clearInterval(castTickTimer);
