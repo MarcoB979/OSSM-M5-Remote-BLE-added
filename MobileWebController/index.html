@@ -928,9 +928,11 @@ function toggleStart() {
     if (castConnected && castSession) {
       try {
         const media = castSession.getMediaSession ? castSession.getMediaSession() : (castMedia || null);
-        const ps = media ? media.playerState : null;
+        if (!media) { funLog("No media session."); return; }
+        const ps = media.playerState;
         const playing = ps === "PLAYING" || ps === "BUFFERING";
-        if (playing) castSession.pause(); else castSession.play();
+        if (playing && media.pause) media.pause(mkCastRequest("PauseRequest"), () => {}, () => {});
+        else if (media.play) media.play(mkCastRequest("PlayRequest"), () => {}, () => {});
       } catch (e) { funLog("Cast control failed."); }
       return;
     }
@@ -2405,10 +2407,9 @@ function pollCastTime() {
   if (!media) return;
   castMedia = media;
   try {
-    let est = media.currentTime;
-    if (typeof est !== "number" || !isFinite(est)) {
-      if (typeof media.getEstimatedTime === "function") est = media.getEstimatedTime();
-    }
+    let est;
+    if (typeof media.getEstimatedTime === "function") est = media.getEstimatedTime();
+    if (typeof est !== "number" || !isFinite(est)) est = media.currentTime;
     if (typeof est !== "number" || !isFinite(est)) return;
     if (media.playerState === "PAUSED") {
       castRemoteTime = est;
@@ -2465,43 +2466,37 @@ function castDuration() {
   if (funState.actions.length) return (funState.actions[funState.actions.length - 1].at + funState.offsetMs) / 1000;
   return 0;
 }
+function mkCastRequest(ctorName, props) {
+  try {
+    const C = chrome.cast && chrome.cast.media && chrome.cast.media[ctorName];
+    if (C) { const r = new C(); if (props) for (const k in props) r[k] = props[k]; return r; }
+  } catch (e) {}
+  return props || {};
+}
 function seekCast(seconds) {
   if (!castConnected) return false;
   const session = castSession || (castContext && castContext.getCurrentSession());
   if (!session) return false;
   const target = Math.max(0, seconds || 0);
-  // Try the legacy session, the framework session, and the media session in turn.
-  const candidates = [];
-  try { const s = session.getSessionObj && session.getSessionObj(); if (s && s !== session) candidates.push(s); } catch (e) {}
-  candidates.push(session);
-  try { const m = session.getMediaSession && session.getMediaSession(); if (m && m !== session) candidates.push(m); } catch (e) {}
-  for (const c of candidates) {
-    if (c && typeof c.seek === "function") {
-      try {
-        let resumeState;
-        try { resumeState = chrome.cast.media.ResumeState.PLAYBACK_START; } catch (e) { resumeState = undefined; }
-        c.seek(target, resumeState,
-          () => {
-            castRemoteTime = target; castClockBaseMs = Date.now();
-            if (funState.playing) { syncFunToTime(target * 1000); if (funPreviewShown) drawFunPreview(); }
-          },
-          (e) => { funLog("Seek failed: " + ((e && (e.description || e.code)) || "unknown")); }
-        );
-        return true;
-      } catch (e) {
-        funLog("Seek threw: " + ((e && e.message) || "unknown"));
-        return false;
-      }
-    }
+  let media = null;
+  try { media = session.getMediaSession && session.getMediaSession(); } catch (e) {}
+  if (!media || typeof media.seek !== "function") { funLog("Seek unavailable (no media session)."); return false; }
+  try {
+    let resumeState;
+    try { resumeState = chrome.cast.media.ResumeState.PLAYBACK_START; } catch (e) { resumeState = "PLAYBACK_START"; }
+    const req = mkCastRequest("SeekRequest", { currentTime: target, resumeState: resumeState });
+    media.seek(req,
+      () => {
+        castRemoteTime = target; castClockBaseMs = Date.now();
+        if (funState.playing) { syncFunToTime(target * 1000); if (funPreviewShown) drawFunPreview(); }
+      },
+      (e) => { funLog("Seek failed: " + ((e && (e.description || e.code)) || "unknown")); }
+    );
+    return true;
+  } catch (e) {
+    funLog("Seek threw: " + ((e && e.message) || "unknown"));
+    return false;
   }
-  // Diagnostic: report what methods the session objects do expose.
-  const methods = [];
-  for (const c of candidates) {
-    if (!c) continue;
-    for (const k of Object.keys(c)) { if (typeof c[k] === "function" && methods.indexOf(k) < 0) methods.push(k); }
-  }
-  funLog("Seek unavailable. Session methods: " + (methods.join(", ") || "none"));
-  return false;
 }
 function updateCastSeekUI() {
   const r = $("castSeek");
@@ -2517,6 +2512,7 @@ function updateCastSeekUI() {
   if (c) c.textContent = fmtCastTime(t);
   const dl = $("castDurLabel");
   if (dl) dl.textContent = fmtCastTime(d);
+  if (funPreviewShown) drawFunPreview();
 }
 function setCastOverlay(show) {
   const wrap = $("fun-video");
@@ -2657,14 +2653,24 @@ function leaveStreamingIfNeeded() {
   if (connected && stdCmd && /^streaming/.test(stdStateName || "")) stdWrite("go:menu");
 }
 let modeSwitchToken = 0;
+let modeSwitchTimer = null;
 function requestMode(command) {
   if (!stdCmd) return;
   const token = ++modeSwitchToken;
+  if (modeSwitchTimer) { clearInterval(modeSwitchTimer); modeSwitchTimer = null; }
   stdWrite("go:menu"); // return to menu first — this works from any mode
-  setTimeout(() => {
-    if (token !== modeSwitchToken || !connected || !stdCmd) return;
-    stdWrite(command);
-  }, 300);
+  // Wait until the device actually reports menu.idle before sending the mode command;
+  // otherwise the button press is ignored and the device stays stuck in the menu.
+  let attempts = 0;
+  modeSwitchTimer = setInterval(() => {
+    attempts++;
+    if (token !== modeSwitchToken || !connected || !stdCmd) { clearInterval(modeSwitchTimer); modeSwitchTimer = null; return; }
+    const s = stdStateName || "";
+    if (s === "menu" || s === "menu.idle" || attempts > 20) {
+      clearInterval(modeSwitchTimer); modeSwitchTimer = null;
+      stdWrite(command);
+    }
+  }, 100);
 }
 function enterStreamingMode() {
   if (connected && stdCmd && !/^streaming/.test(stdStateName || "")) {
