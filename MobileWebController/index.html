@@ -2582,6 +2582,18 @@ function stopCast() {
   } catch (e) {}
   castContext.endCurrentSession(true);
 }
+function replayCast() {
+  castRemoteTime = 0; castClockBaseMs = Date.now(); castEnded = false;
+  const session = castSession || (castContext && castContext.getCurrentSession());
+  let media = null;
+  try { media = session && session.getMediaSession ? session.getMediaSession() : null; } catch (e) {}
+  if (!media || media.playerState === "IDLE") {
+    loadCastMedia();
+  } else {
+    seekCast(0);
+  }
+  if (funState.actions.length && !funState.playing) funStartStreaming();
+}
 function updateCastSeekUI() {
   const r = $("castSeek");
   if (!r) return;
@@ -2642,7 +2654,7 @@ function setCastOverlay(show) {
       const fwdBtn = ov.querySelector("#castFwdBtn");
       if (fwdBtn) fwdBtn.onclick = () => seekCast(castTimeNow() + 10);
       const replayBtn = ov.querySelector("#castReplayBtn");
-      if (replayBtn) replayBtn.onclick = () => seekCast(0);
+      if (replayBtn) replayBtn.onclick = replayCast;
       const ppBtn = ov.querySelector("#castPlayPauseBtn");
       if (ppBtn) ppBtn.onclick = castPlayPause;
       const stopBtn = ov.querySelector("#castStopBtn");
@@ -3414,7 +3426,8 @@ buildBindingUI();
 initCast();
 setInterval(gpPoll, 33);
 // Safety: range sliders only change when dragging the thumb, not when tapping the track
-// (prevents accidental value jumps while scrolling).
+// (prevents accidental value jumps while scrolling). preventDefault works for mouse;
+// the capture-phase input listener reverts jumps on mobile browsers that ignore it.
 document.addEventListener("pointerdown", (e) => {
   const el = e.target;
   if (!el || el.tagName !== "INPUT" || el.type !== "range") return;
@@ -3426,8 +3439,22 @@ document.addEventListener("pointerdown", (e) => {
   const valPct = (parseFloat(el.value) - min) / (max - min);
   const clickPct = (e.clientX - rect.left) / rect.width;
   const distPx = Math.abs(clickPct - valPct) * rect.width;
-  if (distPx > 16) e.preventDefault();
+  if (distPx > 16) {
+    el.dataset.guardValue = el.value;
+    try { e.preventDefault(); } catch (err) {}
+  }
 }, { passive: false });
+
+document.addEventListener("input", (e) => {
+  const el = e.target;
+  if (el && el.dataset && el.dataset.guardValue !== undefined && el.value !== el.dataset.guardValue) {
+    el.value = el.dataset.guardValue;
+  }
+}, true);
+
+const clearSliderGuard = (e) => { if (e.target && e.target.dataset) delete e.target.dataset.guardValue; };
+document.addEventListener("pointerup", clearSliderGuard, true);
+document.addEventListener("pointercancel", clearSliderGuard, true);
 // Fallback state polling: keeps the Start button in sync even if BLE notify is flaky.
 setInterval(() => {
   if (!connected || !stdState) return;
