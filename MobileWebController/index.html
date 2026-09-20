@@ -382,7 +382,7 @@
       <button class="col-toggle" id="toggleColLeft" title="Show / hide sliders column">◀</button>
       <span class="conn-dot" id="conn-dot" style="display:none;"></span>
       <div class="screen-header">
-        <div id="active-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">OSSM Advanced Penetration</div>
+        <div id="active-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">OSSM Standard</div>
         <div class="build-info" id="buildInfo" style="font-size:.62rem;color:#64748b;font-weight:normal;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
       </div>
       <div class="focus-status" id="focus-status" style="display:none;"></div>
@@ -423,8 +423,8 @@
     <div class="mode-row" id="mode-row">
       <span class="mode-label">Mode</span>
       <div class="mode-seg">
-        <button id="modeAp" class="mode-btn active">Advanced</button>
-        <button id="modeStd" class="mode-btn">Standard</button>
+        <button id="modeAp" class="mode-btn">Advanced</button>
+        <button id="modeStd" class="mode-btn active">Standard</button>
         <button id="modeFun" class="mode-btn">Funscript</button>
       </div>
     </div>
@@ -537,7 +537,7 @@ let presetNames = [];
 let connected = false;
 let running = false;
 let padStateText = "";       // last gamepad/keyboard status text
-let appMode = "ap";          // "ap" (advanced penetration) | "std" (standard home)
+let appMode = "std";         // "ap" (advanced penetration) | "std" (standard home)
 let funSettingsHidden = false;
 try { funSettingsHidden = localStorage.getItem("ossm-fun-hidden") === "1"; } catch (e) {}
 let funControlsCollapsed = false;
@@ -548,6 +548,7 @@ try { funPreviewShown = localStorage.getItem("ossm-fun-preview-shown") === "1"; 
 let stdValues = { speed: 0, max: 100, min: 0, sensation: 50, pattern: 0 };
 let stdPatterns = STD_PATTERN_FALLBACK.map((name, idx) => ({ name, idx, desc: STD_PATTERN_DESC_FALLBACK[idx] || "" }));
 let stdStateName = "";
+let firmwareKind = "unknown"; // "lite" | "ossm" | "rust" | "unknown"
 let stdRunning = false;
 let lastNonZeroSpeed = 50;
 
@@ -755,6 +756,8 @@ async function connect() {
     $("header-disconnect").style.display = "inline-block";
     $("header-stop").style.display = "inline-block";
     buildInterface();
+    enforceModeAvailability();
+    if (appMode === "std") enterStdMode();
     log("");
   } catch (e) {
     setConnectingUI(false);
@@ -765,6 +768,7 @@ async function connect() {
 
 function onDisconnected() {
   connected = false; running = false; stdRunning = false; stdStateName = ""; streamChar = null;
+  firmwareKind = "unknown";
   updateFocusStatus();
   $("ble-panel").style.display = "";
   $("conn-dot").style.display = "none";
@@ -799,8 +803,36 @@ function parseStdState(raw) {
   if (typeof j.pattern === "number") stdValues.pattern = Math.round(j.pattern);
   if (typeof j.state === "string") stdStateName = j.state;
   stdRunning = stdValues.speed > 0.5;
+  detectFirmware(j);
 }
-function onStdState(ev) { parseStdState(decode(ev.target.value)); if (appMode === "std") buildInterface(); else if (appMode === "fun") updateStartButton(); }
+// OSSM-Lite reports minPosition/maxPosition in its state JSON; standard OSSM and
+// OSSM-RS only report depth/stroke. Rust OSSM state names use ready/playing/paused.
+function detectFirmware(j) {
+  if (firmwareKind === "lite") return; // definitive, never downgrade
+  if (typeof j.minPosition === "number" && typeof j.maxPosition === "number") {
+    firmwareKind = "lite";
+  } else if (typeof j.state === "string") {
+    const s = j.state.toLowerCase();
+    if (/^(ready|playing|paused)/.test(s)) firmwareKind = "rust";
+    else if (s) firmwareKind = "ossm";
+  }
+}
+function apAvailable() { return firmwareKind !== "ossm" && firmwareKind !== "rust"; }
+// Advanced Penetration only exists on OSSM-Lite firmware; on standard OSSM / OSSM-RS
+// the mode is unavailable, so fall back to Standard mode.
+function enforceModeAvailability() {
+  if (appMode === "ap" && !apAvailable()) {
+    appMode = "std";
+    buildInterface();
+    enterStdMode();
+  }
+}
+function onStdState(ev) {
+  parseStdState(decode(ev.target.value));
+  if (appMode === "ap") enforceModeAvailability();
+  else if (appMode === "std") buildInterface();
+  else if (appMode === "fun") updateStartButton();
+}
 
 async function stdWrite(cmd) {
   if (!stdCmd) return;
@@ -1018,6 +1050,7 @@ function updateFocusStatus() {
                  (padStateText ? `<span class="fs-sep">·</span><span>${padStateText}</span>` : "");
 }
 function buildInterface() {
+  if (appMode === "ap" && !apAvailable()) appMode = "std";
   const isStd = appMode === "std";
   const isFun = appMode === "fun";
   const pc = document.querySelector(".phone-container");
@@ -1043,7 +1076,8 @@ function buildInterface() {
   $("funExit").style.display = isFun ? "" : "none";
   const va = document.querySelector(".visualizer-area"); if (va) va.style.display = isFun ? "none" : "";
 
-  $("modeAp").classList.toggle("active", !isStd && !isFun);
+  const apBtn = $("modeAp");
+  if (apBtn) { apBtn.style.display = apAvailable() ? "" : "none"; apBtn.classList.toggle("active", !isStd && !isFun); }
   $("modeStd").classList.toggle("active", isStd);
   const mf = $("modeFun"); if (mf) mf.classList.toggle("active", isFun);
   const fst = $("focus-status"); if (fst) fst.style.display = (focusedMode() || isFun) ? "" : "none";
@@ -1369,6 +1403,7 @@ function sliderEl(name, min, max, value, color, onSet) {
     </div>`;
   const input = g.querySelector("input");
   const valNum = g.querySelector(".val-num");
+  g._onSet = onSet;
   makeEditable(valNum, min, max, onSet);
   input.addEventListener("input", () => { valNum.textContent = input.value; });
   input.addEventListener("change", () => onSet(parseInt(input.value, 10)));
@@ -2008,11 +2043,15 @@ function buildFunControls() {
   const maxDepthSlider = sliderEl("Max Depth", 1, 100, funState.maxDepth, "#ff0c00", v => {
     funState.maxDepth = v;
     if (funState.minDepth > v) { funState.minDepth = v; minDepthSlider.setValue(v); }
+    stdWrite("set:max:" + funState.maxDepth);
+    stdWrite("set:min:" + funState.minDepth);
   });
   const minDepthSlider = sliderEl("Min Depth", 0, 99, funState.minDepth, "#ff8100", v => {
     const clamped = Math.min(v, funState.maxDepth);
     funState.minDepth = clamped;
     if (clamped !== v) minDepthSlider.setValue(clamped);
+    stdWrite("set:max:" + funState.maxDepth);
+    stdWrite("set:min:" + funState.minDepth);
   });
   wrap.appendChild(maxDepthSlider);
   wrap.appendChild(minDepthSlider);
@@ -2808,12 +2847,12 @@ function enterStdMode() {
   }
   updateStartButton();
 }
-$("modeAp").onclick = () => { leaveStreamingIfNeeded(); setDemoMode(false); appMode = "ap"; buildInterface(); };
+$("modeAp").onclick = () => { if (!apAvailable()) return; leaveStreamingIfNeeded(); setDemoMode(false); appMode = "ap"; buildInterface(); };
 $("modeStd").onclick = () => { leaveStreamingIfNeeded(); setDemoMode(false); appMode = "std"; buildInterface(); enterStdMode(); };
 const mFun = $("modeFun");
 if (mFun) mFun.onclick = () => { leaveStreamingIfNeeded(); appMode = "fun"; if (window.innerWidth < 700 && screen.orientation && screen.orientation.lock) screen.orientation.lock("landscape").catch(() => {}); buildInterface(); enterStreamingMode(); };
 const fEx = $("funExit");
-if (fEx) fEx.onclick = () => { leaveStreamingIfNeeded(); setDemoMode(false); appMode = "ap"; buildInterface(); };
+if (fEx) fEx.onclick = () => { leaveStreamingIfNeeded(); setDemoMode(false); appMode = apAvailable() ? "ap" : "std"; buildInterface(); if (appMode === "std") enterStdMode(); };
 function setDemoMode(on) {
   if (demoMode === on) return;
   demoMode = on;
@@ -3180,7 +3219,8 @@ function gpCyclePattern(delta) {
   buildInterface();
 }
 function gpToggleMode() {
-  appMode = appMode === "ap" ? "std" : (appMode === "std" ? "fun" : "ap");
+  if (apAvailable()) appMode = appMode === "ap" ? "std" : (appMode === "std" ? "fun" : "ap");
+  else appMode = appMode === "std" ? "fun" : "std";
   buildInterface();
 }
 function gpNav(delta) {
@@ -3428,6 +3468,39 @@ setInterval(gpPoll, 33);
 // Safety: range sliders only change when dragging the thumb, not when tapping the track
 // (prevents accidental value jumps while scrolling). preventDefault works for mouse;
 // the capture-phase input listener reverts jumps on mobile browsers that ignore it.
+// A deliberate double-tap on the track ramps the value up to the tapped position.
+let sliderTap = { el: null, x: 0, t: 0 };
+function rampSlider(el, target, fromVal) {
+  const min = parseFloat(el.min), max = parseFloat(el.max);
+  if (!isFinite(min) || !isFinite(max) || max <= min) return;
+  target = Math.round(clamp(target, min, max));
+  const group = el.closest(".slider-group");
+  const onSet = group && group._onSet;
+  const valNum = group && group.querySelector(".val-num");
+  const from = Math.round(fromVal);
+  if (from === target) { if (onSet) onSet(target); return; }
+  const dur = Math.min(600, 140 + Math.abs(target - from) * 12);
+  const t0 = performance.now();
+  el.dataset.ramping = "1";
+  let lastSent = from;
+  let lastSentAt = 0;
+  const step = (t) => {
+    const k = Math.min(1, (t - t0) / dur);
+    const eased = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+    const rv = Math.round(from + (target - from) * eased);
+    el.value = rv;
+    if (valNum) valNum.textContent = rv;
+    if (onSet && rv !== lastSent && t - lastSentAt > 30) { lastSent = rv; lastSentAt = t; onSet(rv); }
+    if (k < 1) requestAnimationFrame(step);
+    else {
+      el.value = target;
+      if (valNum) valNum.textContent = target;
+      if (onSet && target !== lastSent) onSet(target);
+      delete el.dataset.ramping;
+    }
+  };
+  requestAnimationFrame(step);
+}
 document.addEventListener("pointerdown", (e) => {
   const el = e.target;
   if (!el || el.tagName !== "INPUT" || el.type !== "range") return;
@@ -3439,17 +3512,39 @@ document.addEventListener("pointerdown", (e) => {
   const valPct = (parseFloat(el.value) - min) / (max - min);
   const clickPct = (e.clientX - rect.left) / rect.width;
   const distPx = Math.abs(clickPct - valPct) * rect.width;
+  const now = performance.now();
+  const isDouble = sliderTap.el === el && now - sliderTap.t < 350 && Math.abs(e.clientX - sliderTap.x) < 30;
   if (distPx > 16) {
-    el.dataset.guardValue = el.value;
-    try { e.preventDefault(); } catch (err) {}
+    if (isDouble) {
+      // Intentional double-tap on the track: ramp to that position.
+      sliderTap = { el: null, x: 0, t: 0 };
+      try { e.preventDefault(); } catch (err) {}
+      rampSlider(el, min + clickPct * (max - min), parseFloat(el.value));
+    } else {
+      // Single tap (usually from scrolling): guard against the jump.
+      sliderTap = { el, x: e.clientX, t: now };
+      el.dataset.guardValue = el.value;
+      try { e.preventDefault(); } catch (err) {}
+    }
+  } else {
+    sliderTap = { el: null, x: 0, t: 0 };
   }
 }, { passive: false });
 
 document.addEventListener("input", (e) => {
   const el = e.target;
-  if (el && el.dataset && el.dataset.guardValue !== undefined && el.value !== el.dataset.guardValue) {
+  if (!el || !el.dataset) return;
+  if (el.dataset.ramping === "1") return; // our ramp drives the value
+  if (el.dataset.guardValue !== undefined && el.value !== el.dataset.guardValue) {
     el.value = el.dataset.guardValue;
   }
+}, true);
+
+// During a double-tap ramp the browser may still fire a native change event;
+// suppress it so only the ramp's progressive updates reach the device.
+document.addEventListener("change", (e) => {
+  const el = e.target;
+  if (el && el.dataset && el.dataset.ramping === "1") e.stopPropagation();
 }, true);
 
 const clearSliderGuard = (e) => { if (e.target && e.target.dataset) delete e.target.dataset.guardValue; };
@@ -3461,7 +3556,8 @@ setInterval(() => {
   stdState.readValue().then(v => {
     const before = stdStateName;
     parseStdState(decode(v));
-    if (appMode === "std") { updateStartButton(); if (stdStateName !== before) buildInterface(); }
+    if (appMode === "ap") enforceModeAvailability();
+    else if (appMode === "std") { updateStartButton(); if (stdStateName !== before) buildInterface(); }
     else if (appMode === "fun") updateStartButton();
   }).catch(() => {});
 }, 500);
