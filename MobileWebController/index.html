@@ -2469,25 +2469,39 @@ function seekCast(seconds) {
   if (!castConnected) return false;
   const session = castSession || (castContext && castContext.getCurrentSession());
   if (!session) return false;
-  const legacy = (typeof session.getSessionObj === "function" && session.getSessionObj()) || session;
-  const seekFn = (legacy && typeof legacy.seek === "function") ? legacy.seek : (typeof session.seek === "function" ? session.seek : null);
-  if (!seekFn) { funLog("Seek is not supported by this receiver."); return false; }
   const target = Math.max(0, seconds || 0);
-  try {
-    let resumeState;
-    try { resumeState = chrome.cast.media.ResumeState.PLAYBACK_START; } catch (e) { resumeState = undefined; }
-    seekFn.call(legacy || session, target, resumeState,
-      () => {
-        castRemoteTime = target; castClockBaseMs = Date.now();
-        if (funState.playing) { syncFunToTime(target * 1000); if (funPreviewShown) drawFunPreview(); }
-      },
-      (e) => { funLog("Seek failed: " + ((e && (e.description || e.code)) || "unknown")); }
-    );
-    return true;
-  } catch (e) {
-    funLog("Seek failed.");
-    return false;
+  // Try the legacy session, the framework session, and the media session in turn.
+  const candidates = [];
+  try { const s = session.getSessionObj && session.getSessionObj(); if (s && s !== session) candidates.push(s); } catch (e) {}
+  candidates.push(session);
+  try { const m = session.getMediaSession && session.getMediaSession(); if (m && m !== session) candidates.push(m); } catch (e) {}
+  for (const c of candidates) {
+    if (c && typeof c.seek === "function") {
+      try {
+        let resumeState;
+        try { resumeState = chrome.cast.media.ResumeState.PLAYBACK_START; } catch (e) { resumeState = undefined; }
+        c.seek(target, resumeState,
+          () => {
+            castRemoteTime = target; castClockBaseMs = Date.now();
+            if (funState.playing) { syncFunToTime(target * 1000); if (funPreviewShown) drawFunPreview(); }
+          },
+          (e) => { funLog("Seek failed: " + ((e && (e.description || e.code)) || "unknown")); }
+        );
+        return true;
+      } catch (e) {
+        funLog("Seek threw: " + ((e && e.message) || "unknown"));
+        return false;
+      }
+    }
   }
+  // Diagnostic: report what methods the session objects do expose.
+  const methods = [];
+  for (const c of candidates) {
+    if (!c) continue;
+    for (const k of Object.keys(c)) { if (typeof c[k] === "function" && methods.indexOf(k) < 0) methods.push(k); }
+  }
+  funLog("Seek unavailable. Session methods: " + (methods.join(", ") || "none"));
+  return false;
 }
 function updateCastSeekUI() {
   const r = $("castSeek");
