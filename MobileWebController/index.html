@@ -905,6 +905,14 @@ function emergencyStop() {
 function toggleStart() {
   if (appMode === "fun") {
     if (!machineRunningState()) { funLog("Waiting for the OSSM to finish homing…"); return; }
+    if (castConnected && castSession) {
+      try {
+        const ps = castMedia ? castMedia.playerState : null;
+        const playing = ps === "PLAYING" || ps === "BUFFERING";
+        if (playing) castSession.pause(); else castSession.play();
+      } catch (e) { funLog("Cast control failed."); }
+      return;
+    }
     const v = $("funVideo");
     if (v) { if (v.paused) v.play(); else v.pause(); }
     return;
@@ -2102,7 +2110,7 @@ function drawFunPreview() {
   }
 }
 function currentPlaybackMs() {
-  if (castConnected) return (castRemoteTime || 0) * 1000;
+  if (castConnected) return castTimeNow() * 1000;
   const v = $("funVideo");
   return v ? v.currentTime * 1000 : 0;
 }
@@ -2186,15 +2194,20 @@ function pageExtract(html) {
   return { error: "No direct video URL found." };
 }
 async function fallbackExtract(pageUrl) {
-  const proxies = ["https://api.allorigins.win/raw?url=", "https://api.codetabs.com/v1/proxy?quest="];
+  const proxies = ["https://api.allorigins.win/raw?url=", "https://api.codetabs.com/v1/proxy?quest=", "https://corsproxy.io/?url="];
   let html = "";
+  // Try reading the page directly first (works when the site allows CORS).
+  try {
+    html = await (await fetch(pageUrl)).text();
+  } catch (e) {}
+  if (html && html.length > 5000) return pageExtract(html);
   for (const p of proxies) {
     try {
       html = await (await fetch(p + encodeURIComponent(pageUrl))).text();
       if (html && html.length > 5000) break;
     } catch (e) {}
   }
-  if (!html || html.length <= 5000) return { error: "Could not fetch the page." };
+  if (!html || html.length <= 5000) return { error: "Could not fetch the page. Retry, or set your own extractor (⚙) for reliable loading." };
   return pageExtract(html);
 }
 async function loadVideoUrl(input) {
@@ -2203,11 +2216,16 @@ async function loadVideoUrl(input) {
   const pageUrl = /^https?:\/\//i.test(raw)
     ? raw
     : ("https://www.pornhub.com/view_video.php?viewkey=" + encodeURIComponent(extractPhKey(raw)));
-  funLog("Extracting video…");
   let data = null;
-  const extractor = getExtractorUrl();
-  if (extractor) data = await callExtractor(extractor + "?url=" + encodeURIComponent(pageUrl));
-  if (!data || data.error) data = await fallbackExtract(pageUrl);
+  if (/^https?:\/\/[^\s]+\.(?:mp4|m3u8|webm|m4v|mov|mkv|mpg|mpeg|ogv)(?:[?#].*)?$/i.test(raw)) {
+    // Already a direct video file URL — use it without extraction.
+    data = { url: raw, type: /\.m3u8(?:[?#]|$)/i.test(raw) ? "hls" : "mp4" };
+  } else {
+    funLog("Extracting video…");
+    const extractor = getExtractorUrl();
+    if (extractor) data = await callExtractor(extractor + "?url=" + encodeURIComponent(pageUrl));
+    if (!data || data.error) data = await fallbackExtract(pageUrl);
+  }
   if (!data || data.error || !data.url) { funLog((data && data.error) || "Could not extract a video."); return; }
   let name = "Stream";
   try { name = new URL(pageUrl).hostname; } catch (e) {}
@@ -2252,7 +2270,7 @@ function funStreamTick() {
   if (!funState.playing) return;
   if (funPreviewShown) drawFunPreview();
   let t;
-  if (castConnected) t = (castRemoteTime || 0) * 1000;
+  if (castConnected) t = castTimeNow() * 1000;
   else { const v = $("funVideo"); if (!v) return; t = v.currentTime * 1000; }
   const lead = 400;
 
@@ -2309,6 +2327,7 @@ let castContext = null;
 let castAvailable = false, castConnected = false;
 let castSession = null, castMedia = null, castRemoteTime = 0;
 let castPausedLocal = false;
+let castTickTimer = null, castClockBaseMs = 0;
 
 function initCast() {
   const onReady = () => {
@@ -2330,7 +2349,8 @@ function initCast() {
           loadCastMedia();
           if (funState.actions.length && !funState.playing) funStartStreaming();
         } else {
-          castMedia = null; castRemoteTime = 0;
+          castMedia = null; castRemoteTime = 0; castClockBaseMs = 0;
+          if (castTickTimer) { clearInterval(castTickTimer); castTickTimer = null; }
           if (wasConnected) fallbackToLocal();
         }
         updateCastButton();
@@ -2343,6 +2363,21 @@ function initCast() {
 }
 function castableUrl() {
   return funState.videoUrl && /^https?:\/\//i.test(funState.videoUrl) ? funState.videoUrl : null;
+}
+function pollCastTime() {
+  if (!castConnected || !castMedia) return;
+  try {
+    const est = castMedia.getEstimatedTime();
+    if (typeof est !== "number" || !isFinite(est)) return;
+    castRemoteTime = est;
+    const ps = castMedia.playerState;
+    const playing = ps === "PLAYING" || ps === "BUFFERING";
+    castClockBaseMs = playing ? Date.now() : 0;
+  } catch (e) {}
+}
+function castTimeNow() {
+  if (!castClockBaseMs) return castRemoteTime || 0;
+  return (castRemoteTime || 0) + (Date.now() - castClockBaseMs) / 1000;
 }
 function loadCastMedia() {
   const url = castableUrl();
@@ -2361,7 +2396,11 @@ function loadCastMedia() {
   session.loadMedia(req).then(
     (media) => {
       castMedia = media;
-      media.addUpdateListener(() => { castRemoteTime = media.getEstimatedTime(); });
+      castRemoteTime = 0; castClockBaseMs = 0;
+      media.addUpdateListener(() => pollCastTime());
+      pollCastTime();
+      if (castTickTimer) clearInterval(castTickTimer);
+      castTickTimer = setInterval(pollCastTime, 250);
       funLog("Casting to TV…");
     },
     (err) => {
