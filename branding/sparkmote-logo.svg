@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 220" width="800" height="220" role="img" aria-label="Sparkmote OSSM Remote by Volt Labs">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#202036"/>
+      <stop offset="1" stop-color="#0b0b17"/>
+    </linearGradient>
+    <linearGradient id="bolt" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe27a"/>
+      <stop offset="0.5" stop-color="#ff9e2c"/>
+      <stop offset="1" stop-color="#ff5c8a"/>
+    </linearGradient>
+    <linearGradient id="txt" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff9e2c"/>
+      <stop offset="1" stop-color="#ff5c8a"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="12" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  <g transform="translate(24,30) scale(0.3125)">
+    <rect width="512" height="512" rx="116" fill="url(#bg)"/>
+    <rect x="8" y="8" width="496" height="496" rx="108" fill="none" stroke="#ffffff14" stroke-width="2"/>
+    <path d="M280 48 L120 272 L224 272 L192 464 L392 208 L272 208 Z" fill="url(#bolt)" filter="url(#glow)"/>
+    <path d="M422 96 Q428 128 454 134 Q428 140 422 172 Q416 140 390 134 Q416 128 422 96 Z" fill="#ffe27a"/>
+    <path d="M92 130 Q95 144 107 147 Q95 150 92 164 Q89 150 77 147 Q89 144 92 130 Z" fill="#ff9e2c"/>
+  </g>
+  <text x="206" y="122" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="800" letter-spacing="-1" fill="url(#txt)">Sparkmote</text>
+  <path d="M656 74 Q662 98 682 102 Q662 106 656 130 Q650 106 630 102 Q650 98 656 74 Z" fill="#ff9e2c"/>
+  <text x="208" y="158" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" letter-spacing="7" fill="#64748b">OSSM REMOTE</text>
+  <text x="208" y="184" font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="600" letter-spacing="4" fill="#94a3b8">VOLT LABS</text>
+</svg>
