@@ -1971,7 +1971,7 @@ function buildFunControls() {
   testBtn.type = "button"; testBtn.className = "fun-btn"; testBtn.textContent = "Load test URL";
   testBtn.title = "Loads a known-good test video (Big Buck Bunny) to verify casting.";
   testBtn.onclick = () => {
-    const TEST_URL = "https://media.w3.org/2010/05/sintel/trailer.mp4";
+    const TEST_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
     phInput.value = TEST_URL;
     loadVideoUrl(TEST_URL);
   };
@@ -2353,6 +2353,7 @@ let castAvailable = false, castConnected = false;
 let castSession = null, castMedia = null, castRemoteTime = 0;
 let castPausedLocal = false;
 let castTickTimer = null, castClockBaseMs = 0;
+let castConnectAt = 0, castFailNotified = false;
 
 function initCast() {
   const onReady = () => {
@@ -2371,11 +2372,12 @@ function initCast() {
           const v = $("funVideo");
           castPausedLocal = !!(v && !v.paused);
           if (castPausedLocal) v.pause();
+          castConnectAt = Date.now(); castFailNotified = false;
           loadCastMedia();
           if (funState.actions.length && !funState.playing) funStartStreaming();
           setCastOverlay(true);
         } else {
-          castMedia = null; castRemoteTime = 0; castClockBaseMs = 0;
+          castMedia = null; castRemoteTime = 0; castClockBaseMs = 0; castConnectAt = 0;
           if (castTickTimer) { clearInterval(castTickTimer); castTickTimer = null; }
           setCastOverlay(false);
           if (wasConnected) fallbackToLocal();
@@ -2401,43 +2403,49 @@ function castableUrl() {
 function pollCastTime() {
   if (!castConnected) return;
   const session = castSession || (castContext && castContext.getCurrentSession());
-  if (!session || !session.getMediaSession) return;
   let media = null;
-  try { media = session.getMediaSession(); } catch (e) {}
-  if (!media) return;
-  castMedia = media;
-  try {
-    let est;
-    if (typeof media.getEstimatedTime === "function") est = media.getEstimatedTime();
-    if (typeof est !== "number" || !isFinite(est)) est = media.currentTime;
-    if (typeof est !== "number" || !isFinite(est)) return;
-    if (media.playerState === "PAUSED") {
-      castRemoteTime = est;
-      castClockBaseMs = 0;
-      return;
-    }
-    if (!castClockBaseMs) {
-      castRemoteTime = est;
-      castClockBaseMs = Date.now();
-      return;
-    }
-    const jump = est - castRemoteTime;
-    if (jump > 1.0 || jump < -1.0) {
-      // Seek detected (large forward or backward jump): re-anchor and re-sync the
-      // funscript pointer so the OSSM jumps with the video.
-      castRemoteTime = est;
-      castClockBaseMs = Date.now();
-      if (funState.playing) {
-        syncFunToTime(est * 1000);
-        if (funPreviewShown) drawFunPreview();
+  try { media = (session && session.getMediaSession) ? session.getMediaSession() : null; } catch (e) {}
+  if (media) {
+    castMedia = media;
+    try {
+      let est;
+      if (typeof media.getEstimatedTime === "function") est = media.getEstimatedTime();
+      if (typeof est !== "number" || !isFinite(est)) est = media.currentTime;
+      if (typeof est === "number" && isFinite(est)) {
+        if (media.playerState === "PAUSED") {
+          castRemoteTime = est;
+          castClockBaseMs = 0;
+        } else if (!castClockBaseMs) {
+          castRemoteTime = est;
+          castClockBaseMs = Date.now();
+        } else {
+          const jump = est - castRemoteTime;
+          if (jump > 1.0 || jump < -1.0) {
+            // Seek detected (large forward or backward jump): re-anchor and re-sync
+            // the funscript pointer so the OSSM jumps with the video.
+            castRemoteTime = est;
+            castClockBaseMs = Date.now();
+            if (funState.playing) {
+              syncFunToTime(est * 1000);
+              if (funPreviewShown) drawFunPreview();
+            }
+          } else if (jump > 0.1) {
+            // Normal advance: re-anchor.
+            castRemoteTime = est;
+            castClockBaseMs = Date.now();
+          }
+          // else: receiver stuck/behind — keep the running wall clock.
+        }
       }
-    } else if (jump > 0.1) {
-      // Normal advance: re-anchor.
-      castRemoteTime = est;
-      castClockBaseMs = Date.now();
+    } catch (e) {}
+  }
+  // Watchdog: if the receiver never started playing, surface a clear error once.
+  if (castConnectAt && !castFailNotified && (Date.now() - castConnectAt > 6000)) {
+    if (!media || media.playerState === "IDLE") {
+      castFailNotified = true;
+      funLog("Cast failed to load the video — try another URL.");
     }
-    // else: receiver stuck/behind — keep the running wall clock.
-  } catch (e) {}
+  }
   updateCastSeekUI();
 }
 function castTimeNow() {
