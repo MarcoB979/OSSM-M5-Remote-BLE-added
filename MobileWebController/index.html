@@ -372,6 +372,8 @@
       <button class="col-toggle" id="toggleColRight" title="Show / hide settings column">▶</button>
     </div>
 
+    <div class="cast-status" id="castStatus" style="display:none;text-align:center;font-size:.75rem;color:#38bdf8;background:#0f172a;border:1px solid #334155;border-radius:8px;padding:6px;margin-bottom:4px;">📺 Casting to TV — OSSM follows the TV</div>
+
     <div class="visualizer-area">
       <div class="meter-col"><div class="meter-label">Max</div><div class="meter-bar"><div class="meter-fill" id="left-meter" style="background-color: var(--color-top);"></div></div></div>
       <canvas id="graphCanvas" width="280" height="132"></canvas>
@@ -1007,6 +1009,7 @@ function buildInterface() {
   $("fun-controls").style.display = isFun ? "" : "none";
   $("fun-video").style.display = isFun ? "" : "none";
   $("fun-preview-wrap").style.display = isFun ? "" : "none";
+  const cs = $("castStatus"); if (cs) cs.style.display = (isFun && castConnected) ? "block" : "none";
   const pv = $("funPreview"); if (pv) pv.style.display = funPreviewShown ? "block" : "none";
   const pvt = $("funPreviewToggle"); if (pvt) { pvt.textContent = funPreviewShown ? "▾" : "▴"; pvt.title = funPreviewShown ? "Hide funscript preview" : "Show funscript preview"; }
   $("funExit").style.display = isFun ? "" : "none";
@@ -2350,9 +2353,13 @@ function initCast() {
           if (castPausedLocal) v.pause();
           loadCastMedia();
           if (funState.actions.length && !funState.playing) funStartStreaming();
+          const cs = $("castStatus");
+          if (cs) cs.style.display = "block";
         } else {
           castMedia = null; castRemoteTime = 0; castClockBaseMs = 0;
           if (castTickTimer) { clearInterval(castTickTimer); castTickTimer = null; }
+          const cs = $("castStatus");
+          if (cs) cs.style.display = "none";
           if (wasConnected) fallbackToLocal();
         }
         updateCastButton();
@@ -2369,12 +2376,29 @@ function castableUrl() {
 function pollCastTime() {
   if (!castConnected || !castMedia) return;
   try {
-    const est = castMedia.getEstimatedTime();
+    let est = castMedia.currentTime;
+    if (typeof est !== "number" || !isFinite(est)) est = castMedia.getEstimatedTime();
     if (typeof est !== "number" || !isFinite(est)) return;
-    castRemoteTime = est;
     const ps = castMedia.playerState;
     const playing = ps === "PLAYING" || ps === "BUFFERING";
-    castClockBaseMs = playing ? Date.now() : 0;
+    if (!playing) {
+      // Frozen: trust the receiver position exactly and stop the clock.
+      castRemoteTime = est;
+      castClockBaseMs = 0;
+      return;
+    }
+    const now = Date.now();
+    if (castClockBaseMs === 0) {
+      castRemoteTime = est;
+      castClockBaseMs = now;
+      return;
+    }
+    // Re-anchor only when the receiver time has actually moved (normal advance or a
+    // seek). A stuck estimate (e.g. 0 for some HLS streams) must not reset the clock.
+    if (est > castRemoteTime + 0.1 || est < castRemoteTime - 1.0) {
+      castRemoteTime = est;
+      castClockBaseMs = now;
+    }
   } catch (e) {}
 }
 function castTimeNow() {
