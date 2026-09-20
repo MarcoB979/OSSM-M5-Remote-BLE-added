@@ -2437,10 +2437,72 @@ function pollCastTime() {
     }
     // else: receiver stuck/behind — keep the running wall clock.
   } catch (e) {}
+  updateCastSeekUI();
 }
 function castTimeNow() {
   if (!castClockBaseMs) return castRemoteTime || 0;
   return (castRemoteTime || 0) + (Date.now() - castClockBaseMs) / 1000;
+}
+function fmtCastTime(sec) {
+  sec = Math.max(0, Math.floor(sec || 0));
+  const h = Math.floor(sec / 3600);
+  const m = Math.floor((sec % 3600) / 60);
+  const s = sec % 60;
+  return (h > 0 ? h + ":" + String(m).padStart(2, "0") : m) + ":" + String(s).padStart(2, "0");
+}
+function castDuration() {
+  try {
+    const session = castSession || (castContext && castContext.getCurrentSession());
+    const media = session && session.getMediaSession ? session.getMediaSession() : null;
+    if (media) {
+      const info = media.media;
+      if (info && typeof info.duration === "number" && isFinite(info.duration) && info.duration > 0) return info.duration;
+      if (typeof media.duration === "number" && isFinite(media.duration) && media.duration > 0) return media.duration;
+    }
+  } catch (e) {}
+  const v = $("funVideo");
+  if (v && typeof v.duration === "number" && isFinite(v.duration) && v.duration > 0) return v.duration;
+  if (funState.actions.length) return (funState.actions[funState.actions.length - 1].at + funState.offsetMs) / 1000;
+  return 0;
+}
+function seekCast(seconds) {
+  if (!castConnected) return false;
+  const session = castSession || (castContext && castContext.getCurrentSession());
+  if (!session) return false;
+  const legacy = (typeof session.getSessionObj === "function" && session.getSessionObj()) || session;
+  const seekFn = (legacy && typeof legacy.seek === "function") ? legacy.seek : (typeof session.seek === "function" ? session.seek : null);
+  if (!seekFn) { funLog("Seek is not supported by this receiver."); return false; }
+  const target = Math.max(0, seconds || 0);
+  try {
+    let resumeState;
+    try { resumeState = chrome.cast.media.ResumeState.PLAYBACK_START; } catch (e) { resumeState = undefined; }
+    seekFn.call(legacy || session, target, resumeState,
+      () => {
+        castRemoteTime = target; castClockBaseMs = Date.now();
+        if (funState.playing) { syncFunToTime(target * 1000); if (funPreviewShown) drawFunPreview(); }
+      },
+      (e) => { funLog("Seek failed: " + ((e && (e.description || e.code)) || "unknown")); }
+    );
+    return true;
+  } catch (e) {
+    funLog("Seek failed.");
+    return false;
+  }
+}
+function updateCastSeekUI() {
+  const r = $("castSeek");
+  if (!r) return;
+  const d = castDuration();
+  if (d > 0) {
+    const max = Math.floor(d);
+    if (String(r.max) !== String(max)) r.max = max;
+  }
+  const t = castTimeNow();
+  if (!r.dataset.dragging) r.value = Math.max(0, Math.min(Math.floor(d || 0), Math.floor(t)));
+  const c = $("castTimeLabel");
+  if (c) c.textContent = fmtCastTime(t);
+  const dl = $("castDurLabel");
+  if (dl) dl.textContent = fmtCastTime(d);
 }
 function setCastOverlay(show) {
   const wrap = $("fun-video");
@@ -2454,8 +2516,19 @@ function setCastOverlay(show) {
       ov.className = "fun-cast-overlay";
       ov.innerHTML = "<div style=\"font-size:1.5rem;\">📺</div>" +
         "<div style=\"font-size:.95rem;color:#e2e8f0;font-weight:bold;\">Casting to TV</div>" +
-        "<div style=\"font-size:.75rem;color:#94a3b8;\">The OSSM follows the TV playback</div>";
+        "<div style=\"font-size:.75rem;color:#94a3b8;\">The OSSM follows the TV playback</div>" +
+        "<div style=\"display:flex;align-items:center;gap:8px;width:100%;max-width:420px;margin-top:10px;padding:0 12px;box-sizing:border-box;\">" +
+          "<span id=\"castTimeLabel\" style=\"font-size:.7rem;color:#94a3b8;font-variant-numeric:tabular-nums;white-space:nowrap;\">0:00</span>" +
+          "<input type=\"range\" id=\"castSeek\" min=\"0\" max=\"100\" step=\"1\" value=\"0\" style=\"flex:1;min-width:0;\">" +
+          "<span id=\"castDurLabel\" style=\"font-size:.7rem;color:#94a3b8;font-variant-numeric:tabular-nums;white-space:nowrap;\">0:00</span>" +
+        "</div>";
       wrap.appendChild(ov);
+      const r = ov.querySelector("#castSeek");
+      if (r) {
+        r.addEventListener("input", () => { r.dataset.dragging = "1"; const c = $("castTimeLabel"); if (c) c.textContent = fmtCastTime(parseFloat(r.value) || 0); });
+        r.addEventListener("change", () => { r.dataset.dragging = ""; seekCast(parseFloat(r.value) || 0); });
+      }
+      updateCastSeekUI();
     }
     ov.style.display = "flex";
   } else if (ov) {
