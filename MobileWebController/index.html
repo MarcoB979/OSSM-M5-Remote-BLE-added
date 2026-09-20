@@ -337,7 +337,9 @@
     .phone-container.fun .col-center { max-height: calc(100vh - 20px); }
     .phone-container.fun .col-toggle { display: none; }
     .phone-container.fun { height: calc(100vh - 8px); align-items: stretch; }
-    .phone-container.fun .col-left { max-height: calc(100vh - 8px); overflow-y: auto; }
+    .phone-container.fun .col-left { max-height: calc(100vh - 8px); overflow: hidden; }
+    .phone-container.fun #fun-controls { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+    .phone-container.fun .start-stop-row { flex: 0 0 auto; margin-top: 0; background: #0a0a12; padding: 4px 0 8px; }
     .phone-container.fun .fun-video { flex: 1 1 auto; min-height: 0; }
     .phone-container.fun-settings-hidden { grid-template-columns: 1fr 0; }
     .phone-container.fun-settings-hidden .col-left { display: none; }
@@ -918,7 +920,15 @@ function emergencyStop() {
   funState.playing = false;
   if (funState.timer) { clearInterval(funState.timer); funState.timer = null; }
   stdRunning = false;
-  if (castConnected && castContext) { castPausedLocal = false; castContext.endCurrentSession(true); }
+  if (castConnected && castContext) {
+    castPausedLocal = false;
+    try {
+      const s = castContext.getCurrentSession();
+      const m = s && s.getMediaSession && s.getMediaSession();
+      if (m && typeof m.stop === "function") m.stop(mkCastRequest("StopRequest"), () => {}, () => {});
+    } catch (e) {}
+    castContext.endCurrentSession(true);
+  }
   updateStartButton();
   log("⚠ Emergency stop — returning to menu.");
 }
@@ -1971,7 +1981,7 @@ function buildFunControls() {
   testBtn.type = "button"; testBtn.className = "fun-btn"; testBtn.textContent = "Load test URL";
   testBtn.title = "Loads a known-good test video (Big Buck Bunny) to verify casting.";
   testBtn.onclick = () => {
-    const TEST_URL = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4";
+    const TEST_URL = "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_2MB.mp4";
     phInput.value = TEST_URL;
     loadVideoUrl(TEST_URL);
   };
@@ -2354,6 +2364,7 @@ let castSession = null, castMedia = null, castRemoteTime = 0;
 let castPausedLocal = false;
 let castTickTimer = null, castClockBaseMs = 0;
 let castConnectAt = 0, castFailNotified = false;
+let castWasPlaying = false;
 
 function initCast() {
   const onReady = () => {
@@ -2372,12 +2383,12 @@ function initCast() {
           const v = $("funVideo");
           castPausedLocal = !!(v && !v.paused);
           if (castPausedLocal) v.pause();
-          castConnectAt = Date.now(); castFailNotified = false;
+          castConnectAt = Date.now(); castFailNotified = false; castWasPlaying = false;
           loadCastMedia();
           if (funState.actions.length && !funState.playing) funStartStreaming();
           setCastOverlay(true);
         } else {
-          castMedia = null; castRemoteTime = 0; castClockBaseMs = 0; castConnectAt = 0;
+          castMedia = null; castRemoteTime = 0; castClockBaseMs = 0; castConnectAt = 0; castWasPlaying = false;
           if (castTickTimer) { clearInterval(castTickTimer); castTickTimer = null; }
           setCastOverlay(false);
           if (wasConnected) fallbackToLocal();
@@ -2412,32 +2423,53 @@ function pollCastTime() {
       if (typeof media.getEstimatedTime === "function") est = media.getEstimatedTime();
       if (typeof est !== "number" || !isFinite(est)) est = media.currentTime;
       if (typeof est === "number" && isFinite(est)) {
-        if (media.playerState === "PAUSED") {
+        const ps = media.playerState;
+        if (ps === "PAUSED") {
           castRemoteTime = est;
           castClockBaseMs = 0;
-        } else if (!castClockBaseMs) {
+        } else if (ps === "IDLE") {
+          // Media ended (or never started playing).
           castRemoteTime = est;
-          castClockBaseMs = Date.now();
-        } else {
-          const jump = est - castRemoteTime;
-          if (jump > 1.0 || jump < -1.0) {
-            // Seek detected (large forward or backward jump): re-anchor and re-sync
-            // the funscript pointer so the OSSM jumps with the video.
-            castRemoteTime = est;
-            castClockBaseMs = Date.now();
-            if (funState.playing) {
-              syncFunToTime(est * 1000);
-              if (funPreviewShown) drawFunPreview();
-            }
-          } else if (jump > 0.1) {
-            // Normal advance: re-anchor.
-            castRemoteTime = est;
-            castClockBaseMs = Date.now();
+          castClockBaseMs = 0;
+          if (castWasPlaying && funState.playing) {
+            funStopStreaming();
+            funLog("Video ended.");
           }
-          // else: receiver stuck/behind — keep the running wall clock.
+        } else {
+          if (ps === "PLAYING" || ps === "BUFFERING") castWasPlaying = true;
+          if (!castClockBaseMs) {
+            castRemoteTime = est;
+            castClockBaseMs = Date.now();
+          } else {
+            const jump = est - castRemoteTime;
+            if (jump > 1.0 || jump < -1.0) {
+              // Seek detected (large forward or backward jump): re-anchor and re-sync
+              // the funscript pointer so the OSSM jumps with the video.
+              castRemoteTime = est;
+              castClockBaseMs = Date.now();
+              if (funState.playing) {
+                syncFunToTime(est * 1000);
+                if (funPreviewShown) drawFunPreview();
+              }
+            } else if (jump > 0.1) {
+              // Normal advance: re-anchor.
+              castRemoteTime = est;
+              castClockBaseMs = Date.now();
+            }
+            // else: receiver stuck/behind — keep the running wall clock.
+          }
         }
       }
     } catch (e) {}
+  }
+  // Safety net: if the media duration is known and we've reached the end, stop.
+  if (funState.playing) {
+    const d = castDuration();
+    if (d > 0 && castTimeNow() >= d - 0.4) {
+      castClockBaseMs = 0;
+      funStopStreaming();
+      funLog("Video ended.");
+    }
   }
   // Watchdog: if the receiver never started playing, surface a clear error once.
   if (castConnectAt && !castFailNotified && (Date.now() - castConnectAt > 6000)) {
