@@ -30,6 +30,11 @@ jobs:
       - name: Add .nojekyll
         run: touch ./MobileWebController/.nojekyll
 
+      - name: Stamp build time
+        run: |
+          STAMP="$(date -u +'%Y-%m-%d %H:%M UTC')"
+          sed -i "s/__BUILD_TIME__/${STAMP}/g" ./MobileWebController/index.html
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:

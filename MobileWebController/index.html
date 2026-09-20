@@ -477,6 +477,8 @@
   <div id="log" style="margin-top:6px;">Open this in Chrome or Edge to control the OSSM over Bluetooth.</div>
 </div>
 
+<div class="build-info" id="buildInfo" style="text-align:center;font-size:.68rem;color:#64748b;margin-top:8px;opacity:.85;"></div>
+
 <script>
 "use strict";
 
@@ -3156,6 +3158,12 @@ if (tcr) tcr.onclick = () => toggleColSide(3);
 
 buildInterface();
 window.addEventListener("resize", () => { if (focusedMode()) { resizeCanvas(); drawGraph(); } });
+
+const BUILD_TIME = "__BUILD_TIME__";
+(function renderBuildInfo() {
+  const el = $("buildInfo");
+  if (el) el.textContent = BUILD_TIME.indexOf("__") === 0 ? "Local build" : "Build: " + BUILD_TIME;
+})();
 </script>
 <script>
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.protocol === 'http:')) {
