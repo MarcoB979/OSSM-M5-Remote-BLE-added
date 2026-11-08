@@ -27,18 +27,36 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Add .nojekyll
-        run: touch ./MobileWebController/.nojekyll
-
       - name: Stamp build time
         run: |
           STAMP="$(TZ=Europe/Amsterdam date +'%Y-%m-%d %H:%M')"
           sed -i "s/__BUILD_TIME__/${STAMP}/g" ./MobileWebController/index.html
 
+      - name: Assemble site
+        run: |
+          rm -rf ./_site
+          mkdir -p ./_site/webflasher ./_site/build/firmware
+
+          # Web remote at the site root
+          cp -a ./MobileWebController/. ./_site/
+
+          # Web flasher at /webflasher/
+          cp -a ./webflasher/. ./_site/webflasher/
+
+          # Firmware binaries referenced by the flasher manifests as ../build/firmware/*
+          cp -a ./build/firmware/*.bin ./_site/build/firmware/
+
+          touch ./_site/.nojekyll
+
+          # Fail fast if the flasher or its firmware payload is missing
+          test -f ./_site/webflasher/index.html
+          test -f ./_site/build/firmware/OSSM-M5-Remote_m5stack-core2_V2-3.bin
+          test -f ./_site/build/firmware/OSSM-M5-Remote_m5stack-cores3_V2-3.bin
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./MobileWebController
+          path: ./_site
 
       - name: Deploy to GitHub Pages
         id: deployment
